@@ -8,7 +8,7 @@
 
 **An independent, open-source memory allocator project for ARM, Android, Mojo, and resource-conscious computing.**
 
-[Explore the roadmap](docs/MimirAlloc_Research_and_Development_Roadmap.md) · [Engineering guide](docs/ENGINEERING_GUIDE.md) · [Memory systems research library](docs/research/README.md) · [Project A.E.S.I.R.](https://github.com/hrabanazviking/RuneForgeAI-Project-Aesir) · [MIT license](LICENSE)
+[Explore the roadmap](docs/MimirAlloc_Research_and_Development_Roadmap.md) · [Engineering guide](docs/ENGINEERING_GUIDE.md) · [Memory systems research library](docs/research/README.md) · [Android ARM64 field notes](docs/field-notes/android-arm64-2026-11/README.md) · [Project A.E.S.I.R.](https://github.com/hrabanazviking/RuneForgeAI-Project-Aesir) · [MIT license](LICENSE)
 
 `Research & planning`　 •　 `ARM64 first`　 •　 `Open source`　 •　 `Evidence before claims`
 

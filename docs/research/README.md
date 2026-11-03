@@ -32,3 +32,7 @@ A practical map of memory allocation from a single process to heterogeneous edge
 ## Evidence labels
 
 **Documented** = supported by a cited source for its stated scope. **Proposed** = a design or hypothesis to investigate. **Host-tested** and **device-tested** require named builds and logs. **Integration-proven** requires the original target and evidence it actually used MimirAlloc. **Performance-measured** requires reproducible workloads, baselines and results. None of this research alone establishes an implementation, performance win, Mojo compatibility, Android support or remote-memory service.
+
+## Physical-device field notes
+
+The [Android ARM64 field notebook](../field-notes/android-arm64-2026-11/README.md) records the SM-X400 inventory, Mojo allocator startup failure, experimental source and interrupted build, inference memory budget, and bounded GPU and NNAPI probes. It distinguishes observations from proposed MimirAlloc work.
