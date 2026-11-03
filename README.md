@@ -18,6 +18,12 @@
 
 > **Project status — the forge is just being lit.** This repository currently contains documentation, artwork, and an MIT license. The allocator, installation package, benchmarks, Android support, and Mojo integration are **planned**, not implemented or verified yet. There is no build or install command for MimirAlloc at this stage.
 
+---
+
+![file_000000003640822fa8b8a9b041610fd7.png](file_000000003640822fa8b8a9b041610fd7.png)
+
+---
+
 ## 🌌 The idea
 
 MimirAlloc is a proposed clean-room memory allocator: a piece of foundational software that manages the memory a program requests and releases. The goal is to build a small, dependable foundation for devices where memory, power, and responsiveness matter—from ARM Linux machines to Android tablets and local AI systems.
