@@ -8,7 +8,7 @@
 
 **An independent, open-source memory allocator project for ARM, Android, Mojo, and resource-conscious computing.**
 
-[Explore the roadmap](docs/MimirAlloc_Research_and_Development_Roadmap.md) · [Engineering guide](docs/ENGINEERING_GUIDE.md) · [Project A.E.S.I.R.](https://github.com/hrabanazviking/RuneForgeAI-Project-Aesir) · [MIT license](LICENSE)
+[Explore the roadmap](docs/MimirAlloc_Research_and_Development_Roadmap.md) · [Engineering guide](docs/ENGINEERING_GUIDE.md) · [Memory systems research library](docs/research/README.md) · [Project A.E.S.I.R.](https://github.com/hrabanazviking/RuneForgeAI-Project-Aesir) · [MIT license](LICENSE)
 
 `Research & planning`　 •　 `ARM64 first`　 •　 `Open source`　 •　 `Evidence before claims`
 
@@ -75,6 +75,7 @@ cd RuneForgeAI-MimirAlloc
 
 - Read the [research and development roadmap](docs/MimirAlloc_Research_and_Development_Roadmap.md).
 - Read the [engineering guide](docs/ENGINEERING_GUIDE.md) for the first investigations and contribution workflow.
+- Explore the [memory systems research library](docs/research/README.md) for allocator design, ARM and RISC-V, edge AI, accelerators, CXL, distributed memory, experiments, and primary sources.
 - Check the repository’s [issues](https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/issues) for current work.
 
 **There is no allocator to install or run yet.** Build, integration, and benchmark instructions will be added when the corresponding implementation exists and has been tested.
