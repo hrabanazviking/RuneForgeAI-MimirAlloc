@@ -78,6 +78,7 @@ cd RuneForgeAI-MimirAlloc
 - Explore the [memory systems research library](docs/research/README.md) for allocator design, ARM and RISC-V, edge AI, accelerators, CXL, distributed memory, experiments, and primary sources.
 - Discover the [neural computer research collection](docs/research/llm_computers/README.md), including guest allocators and distributed computing proposals.
 - Explore [intelligent and federated memory research](docs/research/intelligent_memory/README.md), covering optional small-model policies, RAG, KV caches and multi-device resources.
+- Read the [integrated AI and memory research synthesis](docs/research/ai_memory_synthesis/README.md) for cross-domain designs, primary sources, experiments and implementation work packages.
 - Check the repository’s [issues](https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/issues) for current work.
 
 **There is no allocator to install or run yet.** Build, integration, and benchmark instructions will be added when the corresponding implementation exists and has been tested.

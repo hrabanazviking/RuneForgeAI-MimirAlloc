@@ -19,6 +19,7 @@ A practical map of memory allocation from a single process to heterogeneous edge
 | [Primary-source research and reading map](13_SOURCE_READING_MAP.md) | Primary-source bibliography and reading map |
 | [Neural computers and LLM-embedded virtual machines](llm_computers/README.md) | Guest allocators, model state, verification, and distributed worker research |
 | [Intelligent allocation, RAG, KV cache and federated memory](intelligent_memory/README.md) | Tiny-model policies, retrieval, unified resource management and experiments |
+| [AI and memory integrated research synthesis](ai_memory_synthesis/README.md) | Neural, agent, retrieval, allocator and device memory research |
 
 ## Suggested paths
 
