@@ -17,6 +17,7 @@ A practical map of memory allocation from a single process to heterogeneous edge
 | [Allocator landscape: what to study and compare](11_ALLOCATOR_LANDSCAPE.md) | Established allocators and comparison methods |
 | [Experimental lab and measurement recipes](12_EXPERIMENT_LAB.md) | Practical experiment and measurement protocols |
 | [Primary-source research and reading map](13_SOURCE_READING_MAP.md) | Primary-source bibliography and reading map |
+| [Neural computers and LLM-embedded virtual machines](llm_computers/README.md) | Guest allocators, model state, verification, and distributed worker research |
 
 ## Suggested paths
 
