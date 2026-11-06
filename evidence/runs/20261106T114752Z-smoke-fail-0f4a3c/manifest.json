@@ -1,0 +1,106 @@
+{
+  "argv": [
+    "/bin/sh",
+    "scripts/failure_cases/smoke_fail.sh"
+  ],
+  "case_id": "smoke-fail",
+  "case_sha256": "e2c1b2397cd4afcee72fa5af5a83250e0e51c4dd00e1546ff90e23c71f84eeaa",
+  "child_peak_rss_kb": 18224,
+  "claim_scope": "harness-evidence-only: proves this command ran here with this result; not evidence of the Mojo/tcmalloc blocker",
+  "classification": "unclassified",
+  "classification_hint": null,
+  "cwd": ".",
+  "df_free_bytes_cwd": 213204123648,
+  "duration_ms": 1,
+  "env_class": "arm64-linux",
+  "error_lines": [
+    {
+      "line_no": 1,
+      "stream": "stderr",
+      "text": "smoke: first relevant error: deliberate exit 3"
+    }
+  ],
+  "exit_code": 3,
+  "expected": {
+    "exit_code": 3,
+    "outcome": "fail"
+  },
+  "failing_process": "other",
+  "finished_at_utc": "2026-11-06T11:47:52Z",
+  "first_relevant_error": "smoke: first relevant error: deliberate exit 3",
+  "git": {
+    "branch": "yrsa/mimiralloc-05",
+    "dirty_bool": true,
+    "head_sha": "b0b837453da351700987bb563126c90be2b8978f"
+  },
+  "harness_sha256": "969e4ed48a0eea4b308dd0abc57f92b461d550844a2af1f01b499f1da9b8ad51",
+  "libc": {
+    "gnu_get_libc_version": "2.36",
+    "ldd_version": "ldd (Debian GLIBC 2.36-9+rpt2+deb12u14) 2.36",
+    "summary": "ldd (Debian GLIBC 2.36-9+rpt2+deb12u14) 2.36"
+  },
+  "loadavg_before": [
+    0.79,
+    0.89,
+    0.99
+  ],
+  "logs": {
+    "stderr.log": {
+      "sha256": "df7db166f435475cae5c4ce9a279076ae90c90e45316596882f7a86a9781d704",
+      "size_bytes": 47
+    },
+    "stdout.log": {
+      "sha256": "cdca57defa234a8bd81e13ceb32d81bbb327c68eadcb3c54d6356661963eb3a9",
+      "size_bytes": 39
+    }
+  },
+  "matches_expected": true,
+  "meminfo_after": {
+    "MemAvailable": 14442880,
+    "MemTotal": 16598576,
+    "SwapFree": 14929664,
+    "SwapTotal": 16777200
+  },
+  "meminfo_before": {
+    "MemAvailable": 14459792,
+    "MemTotal": 16598576,
+    "SwapFree": 14929664,
+    "SwapTotal": 16777200
+  },
+  "notes": "Synthetic case. NOT the Mojo/tcmalloc failure.",
+  "nproc": 4,
+  "os_release_pretty": "Debian GNU/Linux 12 (bookworm)",
+  "outcome": "fail",
+  "page_size_bytes": 16384,
+  "python_version": "3.11.2",
+  "run_id": "20261106T114752Z-smoke-fail-0f4a3c",
+  "schema_version": 1,
+  "signal": null,
+  "stage": "other",
+  "started_at_utc": "2026-11-06T11:47:52Z",
+  "stderr_log": {
+    "sha256": "df7db166f435475cae5c4ce9a279076ae90c90e45316596882f7a86a9781d704",
+    "size_bytes": 47
+  },
+  "stdout_log": {
+    "sha256": "cdca57defa234a8bd81e13ceb32d81bbb327c68eadcb3c54d6356661963eb3a9",
+    "size_bytes": 39
+  },
+  "target_ldd": "linux-vdso.so.1 (0x00007fff02898000)\n\tlibc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff02640000)\n\t/lib/ld-linux-aarch64.so.1 (0x00007fff02860000)",
+  "timed_out": false,
+  "title": "Deliberate failure proving the capture path",
+  "toolchain": {
+    "bazel": null,
+    "cc": "cc (Debian 12.2.0-14+deb12u1) 12.2.0",
+    "clang": "Debian clang version 14.0.6",
+    "gcc": "gcc (Debian 12.2.0-14+deb12u1) 12.2.0",
+    "ld": "GNU ld (GNU Binutils for Debian) 2.40",
+    "mojo": "Mojo 1.1.0 (8189361e)",
+    "readelf": "GNU readelf (GNU Binutils for Debian) 2.40"
+  },
+  "uname": {
+    "machine": "aarch64",
+    "release": "6.12.112-v8-16k-hailo+",
+    "sysname": "Linux"
+  }
+}
