@@ -1,0 +1,1097 @@
+MimirAlloc D-009 fresh verification run
+date: 2026-11-06T17:53:04-05:00
+base: 8f878afe9ee45efb3ed549219db45d61f9aa7881
+host: Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+pagesize: 16384 nproc: 4
+=== make clean && make test ===
+D009 FRESH RUN 2026-11-06T17:51:38-05:00 base 8f878afe9ee45efb3ed549219db45d61f9aa7881
+rm -rf build
+mkdir -p build
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/api/mimir_alloc.c -o build/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/core/mimir_core.c -o build/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/platform/mimir_platform.c -o build/mimir_platform.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/contract/test_smoke.c -o build/test_smoke.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_smoke.o -o build/test_smoke
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_core.c -o build/test_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_core.o -o build/test_core
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_b007.c -o build/test_b007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_b007.o -o build/test_b007
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_c005.c -o build/test_c005.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c005.o -o build/test_c005
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_c006.c -o build/test_c006.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c006.o -o build/test_c006
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/contract/test_c007.c -o build/test_c007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c007.o -o build/test_c007
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_c008.c -o build/test_c008.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c008.o -o build/test_c008
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/concurrency/test_d004.c -o build/test_d004.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_d004.o -o build/test_d004
+./build/test_smoke
+PASS header include guard MIMIR_ALLOC_H defined
+PASS mimir_malloc prototype matches void *(*)(size_t)
+PASS mimir_free prototype matches void (*)(void *)
+PASS mimir_calloc prototype matches void *(*)(size_t, size_t)
+PASS mimir_realloc prototype matches void *(*)(void *, size_t)
+PASS mimir_malloc(1) returns non-NULL (real allocator)
+PASS mimir_malloc(1) storage writable/readable by owner
+PASS mimir_malloc(1024) returns non-NULL (real allocator)
+PASS mimir_malloc(1024) storage writable/readable by owner
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_malloc(0) returns NULL (posture only, U-09 unresolved)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free(mimir_malloc(8) result) returns normally
+PASS mimir_calloc(4, 8) returns non-NULL (C-005)
+PASS mimir_calloc(4, 8) storage reads zero at return
+PASS mimir_realloc(calloc block, 128) returns non-NULL (C-005)
+PASS mimir_realloc grow preserves first byte
+PASS mimir_realloc(NULL, 32) returns non-NULL (acts as malloc)
+SMOKE 18/18 checks passed
+./build/test_core
+C-003 core allocator test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered
+  [ok] malloc(1) non-null
+  [ok] malloc(1) aligned to max_align_t
+  [ok] malloc(1) pattern verifies over full extent
+  [ok] malloc(64) non-null
+  [ok] malloc(64) aligned to max_align_t
+  [ok] malloc(64) pattern verifies over full extent
+  [ok] malloc(1000) non-null
+  [ok] malloc(1000) aligned to max_align_t
+  [ok] malloc(1000) pattern verifies over full extent
+  [ok] malloc(16384) non-null
+  [ok] malloc(16384) aligned to max_align_t
+  [ok] malloc(16384) pattern verifies over full extent
+  [ok] malloc(16385) non-null
+  [ok] malloc(16385) aligned to max_align_t
+  [ok] malloc(16385) pattern verifies over full extent
+  [ok] malloc(49275) non-null
+  [ok] malloc(49275) aligned to max_align_t
+  [ok] malloc(49275) pattern verifies over full extent
+  [ok] four simultaneous allocations succeed
+  [ok] live blocks pairwise non-overlapping
+  [ok] live blocks hold distinct patterns undisturbed
+  [ok] all live blocks freed exactly once, no crash
+  [ok] mimir_free(NULL) returns normally
+  [ok] malloc(SIZE_MAX) returns NULL (oversize refusal)
+  [ok] malloc(SIZE_MAX - 8) returns NULL (oversize refusal)
+  [ok] malloc(0) returns NULL (posture only, U-09 unresolved)
+  [ok] allocation after frees succeeds
+  [ok] post-free allocation pattern verifies
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+./build/test_b007
+C-004 B-007 audit test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered (A2 input)
+  [ok] C2/F-08: first call in process succeeds, no init step
+  [ok] B.1: first pointer system-page aligned by construction
+  [ok] C1.4: first descriptor fully clean-initialised
+  [ok] C1.2: first block pattern verifies over full extent
+  [ok] A5/A6: malloc(1) non-null
+  [ok] B.1: malloc(1) system-page aligned
+  [ok] B.1: malloc(1) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(1) descriptor clean, mapping_length == 32768
+  [ok] C1.2: malloc(1) pattern verifies over full extent
+  [ok] A5/A6: malloc(16383) non-null
+  [ok] B.1: malloc(16383) system-page aligned
+  [ok] B.1: malloc(16383) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(16383) descriptor clean, mapping_length == 32768
+  [ok] C1.2: malloc(16383) pattern verifies over full extent
+  [ok] A5/A6: malloc(16384) non-null
+  [ok] B.1: malloc(16384) system-page aligned
+  [ok] B.1: malloc(16384) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(16384) descriptor clean, mapping_length == 32768
+  [ok] C1.2: malloc(16384) pattern verifies over full extent
+  [ok] A5/A6: malloc(16385) non-null
+  [ok] B.1: malloc(16385) system-page aligned
+  [ok] B.1: malloc(16385) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(16385) descriptor clean, mapping_length == 49152
+  [ok] C1.2: malloc(16385) pattern verifies over full extent
+  [ok] A5/A6: malloc(32767) non-null
+  [ok] B.1: malloc(32767) system-page aligned
+  [ok] B.1: malloc(32767) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(32767) descriptor clean, mapping_length == 49152
+  [ok] C1.2: malloc(32767) pattern verifies over full extent
+  [ok] A5/A6: malloc(32768) non-null
+  [ok] B.1: malloc(32768) system-page aligned
+  [ok] B.1: malloc(32768) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(32768) descriptor clean, mapping_length == 49152
+  [ok] C1.2: malloc(32768) pattern verifies over full extent
+  [ok] A5/A6: malloc(32769) non-null
+  [ok] B.1: malloc(32769) system-page aligned
+  [ok] B.1: malloc(32769) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(32769) descriptor clean, mapping_length == 65536
+  [ok] C1.2: malloc(32769) pattern verifies over full extent
+  [ok] C1.4: 24 alloc/free cycles, every descriptor clean-init
+  [ok] interleave: eight simultaneous allocations succeed
+  [ok] interleave: four allocations after partial frees succeed
+  [ok] C1.2: surviving blocks undisturbed by frees and new allocations
+  [ok] fresh allocation after interleaved frees succeeds
+  [ok] sentinel allocation succeeds
+  [ok] D.0: malloc(SIZE_MAX (oversize, A.3)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX (oversize, A.3)
+  [ok] A.3: fresh allocation works after SIZE_MAX (oversize, A.3)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX - 8 (oversize, A.3)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX - 8 (oversize, A.3)
+  [ok] A.3: fresh allocation works after SIZE_MAX - 8 (oversize, A.3)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX - page + 1 (fails A3 check)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX - page + 1 (fails A3 check)
+  [ok] A.3: fresh allocation works after SIZE_MAX - page + 1 (fails A3 check)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX - page (passes A3, fails A5 check)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX - page (passes A3, fails A5 check)
+  [ok] A.3: fresh allocation works after SIZE_MAX - page (passes A3, fails A5 check)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX / 2 (representable, unsatisfiable, F-01)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX / 2 (representable, unsatisfiable, F-01)
+  [ok] A.3: fresh allocation works after SIZE_MAX / 2 (representable, unsatisfiable, F-01)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: mimir_free(NULL) returns normally after failures
+  [ok] allocation after all failures and frees succeeds
+  [ok] post-failure allocation pattern verifies
+  [ok] malloc(0) returns NULL (posture only, U-09 unresolved)
+CHECKS: 70 run, 0 failed
+RESULT: PASS
+./build/test_c005
+C-005 calloc/realloc test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered
+  [ok] calloc(1, 1) non-null
+  [ok] calloc(1, 1) aligned to max_align_t
+  [ok] calloc(1, 1) every requested byte zero (byte-by-byte)
+  [ok] calloc(1, 1) extent owner-writable, pattern verifies
+  [ok] calloc(1, 7) non-null
+  [ok] calloc(1, 7) aligned to max_align_t
+  [ok] calloc(1, 7) every requested byte zero (byte-by-byte)
+  [ok] calloc(1, 7) extent owner-writable, pattern verifies
+  [ok] calloc(7, 1) non-null
+  [ok] calloc(7, 1) aligned to max_align_t
+  [ok] calloc(7, 1) every requested byte zero (byte-by-byte)
+  [ok] calloc(7, 1) extent owner-writable, pattern verifies
+  [ok] calloc(4, 16) non-null
+  [ok] calloc(4, 16) aligned to max_align_t
+  [ok] calloc(4, 16) every requested byte zero (byte-by-byte)
+  [ok] calloc(4, 16) extent owner-writable, pattern verifies
+  [ok] calloc(10, 100) non-null
+  [ok] calloc(10, 100) aligned to max_align_t
+  [ok] calloc(10, 100) every requested byte zero (byte-by-byte)
+  [ok] calloc(10, 100) extent owner-writable, pattern verifies
+  [ok] calloc(3, 1000) non-null
+  [ok] calloc(3, 1000) aligned to max_align_t
+  [ok] calloc(3, 1000) every requested byte zero (byte-by-byte)
+  [ok] calloc(3, 1000) extent owner-writable, pattern verifies
+  [ok] calloc(1, 16385) non-null
+  [ok] calloc(1, 16385) aligned to max_align_t
+  [ok] calloc(1, 16385) every requested byte zero (byte-by-byte)
+  [ok] calloc(1, 16385) extent owner-writable, pattern verifies
+  [ok] calloc(2, 16384) non-null
+  [ok] calloc(2, 16384) aligned to max_align_t
+  [ok] calloc(2, 16384) every requested byte zero (byte-by-byte)
+  [ok] calloc(2, 16384) extent owner-writable, pattern verifies
+  [ok] sentinel allocation succeeds
+  [ok] calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+  [ok] calloc(2, SIZE_MAX) returns NULL (overflow refusal)
+  [ok] calloc(SIZE_MAX/2+1, 2) returns NULL (overflow refusal)
+  [ok] calloc(2, SIZE_MAX/2+1) returns NULL (overflow refusal)
+  [ok] calloc(SIZE_MAX/16+1, 16) returns NULL (overflow refusal)
+  [ok] sentinel undisturbed after calloc overflow refusals
+  [ok] calloc(1, SIZE_MAX) returns NULL (representable, unsatisfiable)
+  [ok] calloc(SIZE_MAX, 1) returns NULL (representable, unsatisfiable)
+  [ok] sentinel undisturbed after unsatisfiable calloc
+  [ok] calloc succeeds after overflow/unsatisfiable failures
+  [ok] post-failure calloc extent reads zero
+  [ok] calloc(0, 16) returns NULL (posture only, U-09 unresolved)
+  [ok] calloc(16, 0) returns NULL (posture only, U-09 unresolved)
+  [ok] calloc(0, 0) returns NULL (posture only, U-09 unresolved)
+  [ok] calloc(8, 8) non-null (pairing setup)
+  [ok] calloc(8, 8) extent reads zero
+  [ok] realloc of calloc block to 256 non-null
+  [ok] grown calloc block: preserved 64 bytes still zero
+  [ok] realloc(NULL, 128) non-null (acts as malloc)
+  [ok] realloc(NULL, 128) aligned to max_align_t
+  [ok] realloc(NULL, 128) extent owner-writable, pattern verifies
+  [ok] realloc(NULL, 128) block freed exactly once, no crash
+  [ok] realloc(NULL, SIZE_MAX) returns NULL (malloc failure case)
+  [ok] realloc(NULL, 0) returns NULL (posture only, U-09 unresolved)
+  [ok] malloc(64) non-null (grow setup)
+  [ok] realloc grow 64 -> 5000 non-null
+  [ok] grow preserves first min(old, new) = 64 bytes
+  [ok] grow moved to a new block (design observation, B-008 S4.4; not a contract claim)
+  [ok] grown extent fully owner-writable, pattern verifies
+  [ok] malloc(100) non-null (multi-page grow setup)
+  [ok] realloc grow 100 -> 3*page+123 non-null
+  [ok] multi-page grow preserves first 100 bytes
+  [ok] malloc(200) non-null (same-size setup)
+  [ok] realloc same size 200 -> 200 non-null
+  [ok] same-size realloc preserves full extent
+  [ok] same-size returns input pointer (design decision, B-008 S4.3; not a contract claim)
+  [ok] malloc(5000) non-null (shrink setup)
+  [ok] realloc shrink 5000 -> 100 non-null
+  [ok] shrink preserves prefix of first 100 bytes
+  [ok] shrink returns input pointer (design-level fact, B-008 S4.4; not a contract claim)
+  [ok] shrunken extent owner-writable, pattern verifies
+  [ok] realloc grow after shrink 100 -> 2000 non-null
+  [ok] grow after shrink preserves recorded 100 bytes
+  [ok] malloc(3*page) non-null (shrink+free setup)
+  [ok] realloc shrink 3*page -> 50 non-null
+  [ok] allocation after shrink+free succeeds
+  [ok] malloc(256) non-null (failure-preservation setup)
+  [ok] realloc(ptr, SIZE_MAX) returns NULL (failure)
+  [ok] original intact after SIZE_MAX realloc failure
+  [ok] realloc(ptr, SIZE_MAX/2) returns NULL (unsatisfiable)
+  [ok] original intact after unsatisfiable realloc failure
+  [ok] original still usable: grow succeeds after failures
+  [ok] grow after failures preserves first 256 bytes
+  [ok] malloc(128) non-null (freeable-after-failure setup)
+  [ok] realloc(ptr, SIZE_MAX) returns NULL (second block)
+  [ok] second original intact after failed realloc
+  [ok] allocation after freeing failure-preserved block succeeds
+  [ok] malloc(300) non-null (realloc(ptr, 0) posture setup)
+  [ok] realloc(ptr, 0) returns NULL (posture only, U-12 unresolved)
+  [ok] original intact after realloc(ptr, 0) (posture record)
+  [ok] original was freeable after realloc(ptr, 0); later allocation succeeds (posture record)
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+./build/test_c006
+C-006 section 6.3 startup / error-path test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered
+  [ok] MA-6.3-001: first call in process is mimir_free(NULL), returns normally, no init step
+  [ok] MA-6.3-001/-005: first mimir_malloc succeeds with no prior initialisation
+  [ok] B-007 C1.4: first descriptor fully formed before publication (magic, base, sizes, LIVE, flags/reserved zero)
+  [ok] fresh image: first call mimir_calloc succeeds, zeroed, frees, health cycle ok
+  [ok] fresh image: first call mimir_realloc(NULL, 64) behaves as malloc and frees
+  [ok] MA-6.3-001/-004: 8 threads race first entry in a fresh image, 150 cycles each with induced failures, no deadlock, no error
+  [ok] silence battery: live block ready
+  [ok] silence battery: tmpfile ready
+  [ok] silence battery: failure and success calls behave as designed inside the window
+  [ok] MA-6.3-020..023: zero bytes written to stdout/stderr across all failure and success paths in the battery
+  [ok] silence battery: live block contents intact after failed reallocs inside the window
+  [ok] lock battery: original block allocated
+  [ok] after malloc(SIZE_MAX) NULL: allocation succeeds (no leaked lock)
+  [ok] after malloc(SIZE_MAX-8) NULL: allocation succeeds
+  [ok] after malloc(SIZE_MAX/2) NULL (unsatisfiable): allocation succeeds
+  [ok] after calloc overflow NULL: allocation succeeds
+  [ok] after calloc overflow (swapped) NULL: allocation succeeds
+  [ok] after calloc unsatisfiable NULL: allocation succeeds
+  [ok] after realloc grow SIZE_MAX NULL: original intact, allocation succeeds
+  [ok] after realloc grow SIZE_MAX/2 NULL: original intact, allocation succeeds
+  [ok] 60-round mixed failure/success storm: every failure NULL, every health cycle succeeds
+  [ok] MA-6.3-023: 500 consecutive failures stay NULL and the allocator is healthy after (no accumulation, no leaked lock)
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+./build/test_c007
+C-007 portable unit/contract test suite (B-009)
+target of this run: ARM64 Linux (this Pi only); x86-64 run OWED
+runtime system page size: 16384 bytes (sysconf(_SC_PAGESIZE), failure-checked)
+deterministic seed: 0x243F6A8885A308D3
+  [ok] P3-T-SYS-001: registry holds all 119 B-009 Appendix A case IDs
+  [ok] P3-T-SYS-001: every registered ID is well-formed under the S4.2 scheme
+  [ok] P3-T-SYS-001: no registered ID is duplicated
+CASE P3-T-SYS-001 PASS (3 checks)
+  [ok] P3-T-SYS-003: a record carrying every S9.2 mandatory field is accepted
+  [ok] P3-T-SYS-003: a record missing the Seed field is rejected, not a PASS record
+  [ok] P3-T-SYS-003: a record missing the Result field is rejected, not a PASS record
+CASE P3-T-SYS-003 PASS (3 checks)
+SKIP P3-T-SYS-002 SKIPPED/NOT-YET: no completed per-target annex exists (B-009 Appendix B is a template only, INC-C007-03); an absent annex decision leaves the case BLOCKED on this target
+SKIP P3-T-DIFF-001 SKIPPED/NOT-YET: x86-64 leg OWED in full (B-009 S3.4); no paired record exists to compare
+SKIP P3-T-DIFF-002 SKIPPED/NOT-YET: x86-64 leg OWED in full (B-009 S3.4); no pair, so no divergence judgement can be made
+  [ok] P3-T-MAP-042: allocation after free(NULL)-before-any-allocation works
+  [ok] P3-T-MAP-042: allocation after interleaved free(NULL) calls works
+  [ok] P3-T-MAP-042: live block undisturbed by interleaved free(NULL) calls
+  [ok] P3-T-MAP-042: free(NULL) after all frees returns normally
+CASE P3-T-MAP-042 PASS (4 checks)
+  [ok] P3-T-MAP-001: mimir_malloc(1) returns non-null
+  [ok] P3-T-MAP-001: returned pointer is suitably aligned (fundamental alignment, no numeric value asserted, U-15)
+  [ok] P3-T-MAP-001: mimir_malloc(1000) returns non-null
+  [ok] P3-T-MAP-001: second returned pointer is suitably aligned
+CASE P3-T-MAP-001 PASS (4 checks)
+  [ok] P3-T-MAP-002: several live blocks allocated
+  [ok] P3-T-MAP-002: live blocks are pairwise distinct
+  [ok] P3-T-MAP-002: live blocks are pairwise non-overlapping over full requested extents
+CASE P3-T-MAP-002 PASS (3 checks)
+  [ok] P3-T-MAP-003: runtime system page size discovered (failure-checked, S3.2)
+  [ok] P3-T-MAP-003: every requested byte of malloc(1) writable and readable back
+  [ok] P3-T-MAP-003: every requested byte of malloc(64) writable and readable back
+  [ok] P3-T-MAP-003: every requested byte of malloc(1000) writable and readable back
+  [ok] P3-T-MAP-003: every requested byte of malloc(16384) writable and readable back
+  [ok] P3-T-MAP-003: every requested byte of malloc(16385) writable and readable back
+CASE P3-T-MAP-003 PASS (6 checks)
+  [ok] P3-T-MAP-011: representable but unsatisfiable request returns null, no unallocated pointer in any form
+CASE P3-T-MAP-011 PASS (1 checks)
+  [ok] P3-T-MAP-012: sentinel block allocated before induced failure
+  [ok] P3-T-MAP-012: induced failure returns null (as in MAP-011)
+  [ok] P3-T-MAP-012: no ownership passed or disturbed: live sentinel bytes unchanged after failure
+  [ok] P3-T-MAP-012: next ordinary in-scope allocation after failure succeeds
+  [ok] P3-T-MAP-012: post-failure allocation behaves as in MAP-001 (writable/readable)
+CASE P3-T-MAP-012 PASS (5 checks)
+  [ok] P3-T-MAP-021: maximum representable size request fails with null, no ownership passes
+  [ok] P3-T-MAP-021: size + reserve/rounding unrepresentable request fails with null
+  [ok] P3-T-MAP-021: ordinary allocation after oversize refusals succeeds
+CASE P3-T-MAP-021 PASS (3 checks)
+  [ok] P3-T-MAP-031: block allocated for free case
+  [ok] P3-T-MAP-031: block contents verified before free
+  [ok] P3-T-MAP-031: free of a live in-scope pointer completes, retired exactly once (single free call)
+  [ok] P3-T-MAP-031: storage eligible for reuse: fresh allocation after free succeeds
+  [ok] P3-T-MAP-031: fresh allocation fully usable
+CASE P3-T-MAP-031 PASS (5 checks)
+  [ok] P3-T-MAP-032: mixed sequence: five live blocks allocated
+  [ok] P3-T-MAP-032: freeing each block exactly once disturbs no other live block's bytes
+  [ok] P3-T-MAP-032: after all frees, a fresh allocation succeeds (baseline behaviour)
+CASE P3-T-MAP-032 PASS (3 checks)
+  [ok] P3-T-MAP-041: mimir_free(NULL) returns normally, no error (hook C-005)
+  [ok] P3-T-MAP-041: later allocation behaves normally after free(NULL)
+  [ok] P3-T-MAP-041: post-free(NULL) allocation fully usable
+CASE P3-T-MAP-041 PASS (3 checks)
+  [ok] P3-T-MAP-051: block obtained from mimir_malloc (compatible family)
+  [ok] P3-T-MAP-051: block contents verified before release
+  [ok] P3-T-MAP-051: block released by the compatible API family (mimir_free), exactly once
+  [ok] P3-T-MAP-051: fresh allocation after compatible release succeeds
+CASE P3-T-MAP-051 PASS (4 checks)
+SKIP P3-T-FAIL-001 SKIPPED/NOT-YET: needs the fault-injection shim on the L6 mapping boundary; no shim exists in the banked base (INC-C007-01, carried from INC-C004-02/INC-C005-03). The public-API failure+recovery aspect is run as MAP-011/MAP-012
+SKIP P3-T-FAIL-002 SKIPPED/NOT-YET: N-sweep needs the fault-injection shim; none exists in the banked base (INC-C007-01)
+SKIP P3-T-FAIL-003 SKIPPED/NOT-YET: the recovery probe is specified against an injected failure (shim); none exists. Uninjected recovery after a real unsatisfiable failure is run as MAP-012
+SKIP P3-T-FAIL-011 SKIPPED/NOT-YET: the no-syscall aspect needs the shim's mapping-attempt counter; the return-value aspect is run as MAP-021/ARITH-001/ARITH-002
+SKIP P3-T-FAIL-021 SKIPPED/NOT-YET: EMFILE/ENFILE-class injection needs the shim; none exists (INC-C007-01)
+SKIP P3-T-FAIL-031 SKIPPED/NOT-YET: EAGAIN-class injection and attempt counting need the shim; none exists (INC-C007-01)
+SKIP P3-T-FAIL-041 SKIPPED: BLOCKED-by-U-09 (zero-size undecided, V-01); no pass criterion exists and none is written
+SKIP P3-T-FAIL-051 SKIPPED/NOT-YET: release-failure injection on the L6 release boundary needs the shim; the branch rests on code inspection as at C-004 (INC-C007-01)
+SKIP P3-T-FAIL-061 SKIPPED/NOT-YET: lock/initialisation-primitive fault injection does not exist in the banked base (INC-C007-01)
+SKIP P3-T-FAIL-081 SKIPPED/NOT-YET: DIAGNOSTIC-ONLY case for a DEBUG/internal-check build; no such build exists in the banked base and it is never a conformance PASS (B-009 S7.2)
+INSPECTED P3-T-FAIL-091 INSPECTED (inapplicability recorded, per its own row): the banked baseline makes ONE mapping attempt per allocation in alloc_locked (src/core/mimir_core.c, single mimir_platform_map_acquire call site), all-or-nothing with release-on-partial-failure before any publication; the multi-step variant this case guards does not exist in Phase 3. See NOTES_C007.md
+SKIP P3-T-FAIL-101 SKIPPED/NOT-YET: forcing page-size discovery failure needs interposition on the L6 query; none exists in the banked base (INC-C007-01). Discovery itself is failure-checked and exercised in every run of this suite
+SKIP P3-T-FAIL-111 SKIPPED/NOT-YET: needs an instrumented error-reporting path placed in a cannot-allocate state; no such instrumentation exists in the banked base (INC-C007-01)
+  [ok] P3-T-DATA-001: single cycle: allocation succeeds
+  [ok] P3-T-DATA-001: single cycle: unique pattern verifies over full extent
+  [ok] P3-T-DATA-001: single cycle: allocation after the cycle succeeds (baseline behaviour)
+CASE P3-T-DATA-001 PASS (3 checks)
+  [ok] P3-T-DATA-002: 200 allocate/write/verify/free cycles complete, each returning to baseline behaviour
+CASE P3-T-DATA-002 PASS (1 checks)
+  [ok] P3-T-DATA-011: live set of seeded random sizes coexists (seed 0x243F6A8885A308D3)
+  [ok] P3-T-DATA-011: every live block's unique pattern still reads as written on repeated checks, first and last bytes included
+CASE P3-T-DATA-011 PASS (2 checks)
+  [ok] P3-T-DATA-012: live blocks pairwise non-overlapping across full requested extents
+  [ok] P3-T-DATA-012: new allocation proceeds while live set is live
+  [ok] P3-T-DATA-012: no live block's bytes changed when neighbours were written, freed, or newly allocated
+CASE P3-T-DATA-012 PASS (3 checks)
+  [ok] P3-T-DATA-021: runtime system page size discovered (size derived from it, never a literal)
+  [ok] P3-T-DATA-021: large allocation spanning many runtime-discovered system pages succeeds
+  [ok] P3-T-DATA-021: pattern verified over the full large extent (start, middle, end)
+  [ok] P3-T-DATA-021: bytes straddling a runtime-page boundary verify
+CASE P3-T-DATA-021 PASS (4 checks)
+  [ok] P3-T-DATA-022: persistent live set allocated before churn
+  [ok] P3-T-DATA-022: 100 interleaved alloc/free churn operations complete (no hang)
+  [ok] P3-T-DATA-022: after churn, every surviving live block verifies intact
+  [ok] P3-T-DATA-022: surviving blocks each retired exactly once after churn
+CASE P3-T-DATA-022 PASS (4 checks)
+  [ok] P3-T-ARITH-001: request at the maximum representable size is rejected with the defined failure (null), no wrapped allocation
+CASE P3-T-ARITH-001 PASS (1 checks)
+  [ok] P3-T-ARITH-002: each symbolic boundary request (max, max-reserve class, representable-unsatisfiable) is rejected, never wraps to a small allocation
+  [ok] P3-T-ARITH-002: ordinary allocation after boundary refusals succeeds
+CASE P3-T-ARITH-002 PASS (2 checks)
+  [ok] P3-T-ARITH-011: live block in place before failure case
+  [ok] P3-T-ARITH-011: failure is reported via the defined failure channel (null), no partially constructed block returned or reachable
+  [ok] P3-T-ARITH-011: caller-supplied inputs stay caller-owned and unchanged
+  [ok] P3-T-ARITH-011: pre-existing live block unchanged by the failure
+CASE P3-T-ARITH-011 PASS (4 checks)
+  [ok] P3-T-ARITH-012: oversize, mapping-failure, and calloc-overflow causes all yield the same failure class (defined failure, no ownership, no false success)
+  [ok] P3-T-ARITH-012: ordinary allocation after all failure causes succeeds
+CASE P3-T-ARITH-012 PASS (2 checks)
+SKIP P3-T-ARITH-031 SKIPPED/NOT-YET: metadata-allocation failure injection needs the shim; none exists (INC-C007-01)
+SKIP P3-T-ARITH-032 SKIPPED/NOT-YET: failure after partial descriptor construction needs fault injection; none exists (INC-C007-01). The following-allocation half is run as MAP-012
+SKIP P3-T-ARITH-041 SKIPPED/NOT-YET: the namespaced API takes no alignment parameter, so alignment-rounding overflow has no executable instance here; the size+reserve overflow aspect is run as ARITH-002 (INC-C007-05)
+SKIP P3-T-ARITH-042 SKIPPED/NOT-YET: the before-any-mapping-attempt aspect needs the shim's attempt counter (count 0); the rejection aspect is run as ARITH-001/ARITH-002
+  [ok] P3-T-ARITH-043: runtime system page size discovered for boundary sizes
+  [ok] P3-T-ARITH-043: over-rejection guard: requests just inside the representable boundary (1, alignment-1, alignment, alignment+1, page-1, page, page+1) succeed and verify, never spuriously rejected
+CASE P3-T-ARITH-043 PASS (2 checks)
+SKIP P3-T-ALIGN-001 SKIPPED/NOT-YET: no explicit-alignment entry point exists in the banked namespaced surface (documented absence, B-008 S6.1; INC-C007-05). Fundamental alignment of mimir_malloc itself is run under MAP-001
+SKIP P3-T-ALIGN-002 SKIPPED/NOT-YET: no explicit-alignment entry point exists in the banked surface (INC-C007-05)
+SKIP P3-T-ALIGN-011 SKIPPED/NOT-YET: no explicit-alignment entry point exists, and its failure induction also needs the shim (INC-C007-01/-05)
+SKIP P3-T-ALIGN-012 SKIPPED/NOT-YET: no explicit-alignment entry point exists in the banked surface (INC-C007-05)
+SKIP P3-T-ALIGN-021 SKIPPED: BLOCKED-by-U-11 (invalid-alignment validity undecided, V-03); no pass criterion exists
+SKIP P3-T-ALIGN-031 SKIPPED: BLOCKED-by-U-11 (size-multiple-of-alignment rule undecided, V-03); no pass criterion exists
+SKIP P3-T-ALIGN-041 SKIPPED: BLOCKED-by-U-09 (also U-11); no pass criterion exists
+SKIP P3-T-ALIGN-051 SKIPPED/NOT-YET: posix_memalign is not in the banked surface (symbol set unsettled, U-01; documented absence, B-008 S6.1)
+SKIP P3-T-ALIGN-052 SKIPPED/NOT-YET: posix_memalign is not in the banked surface (U-01)
+SKIP P3-T-ALIGN-061 SKIPPED/NOT-YET: posix_memalign is not in the banked surface, so the C-008 unchanged-output model has no executable instance (U-01)
+SKIP P3-T-ALIGN-062 SKIPPED: BLOCKED-by-U-14 (exact posix_memalign error numbers undecided, V-06); no numeric criterion is written
+SKIP P3-T-ALIGN-071 SKIPPED: BLOCKED-by-U-11 (invalid alignment for posix_memalign undecided); no pass criterion exists
+SKIP P3-T-ALIGN-081 SKIPPED: BLOCKED-by-U-09 (zero-size with valid alignment undecided); no pass criterion exists
+SKIP P3-T-INIT-001 SKIPPED: BLOCKED-by-U-05 for promotion (watchdog bound undecided; results would be PRELIMINARY per contracts S6.3). Startup/init work is also C-006 scope, which is not in this slice's banked base
+SKIP P3-T-INIT-011 SKIPPED: BLOCKED-by-U-05 (as for INIT-001); the instrumented normal path it needs does not exist in the banked base
+SKIP P3-T-INIT-021 SKIPPED: BLOCKED-by-U-05 (as for INIT-001)
+SKIP P3-T-INIT-031 SKIPPED: BLOCKED-by-U-05 (as for INIT-001)
+SKIP P3-T-INIT-041 SKIPPED: BLOCKED-by-U-05 (inherits INIT-001); also needs a shared-library pre-main harness arrangement that does not exist in the banked base
+SKIP P3-T-INIT-051 SKIPPED/NOT-YET: no distinct bootstrap path exists in the banked base to serve a block under C-010 conditions (registry anchors and lock are static, B-006 F-08 precondition fact), so the case cannot be instantiated as specified
+INSPECTED P3-T-INIT-061 INSPECTED (audit case): init-path dependency list enumerated from the banked sources -- src/api/mimir_alloc.c, src/core/mimir_core.c, src/platform/mimir_platform.c and their headers are portable C11 only (includes: stddef/stdint/string, sys/mman, unistd, pthread); no C++ container or utility appears on the path, and this programme (a pre-main-free binary) reaches main and allocates. Worksheet in NOTES_C007.md
+SKIP P3-T-INIT-071 SKIPPED/NOT-YET: no ordering mechanism for allocating static/global construction is stated by any banked design, so the case's precondition cannot be satisfied as specified
+INSPECTED P3-T-INIT-081 INSPECTED (audit case): central bookkeeping is fixed static storage (registry head pointer + counters in src/core/mimir_core.c); per-block descriptors live inside each block's own mapping, so central bookkeeping footprint does not grow with the number of allocations or threads. Runtime footprint measurement is not claimed. Worksheet in NOTES_C007.md
+SKIP P3-T-ERR-031 SKIPPED/NOT-YET: DIAGNOSTIC-ONLY debug-detection case; no DEBUG/internal-check build exists in the banked base; never a conformance PASS (B-009 S7.3)
+SKIP P3-T-ERR-041 SKIPPED/NOT-YET: needs an internal-check build plus induced metadata corruption, neither available through the public API or the banked base (INC-C007-01)
+SKIP P3-T-ERR-051 SKIPPED/NOT-YET: documentation terminology audit over the full document set; it is an audit artefact of the S7.6 completeness audit (exit item 12), not a runtime case this suite can pass. No claim is made here
+SKIP P3-T-ERR-061 SKIPPED/NOT-YET: documentation audit as for ERR-051; this suite's own records qualify every page quantity as system page size or requested bytes
+SKIP P3-T-ERR-071 SKIPPED/NOT-YET: needs the reporting path instrumented for dynamic-allocation use during an induced failure (its failure-context case FAIL-111 is likewise skipped); no such instrumentation exists
+SKIP P3-T-ERR-081 SKIPPED/NOT-YET: needs reporting invoked from an induced corrupted state (F-09/F-12 induction); not available in the banked base
+SKIP P3-T-ERR-091 SKIPPED/NOT-YET: needs bootstrap-path reporting instrumentation (as in INIT-011, BLOCKED-by-U-05); not available in the banked base
+SKIP P3-T-ERR-101 SKIPPED/NOT-YET: needs cascaded-error instrumentation with retained-storage accounting; not available in the banked base
+SKIP P3-T-ERR-111 SKIPPED/NOT-YET: full claim-surface documentation audit (headers, docs, diagnostics text) belongs to the S7.6 completeness audit; the header-scoped half is inspected under UNS-071
+SKIP P3-T-ERR-121 SKIPPED/NOT-YET: documentation audit as for ERR-111 (implied claims included)
+SKIP P3-T-ERR-131 SKIPPED/NOT-YET: documentation audit half belongs to the S7.6 completeness audit; any stronger runtime signal-state claim is BLOCKED-by-U-05 and is not made
+SKIP P3-T-ERR-141 SKIPPED: BLOCKED-by-U-05 (also U-19): no atfork registration or lock discipline is documented in a banked design; no fork claim is made
+  [ok] P3-T-ERR-151: live parent blocks allocated immediately before fork
+  [ok] P3-T-ERR-151: fork succeeded
+  [ok] P3-T-ERR-151: child exited without touching the allocator (no child claim made)
+  [ok] P3-T-ERR-151: parent case only: after fork, every live parent block is still valid, bytes as written, ownership unchanged
+  [ok] P3-T-ERR-151: parent frees each block exactly once and allocates normally after fork
+CASE P3-T-ERR-151 PASS (5 checks)
+SKIP P3-T-ERR-161 SKIPPED: BLOCKED-by-U-05 (also U-17..U-21): fork behaviour beyond the ERR-151 parent case is not Defined; no pass criterion exists
+SKIP P3-T-ERR-171 SKIPPED: BLOCKED-by-U-03, out of Phase 3 scope: no runtime configuration surface exists (L7 compiled out, B-006 S12.3)
+SKIP P3-T-ERR-181 SKIPPED: BLOCKED-by-U-03, out of Phase 3 scope: no statistics setting exists (as for ERR-171)
+SKIP P3-T-ERR-191 SKIPPED: BLOCKED-by-U-03, out of Phase 3 scope: no diagnostics setting exists (as for ERR-171)
+SKIP P3-T-ERR-201 SKIPPED: BLOCKED-by-U-03, out of Phase 3 scope: no config or config version ID exists (as for ERR-171)
+  [ok] P3-T-ERR-211: 50 cycles: block allocated on thread A freed on thread B exactly as on one thread, bytes intact at handoff, ownership preserved exactly (hook C-009)
+CASE P3-T-ERR-211 PASS (1 checks)
+  [ok] P3-T-ERR-212: churn: 4 rounds x 4 threads created and destroyed while blocks transfer between threads (seeded); every transferred block released exactly once by its correct owner, no overlap or corruption (hook C-009; correctness only)
+CASE P3-T-ERR-212 PASS (1 checks)
+  [ok] P3-T-CAL-001: calloc(4, 8) returns non-null
+  [ok] P3-T-CAL-001: calloc storage suitably aligned as in MALLOC-01 (no numeric value asserted, U-15)
+  [ok] P3-T-CAL-001: every byte reads zero before any caller write (hook C-002)
+  [ok] P3-T-CAL-001: calloc(3, 7): non-multiple-of-alignment product (21 bytes) returns non-null and zeroed
+CASE P3-T-CAL-001 PASS (4 checks)
+  [ok] P3-T-CAL-002: zeroed, suitably aligned result holds across the registered size set including non-multiples of the alignment
+CASE P3-T-CAL-002 PASS (1 checks)
+  [ok] P3-T-CAL-003: calloc(37, 11) returns non-null
+  [ok] P3-T-CAL-003: every inspected byte of the requested product (407 bytes) reads zero at the point of return; no byte beyond the requested product is inspected as an oracle
+CASE P3-T-CAL-003 PASS (2 checks)
+  [ok] P3-T-CAL-011: overflow product (count x size unrepresentable) fails with null, no wrapped-around allocation (hook C-001; errno not asserted, U-10)
+  [ok] P3-T-CAL-011: overflow detected with the factors in the other order
+  [ok] P3-T-CAL-011: maximal overflow product fails with null
+CASE P3-T-CAL-011 PASS (3 checks)
+  [ok] P3-T-CAL-012: representable product above the target maximum fails with null, no wrapped allocation
+  [ok] P3-T-CAL-012: same representable-but-unsatisfiable product with factors exchanged fails with null
+CASE P3-T-CAL-012 PASS (2 checks)
+  [ok] P3-T-CAL-021: non-overflow failure (representable product cannot be satisfied) returns null, no pointer to unallocated storage in any form
+  [ok] P3-T-CAL-021: after the failure the next ordinary in-scope calloc behaves normally (non-null, zeroed)
+CASE P3-T-CAL-021 PASS (2 checks)
+SKIP P3-T-CAL-031 SKIPPED: BLOCKED-by-U-09 (calloc zero factor undecided, V-01); no pass criterion exists and none is written. The implementation's zero-factor posture is recorded by C-005, not by this suite
+  [ok] P3-T-REA-001: grow/shrink setup allocation succeeds
+  [ok] P3-T-REA-001: realloc grow to 512 succeeds (hook C-004)
+  [ok] P3-T-REA-001: grow: first min(old, new) = 32 bytes preserved byte-for-byte
+  [ok] P3-T-REA-001: realloc shrink to 16 succeeds
+  [ok] P3-T-REA-001: shrink: first min(old, new) = 16 bytes preserved byte-for-byte
+CASE P3-T-REA-001 PASS (5 checks)
+  [ok] P3-T-REA-002: move-case setup allocation succeeds
+  [ok] P3-T-REA-002: realloc grow to 8192 succeeds
+  [ok] P3-T-REA-002: on a move, the preserved range (24 bytes) matches byte-for-byte
+  [ok] P3-T-REA-002: move instance observed: returned pointer differs from the original (precondition observation only, per B-008 S4.4 grow-always-moves design fact; never a behavioural oracle)
+CASE P3-T-REA-002 PASS (4 checks)
+  [ok] P3-T-REA-011: failure-preservation setup allocation succeeds
+  [ok] P3-T-REA-011: realloc to an unsatisfiable size returns null (hook C-003; errno not asserted, U-10)
+  [ok] P3-T-REA-011: original allocation unchanged in contents and still caller-owned after failed realloc (MA-6.2-022)
+  [ok] P3-T-REA-011: original remains usable after failed realloc
+CASE P3-T-REA-011 PASS (4 checks)
+  [ok] P3-T-REA-012: freeable-after-failure setup allocation succeeds
+  [ok] P3-T-REA-012: realloc to a representable unsatisfiable size returns null
+  [ok] P3-T-REA-012: original intact after the failed realloc
+  [ok] P3-T-REA-012: original freed normally exactly as before the call (MA-6.2-022)
+  [ok] P3-T-REA-012: fresh allocation after freeing the preserved original succeeds (baseline behaviour)
+CASE P3-T-REA-012 PASS (5 checks)
+  [ok] P3-T-REA-021: realloc(NULL, 64) behaves as mimir_malloc(64): non-null, ownership passes
+  [ok] P3-T-REA-021: realloc(NULL) block fully writable/readable
+CASE P3-T-REA-021 PASS (2 checks)
+  [ok] P3-T-REA-022: realloc(NULL, unsatisfiable) behaves as the malloc failure case: null, no ownership passes
+  [ok] P3-T-REA-022: realloc(NULL, SIZE_MAX) behaves as the malloc oversize case: null
+  [ok] P3-T-REA-022: ordinary realloc(NULL, 32) succeeds after the failure cases
+CASE P3-T-REA-022 PASS (3 checks)
+  [ok] P3-T-REA-031: grow-tail setup allocation succeeds
+  [ok] P3-T-REA-031: realloc grow to 400 succeeds
+  [ok] P3-T-REA-031: preserved range (first min(old, new) = 40 bytes) verified; tail bytes beyond it are recorded UNSPECIFIED and are never asserted (REALLOC-06)
+CASE P3-T-REA-031 PASS (3 checks)
+SKIP P3-T-REA-041 SKIPPED: BLOCKED-by-U-12 (realloc(p, 0) undecided, V-04); in particular neither the return value nor the ownership/freeability of p is asserted. The implementation posture is recorded by C-005, not by this suite
+SKIP P3-T-COND-001 SKIPPED: BLOCKED-by-U-16: the reallocarray gate does not hold for this target (no annex records it; the symbol is absent from the banked surface)
+SKIP P3-T-COND-002 SKIPPED: BLOCKED-by-U-16 (as for COND-001)
+SKIP P3-T-COND-003 SKIPPED: BLOCKED-by-U-16 (as for COND-001)
+SKIP P3-T-UNS-001 SKIPPED: BLOCKED-by-U-09 (and U-12 for realloc(p, 0)): zero-size is listed unsupported/unresolved in the written record and no conformance case in this suite claims a zero-size result; no runtime refusal is asserted
+SKIP P3-T-UNS-011 SKIPPED: BLOCKED-by-U-11 (numeric guarantee also U-15): explicit alignment is listed unsupported in the written record; no failure model exists to assert
+INSPECTED P3-T-UNS-021 INSPECTED (audit case): docs/PHASE_3_MINIMAL_ALLOCATOR_DESIGN.md (B-006) states it provides NO mimir_calloc and NO mimir_realloc (its S12.2, verified by grep at this slice's run); the pair's conformance home is the CAL/REA cases above under the B-008 S7.2 amended supported list, by analogy under U-03. Worksheet in NOTES_C007.md
+INSPECTED P3-T-UNS-031 INSPECTED (audit case): the API translation unit exports exactly mimir_malloc, mimir_free, mimir_calloc, mimir_realloc and no standard name (nm evidence in the recorded run); no interposition or standard-name replacement is claimed or tested
+INSPECTED P3-T-UNS-041 INSPECTED (audit case): no case in this suite asserts address reuse, trim, size classes, caches, or sharding; the suite contains no trim operation and no fuzzer (the B-009 S4.3d fuzzer does not exist in the banked base, INC-C007-01)
+SKIP P3-T-UNS-051 SKIPPED: BLOCKED-by-U-03: whether any statistics/trim surface is even in scope is the open U-03 decision; no Phase 3 conformance case here depends on a stats/trim call
+SKIP P3-T-UNS-061 SKIPPED: BLOCKED-by-U-17 (under U-05): lock state in the fork child is UNRESOLVED; nothing about the child is asserted (see ERR-151 parent case)
+SKIP P3-T-UNS-062 SKIPPED: BLOCKED-by-U-18 (under U-05): first allocation in the fork child is UNRESOLVED
+SKIP P3-T-UNS-063 SKIPPED: BLOCKED-by-U-19 (under U-05): atfork ordering is UNRESOLVED
+SKIP P3-T-UNS-064 SKIPPED: BLOCKED-by-U-20 (under U-05): statistics/diagnostics across fork are UNRESOLVED (and no stats surface exists)
+SKIP P3-T-UNS-065 SKIPPED: BLOCKED-by-U-21 (under U-05): fork during bootstrap is UNRESOLVED
+INSPECTED P3-T-UNS-071 INSPECTED (audit case, header-scoped): include/mimir_alloc.h states no async-signal-safety claim (it expressly states none is stated or implied), and no case in this suite calls an allocator function from a signal handler -- this suite contains no signal handler at all (verified by grep of this source at run time). The full claim-surface audit remains ERR-111..131, skipped above
+INSPECTED P3-T-UNS-081 INSPECTED (audit case): this suite's only recorded run is ARM64 Linux + glibc on this Pi; no annex or case instance exists for Android/bionic/musl/Termux/proot and no evidence from them is worded as exit evidence. The x86-64 annex is likewise absent and its run OWED
+INSPECTED P3-T-UNS-091 INSPECTED (audit case): no timing value is an oracle in any case of this suite (verified by inspection of this source: no clock/timing assertion exists); timestamps in the recorded run are records, never oracles, and no PASS line carries a performance conclusion
+SKIP P3-T-UNS-101 SKIPPED: BLOCKED-by-U-13 (presence also U-01): malloc_usable_size is outside its COND gate; no presence, semantics, or null-case result is asserted
+SUITE cases: 40 passed, 0 failed, 70 skipped, 9 inspected (of 119 registered)
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+x86-64 run of this suite: OWED (B-009 S3.4); Phase 3 exit: UNMET
+./build/test_c008
+C-008 controlled-failure test (roadmap S9.3, B-008 S6)
+  [ok] runtime page size discovered
+runtime system page size: 16384 bytes
+S93-1 boundaries and defined refusals (B-008 S6.4)
+  [ok] sentinel block allocated
+  [ok] malloc at page-1 / page / page+1 / 2page-1 / 2page+1: success, aligned, full extent usable
+  [ok] calloc product == one page: every requested byte zero at return
+  [ok] realloc boundary: block of page-1 allocated
+  [ok] realloc grow page-1 -> page+1 succeeds
+  [ok] realloc across page boundary preserves the whole old extent byte-for-byte
+  [ok] refusal: malloc(SIZE_MAX) returns null (total-size overflow)
+  [ok] after malloc(SIZE_MAX): sentinel intact, recovery succeeds
+  [ok] refusal: malloc(SIZE_MAX - page + 1) returns null (reserve-sum overflow, pre-admission)
+  [ok] after reserve-overflow refusal: sentinel intact, recovery succeeds
+  [ok] refusal: malloc(SIZE_MAX/2) returns null (representable, unsatisfiable)
+  [ok] after unsatisfiable malloc: sentinel intact, recovery succeeds
+  [ok] refusal: calloc(SIZE_MAX, 2) returns null (product overflow)
+  [ok] after calloc overflow: sentinel intact, recovery succeeds
+  [ok] refusal: calloc(2, SIZE_MAX) returns null (product overflow, swapped factors)
+  [ok] after swapped calloc overflow: sentinel intact, recovery succeeds
+  [ok] refusal: calloc(SIZE_MAX/2 + 1, 2) returns null (product overflow at the boundary)
+  [ok] after boundary calloc overflow: sentinel intact, recovery succeeds
+  [ok] realloc refusal: original block allocated
+  [ok] refusal: realloc(p, SIZE_MAX) returns null
+  [ok] after realloc(SIZE_MAX): original preserved byte-for-byte (B-008 S6.4)
+  [ok] refusal: realloc(p, SIZE_MAX/2) returns null (representable, unsatisfiable)
+  [ok] after unsatisfiable realloc: original preserved, recovery succeeds
+  [ok] original freed exactly as before the failed reallocs; allocator healthy
+  [ok] sentinel intact at end of S93-1
+S93-2 low process limit (RLIMIT_AS child)
+  [ok] rlimit child: allocations succeed until the OS refuses, the refusal is exactly null (child reached it alive, no crash or hang), and after freeing, a fresh allocation under the same limit succeeds
+  [ok] parent allocator healthy after the rlimit child
+S93-3 fragmented address space
+  [ok] fragmentation setup: 48 mixed-size blocks allocated
+  [ok] survivors byte-for-byte intact after every second block is freed (holes opened)
+  [ok] 24 new blocks allocated into the holed space
+  [ok] every live requested extent pairwise disjoint after fragmentation churn (no overlapping valid blocks)
+  [ok] every live block's contents intact after fragmentation churn
+  [ok] recovery succeeds after fragmentation case
+S93-4 kill / restart during work
+  [ok] kill case: parent sentinel allocated
+  [ok] worker child killed with SIGKILL while holding a live, verified block
+  [ok] fresh process after the kill allocates, verifies and frees normally (restart health; per-process state only)
+  [ok] parent sentinel intact and parent allocator healthy after the kill
+S93-5 failure storm (120 rounds)
+  [ok] 120 rounds: every induced failure is exactly null, every interleaved allocation succeeds, no hang (the suite completing is the no-hang evidence)
+  [ok] storm survivors pairwise disjoint (failures never return overlapping valid blocks)
+  [ok] storm survivors' contents intact
+  [ok] recovery succeeds after the failure storm
+SKIP S93-INJ-1 SKIPPED/NOT-YET: fail-the-Nth-mapping sweep needs the fault-injection shim on the L6 mapping boundary; none exists in the banked base (INC-C007-01, carried as INC-C008-01)
+SKIP S93-INJ-2 SKIPPED/NOT-YET: metadata-allocation failure injection needs the shim; none exists (INC-C007-01)
+SKIP S93-INJ-3 SKIPPED/NOT-YET: EMFILE / EAGAIN-class OS failure injection needs the shim; none exists (INC-C007-01)
+SKIP S93-ENV-1 SKIPPED/NOT-YET: Android track of roadmap S9.3 cannot run on this Linux Pi host; results are tracked separately per target and none is claimed (INC-C008-04)
+SKIP S93-ENV-2 SKIPPED/NOT-YET: proot track of roadmap S9.3 cannot run on this host (INC-C008-04)
+SKIP S93-FORK-1 SKIPPED: BLOCKED-by-U-17..U-21 -- fork-child lock state and first allocation in the child are open (B-008 S6.3 X-4a/X-4b); no behaviour is asserted
+SKIP S93-TEARDOWN-1 SKIPPED: BLOCKED -- calls after allocator teardown / from exit-path code have no contract row (B-008 S6.3 X-8, INC-B008-8); no claim is made or tested
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+./build/test_d004
+D-004 multithread allocate/fill/free test
+CONFIG: threads=4 iter_a=250 live_b=16 cross_c=50 iter_d=200 host_page_size=16384
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+PHASE B distinct live pointers: ok (64 recorded)
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+MAKE_TEST_EXIT:0
+=== make test-d003 ===
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/platform/test_d003.c -o build/test_d003.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_d003.o -o build/test_d003
+./build/test_d003
+D-003 page-size portability test
+PART B [ARITHMETIC-LEVEL ONLY] checked round-up vs independent __int128 oracle, page sizes 4096 and 16384
+  [ok] B1 page=4096 x=0: ref==oracle (0)
+  [ok] B1 page=4096 x=0: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=1: ref==oracle (4096)
+  [ok] B1 page=4096 x=1: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=100: ref==oracle (4096)
+  [ok] B1 page=4096 x=100: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=4095: ref==oracle (4096)
+  [ok] B1 page=4096 x=4095: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=4096: ref==oracle (4096)
+  [ok] B1 page=4096 x=4096: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=4097: ref==oracle (8192)
+  [ok] B1 page=4096 x=4097: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=8191: ref==oracle (8192)
+  [ok] B1 page=4096 x=8191: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=8192: ref==oracle (8192)
+  [ok] B1 page=4096 x=8192: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=8193: ref==oracle (12288)
+  [ok] B1 page=4096 x=8193: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=16383: ref==oracle (16384)
+  [ok] B1 page=4096 x=16383: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=16384: ref==oracle (16384)
+  [ok] B1 page=4096 x=16384: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=16385: ref==oracle (20480)
+  [ok] B1 page=4096 x=16385: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=32768: ref==oracle (32768)
+  [ok] B1 page=4096 x=32768: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=32769: ref==oracle (36864)
+  [ok] B1 page=4096 x=32769: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=65536: ref==oracle (65536)
+  [ok] B1 page=4096 x=65536: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=1048576: ref==oracle (1048576)
+  [ok] B1 page=4096 x=1048576: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=1048577: ref==oracle (1052672)
+  [ok] B1 page=4096 x=1048577: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=0: ref==oracle (0)
+  [ok] B1 page=16384 x=0: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=1: ref==oracle (16384)
+  [ok] B1 page=16384 x=1: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=100: ref==oracle (16384)
+  [ok] B1 page=16384 x=100: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=4095: ref==oracle (16384)
+  [ok] B1 page=16384 x=4095: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=4096: ref==oracle (16384)
+  [ok] B1 page=16384 x=4096: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=4097: ref==oracle (16384)
+  [ok] B1 page=16384 x=4097: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=8191: ref==oracle (16384)
+  [ok] B1 page=16384 x=8191: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=8192: ref==oracle (16384)
+  [ok] B1 page=16384 x=8192: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=8193: ref==oracle (16384)
+  [ok] B1 page=16384 x=8193: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=16383: ref==oracle (16384)
+  [ok] B1 page=16384 x=16383: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=16384: ref==oracle (16384)
+  [ok] B1 page=16384 x=16384: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=16385: ref==oracle (32768)
+  [ok] B1 page=16384 x=16385: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=32768: ref==oracle (32768)
+  [ok] B1 page=16384 x=32768: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=32769: ref==oracle (49152)
+  [ok] B1 page=16384 x=32769: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=65536: ref==oracle (65536)
+  [ok] B1 page=16384 x=65536: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=1048576: ref==oracle (1048576)
+  [ok] B1 page=16384 x=1048576: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=1048577: ref==oracle (1064960)
+  [ok] B1 page=16384 x=1048577: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=SIZE_MAX: overflow refused
+  [ok] B1 page=16384 x=SIZE_MAX: overflow refused
+  [ok] B1 page=16384 x=SIZE_MAX-100: overflow refused
+  [ok] B2 page=4096 req=1: mapping length == 8192
+  [ok] B2 page=4096 req=4096: mapping length == 8192
+  [ok] B2 page=4096 req=4097: mapping length == 12288
+  [ok] B2 page=4096 req=32769: mapping length == 40960
+  [ok] B2 page=16384 req=1: mapping length == 32768
+  [ok] B2 page=16384 req=4096: mapping length == 32768
+  [ok] B2 page=16384 req=16385: mapping length == 49152
+  [ok] B2 page=16384 req=32769: mapping length == 65536
+  [ok] B3 min VA per malloc(4096): 8192 @4K pages, 32768 @16K pages
+  [ok] B3 old cap 8192 @4K pages: 64 MiB < 96 MiB limit (refusal NOT guaranteed -- the INC-D003-01 defect)
+  [ok] B3 fixed cap 32768: refusal guaranteed at both 4096 and 16384 page sizes
+PART A [MEASURED ON-DEVICE] runtime page size and allocator behaviour on this host
+runtime system page size: L6 reports 16384 bytes, independent sysconf(_SC_PAGESIZE) reports 16384
+  [ok] A1 L6 page-size discovery succeeds
+  [ok] A1 L6 value == independent sysconf value
+  [ok] A1 discovered page size is a nonzero power of two
+  [ok] A2 acquire(1): length == round_up(req, runtime page) == 16384
+  [ok] A2 acquire(1): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(16383): length == round_up(req, runtime page) == 16384
+  [ok] A2 acquire(16383): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(16384): length == round_up(req, runtime page) == 16384
+  [ok] A2 acquire(16384): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(16385): length == round_up(req, runtime page) == 32768
+  [ok] A2 acquire(16385): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(32769): length == round_up(req, runtime page) == 49152
+  [ok] A2 acquire(32769): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A3 malloc(1) succeeds
+  [ok] A3 malloc(1): user pointer is runtime-page aligned
+  [ok] A3 malloc(1): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(1): requested extent pattern verifies
+  [ok] A3 malloc(100) succeeds
+  [ok] A3 malloc(100): user pointer is runtime-page aligned
+  [ok] A3 malloc(100): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(100): requested extent pattern verifies
+  [ok] A3 malloc(4095) succeeds
+  [ok] A3 malloc(4095): user pointer is runtime-page aligned
+  [ok] A3 malloc(4095): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(4095): requested extent pattern verifies
+  [ok] A3 malloc(4096) succeeds
+  [ok] A3 malloc(4096): user pointer is runtime-page aligned
+  [ok] A3 malloc(4096): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(4096): requested extent pattern verifies
+  [ok] A3 malloc(4097) succeeds
+  [ok] A3 malloc(4097): user pointer is runtime-page aligned
+  [ok] A3 malloc(4097): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(4097): requested extent pattern verifies
+  [ok] A3 malloc(16383) succeeds
+  [ok] A3 malloc(16383): user pointer is runtime-page aligned
+  [ok] A3 malloc(16383): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(16383): requested extent pattern verifies
+  [ok] A3 malloc(16384) succeeds
+  [ok] A3 malloc(16384): user pointer is runtime-page aligned
+  [ok] A3 malloc(16384): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(16384): requested extent pattern verifies
+  [ok] A3 malloc(16385) succeeds
+  [ok] A3 malloc(16385): user pointer is runtime-page aligned
+  [ok] A3 malloc(16385): descriptor usable_offset == runtime page, mapping_length == 49152, usable_size == mapping_length - page
+  [ok] A3 malloc(16385): requested extent pattern verifies
+  [ok] A3 malloc(32769) succeeds
+  [ok] A3 malloc(32769): user pointer is runtime-page aligned
+  [ok] A3 malloc(32769): descriptor usable_offset == runtime page, mapping_length == 65536, usable_size == mapping_length - page
+  [ok] A3 malloc(32769): requested extent pattern verifies
+CHECKS: 141 run, 0 failed
+RESULT: PASS
+=== make test-d005 ===
+./scripts/cross/build_x86_64_freestanding_probe.sh
+== compile (clang --target=x86_64-linux-gnu) ==
+/tmp/tmp.6x6bRccEmY/probe.o: ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), not stripped
+== link (ld.gold -m elf_x86_64) ==
+/tmp/tmp.6x6bRccEmY/probe_x64: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+  Class:                             ELF64
+  Type:                              EXEC (Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+== run via binfmt (direct exec) ==
+output: D005-X64-PROBE-OK
+exit:   42
+== run via explicit box64 ==
+output: D005-X64-PROBE-OK
+exit:   42
+FREESTANDING PROBE: PASS (compile + link + run, exit 42 verified twice)
+=== make test-d006 ===
+./scripts/android/probe_android_toolchain.sh
+== host ==
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+aarch64
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+16384
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+== android environment variables ==
+ANDROID_NDK_HOME=[]
+ANDROID_HOME=[]
+ANDROID_SDK_ROOT=[]
+PREFIX (Termux)=[]
+(no ANDROID_* variables in environment)
+== NDK / SDK commands ==
+ABSENT:  ndk-build
+ABSENT:  sdkmanager
+ABSENT:  aarch64-linux-android21-clang
+ABSENT:  aarch64-linux-android-clang
+ABSENT:  adb
+== NDK / SDK paths ==
+ABSENT:  /home/pi/Android
+ABSENT:  /home/pi/Android/Sdk
+ABSENT:  /home/pi/android-ndk
+ABSENT:  /opt/android-sdk
+ABSENT:  /opt/android-ndk
+ABSENT:  /opt/android
+ABSENT:  /usr/lib/android-sdk
+ABSENT:  /usr/lib/android-ndk
+ABSENT:  /home/pi/.android
+ABSENT:  /usr/aarch64-linux-android
+== native compilers (for contrast) ==
+PRESENT: cc (/usr/bin/cc)
+PRESENT: gcc (/usr/bin/gcc)
+PRESENT: clang (/usr/bin/clang)
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+Debian clang version 14.0.6
+Target: aarch64-unknown-linux-gnu
+== clang AArch64 backend (NOT an Android toolchain) ==
+    aarch64    - AArch64 (little endian)
+    aarch64_32 - AArch64 (little endian ILP32)
+    aarch64_be - AArch64 (big endian)
+    arm64      - ARM64 (little endian)
+    arm64_32   - ARM64 (little endian ILP32)
+== Termux / proot presence (on this Pi host) ==
+ABSENT:  proot
+ABSENT:  proot-distro
+ABSENT:  termux-info
+ABSENT:  /data/data/com.termux
+ABSENT:  /data/data/com.termux/files/usr
+ABSENT:  /system/bin
+== debian packages mentioning android/ndk/adb (read-only) ==
+ii  libdbd-mariadb-perl                            1.22-1+b1                                arm64        Perl5 database interface to the MariaDB/MySQL databases
+ii  libmariadb3:arm64                              1:10.11.19-0+deb12u1                     arm64        MariaDB database client library
+ii  libreoffice-sdbc-mysql                         4:7.4.7-1+deb12u14                       arm64        MariaDB/MySQL SDBC driver for LibreOffice
+ii  mariadb-client                                 1:10.11.19-0+deb12u1                     arm64        MariaDB database client binaries
+ii  mariadb-client-core                            1:10.11.19-0+deb12u1                     arm64        MariaDB database core client binaries
+ii  mariadb-common                                 1:10.11.19-0+deb12u1                     all          MariaDB common configuration files
+ii  mobile-broadband-provider-info                 20230416-1                               all          database of mobile broadband service providers
+== name search, bounded depth (unrelated hits stay labelled) ==
+(end name search - a name match is not an NDK; only an NDK tree with toolchains/ and ndk-build counts)
+== probe complete ==
+=== make test-d007 ===
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/android/test_d007.c -o build/test_d007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_d007.o -o build/test_d007
+./build/test_d007
+D007-ANDROID-TEST allocate/fill/verify/free (4 public mimir_ symbols)
+NOTE: a run of this binary is evidence for the host it runs on only.
+ENV PAGESIZE=16384 (sysconf, measured in this run)
+PASS ENV sysconf(_SC_PAGESIZE) succeeded
+ENV NPROCESSORS_ONLN=4
+ENV POINTER_BITS=64
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS A mimir_malloc(ladder size) non-NULL
+PASS A fill/verify round-trip intact
+PASS B 8 live blocks filled and verified while live
+PASS B 8 live blocks pairwise distinct
+PASS B live blocks suitably aligned (max_align_t, non-numeric U-15)
+PASS C mimir_calloc(16, 32) non-NULL
+PASS C calloc extent reads zero at return
+PASS C mimir_malloc(128) non-NULL (realloc source)
+PASS C mimir_realloc grow 128 -> 512 non-NULL
+PASS C realloc grow preserves first 128 bytes
+PASS C mimir_realloc(NULL, 64) acts as malloc
+PASS D mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS D mimir_free(NULL) returns normally (defined no-op)
+PASS E producer thread created
+PASS E producer fill/verify clean (25 blocks)
+PASS E 25 blocks verified and freed cross-thread
+PASS E fresh allocation after cross-thread frees non-NULL
+PASS E fresh allocation fill/verify intact
+CHECKS 59 run, 0 failed
+ALLOCATIONS 58 FREES 58
+RESULT: PASS
+=== make test-d008 ===
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/compat/test_d008.c -o build/test_d008.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_d008.o -o build/test_d008
+./build/test_d008
+D-008 libc/alignment compatibility probe
+ENV pagesize=16384 alignof_max_align_t=16 sizeof_max_align_t=32 ptr_bits=64
+ENV libc=glibc __GLIBC__=2 __GLIBC_MINOR__=36
+  [ok] ENV sysconf pagesize positive size=0 ptr=(nil)
+  [ok] ENV alignof positive size=0 ptr=(nil)
+PHASE A mimir_malloc ladder (33 sizes)
+  [ok] A non-null size=1 ptr=0x7fff5fe24000
+  [ok] A aligned to max_align_t size=1 ptr=0x7fff5fe24000
+  [ok] A non-null size=2 ptr=0x7fff5fdf4000
+  [ok] A aligned to max_align_t size=2 ptr=0x7fff5fdf4000
+  [ok] A non-null size=3 ptr=0x7fff5fdec000
+  [ok] A aligned to max_align_t size=3 ptr=0x7fff5fdec000
+  [ok] A non-null size=5 ptr=0x7fff5fde4000
+  [ok] A aligned to max_align_t size=5 ptr=0x7fff5fde4000
+  [ok] A non-null size=7 ptr=0x7fff5fddc000
+  [ok] A aligned to max_align_t size=7 ptr=0x7fff5fddc000
+  [ok] A non-null size=8 ptr=0x7fff5fdd4000
+  [ok] A aligned to max_align_t size=8 ptr=0x7fff5fdd4000
+  [ok] A non-null size=15 ptr=0x7fff5fc1c000
+  [ok] A aligned to max_align_t size=15 ptr=0x7fff5fc1c000
+  [ok] A non-null size=16 ptr=0x7fff5fc14000
+  [ok] A aligned to max_align_t size=16 ptr=0x7fff5fc14000
+  [ok] A non-null size=17 ptr=0x7fff5fc0c000
+  [ok] A aligned to max_align_t size=17 ptr=0x7fff5fc0c000
+  [ok] A non-null size=24 ptr=0x7fff5fc04000
+  [ok] A aligned to max_align_t size=24 ptr=0x7fff5fc04000
+  [ok] A non-null size=31 ptr=0x7fff5fbfc000
+  [ok] A aligned to max_align_t size=31 ptr=0x7fff5fbfc000
+  [ok] A non-null size=32 ptr=0x7fff5fbf4000
+  [ok] A aligned to max_align_t size=32 ptr=0x7fff5fbf4000
+  [ok] A non-null size=33 ptr=0x7fff5fbec000
+  [ok] A aligned to max_align_t size=33 ptr=0x7fff5fbec000
+  [ok] A non-null size=63 ptr=0x7fff5fbe4000
+  [ok] A aligned to max_align_t size=63 ptr=0x7fff5fbe4000
+  [ok] A non-null size=64 ptr=0x7fff5fbdc000
+  [ok] A aligned to max_align_t size=64 ptr=0x7fff5fbdc000
+  [ok] A non-null size=65 ptr=0x7fff5fbd4000
+  [ok] A aligned to max_align_t size=65 ptr=0x7fff5fbd4000
+  [ok] A non-null size=100 ptr=0x7fff5fbcc000
+  [ok] A aligned to max_align_t size=100 ptr=0x7fff5fbcc000
+  [ok] A non-null size=127 ptr=0x7fff5fbc4000
+  [ok] A aligned to max_align_t size=127 ptr=0x7fff5fbc4000
+  [ok] A non-null size=128 ptr=0x7fff5fbbc000
+  [ok] A aligned to max_align_t size=128 ptr=0x7fff5fbbc000
+  [ok] A non-null size=255 ptr=0x7fff5fbb4000
+  [ok] A aligned to max_align_t size=255 ptr=0x7fff5fbb4000
+  [ok] A non-null size=256 ptr=0x7fff5fbac000
+  [ok] A aligned to max_align_t size=256 ptr=0x7fff5fbac000
+  [ok] A non-null size=1000 ptr=0x7fff5fba4000
+  [ok] A aligned to max_align_t size=1000 ptr=0x7fff5fba4000
+  [ok] A non-null size=1024 ptr=0x7fff5fb9c000
+  [ok] A aligned to max_align_t size=1024 ptr=0x7fff5fb9c000
+  [ok] A non-null size=4095 ptr=0x7fff5fb94000
+  [ok] A aligned to max_align_t size=4095 ptr=0x7fff5fb94000
+  [ok] A non-null size=4096 ptr=0x7fff5fb8c000
+  [ok] A aligned to max_align_t size=4096 ptr=0x7fff5fb8c000
+  [ok] A non-null size=4097 ptr=0x7fff5fb84000
+  [ok] A aligned to max_align_t size=4097 ptr=0x7fff5fb84000
+  [ok] A non-null size=8192 ptr=0x7fff5fb7c000
+  [ok] A aligned to max_align_t size=8192 ptr=0x7fff5fb7c000
+  [ok] A non-null size=16383 ptr=0x7fff5fb74000
+  [ok] A aligned to max_align_t size=16383 ptr=0x7fff5fb74000
+  [ok] A non-null size=16384 ptr=0x7fff5fb6c000
+  [ok] A aligned to max_align_t size=16384 ptr=0x7fff5fb6c000
+  [ok] A non-null size=16385 ptr=0x7fff5fb60000
+  [ok] A aligned to max_align_t size=16385 ptr=0x7fff5fb60000
+  [ok] A non-null size=65536 ptr=0x7fff5fb4c000
+  [ok] A aligned to max_align_t size=65536 ptr=0x7fff5fb4c000
+  [ok] A non-null size=100000 ptr=0x7fff5fb2c000
+  [ok] A aligned to max_align_t size=100000 ptr=0x7fff5fb2c000
+  [ok] A non-null size=262144 ptr=0x7fff5fae8000
+  [ok] A aligned to max_align_t size=262144 ptr=0x7fff5fae8000
+  [ok] A pairwise distinct size=1 ptr=0x7fff5fe24000
+  [ok] A pairwise distinct size=2 ptr=0x7fff5fdf4000
+  [ok] A pairwise distinct size=3 ptr=0x7fff5fdec000
+  [ok] A pairwise distinct size=5 ptr=0x7fff5fde4000
+  [ok] A pairwise distinct size=7 ptr=0x7fff5fddc000
+  [ok] A pairwise distinct size=8 ptr=0x7fff5fdd4000
+  [ok] A pairwise distinct size=15 ptr=0x7fff5fc1c000
+  [ok] A pairwise distinct size=16 ptr=0x7fff5fc14000
+  [ok] A pairwise distinct size=17 ptr=0x7fff5fc0c000
+  [ok] A pairwise distinct size=24 ptr=0x7fff5fc04000
+  [ok] A pairwise distinct size=31 ptr=0x7fff5fbfc000
+  [ok] A pairwise distinct size=32 ptr=0x7fff5fbf4000
+  [ok] A pairwise distinct size=33 ptr=0x7fff5fbec000
+  [ok] A pairwise distinct size=63 ptr=0x7fff5fbe4000
+  [ok] A pairwise distinct size=64 ptr=0x7fff5fbdc000
+  [ok] A pairwise distinct size=65 ptr=0x7fff5fbd4000
+  [ok] A pairwise distinct size=100 ptr=0x7fff5fbcc000
+  [ok] A pairwise distinct size=127 ptr=0x7fff5fbc4000
+  [ok] A pairwise distinct size=128 ptr=0x7fff5fbbc000
+  [ok] A pairwise distinct size=255 ptr=0x7fff5fbb4000
+  [ok] A pairwise distinct size=256 ptr=0x7fff5fbac000
+  [ok] A pairwise distinct size=1000 ptr=0x7fff5fba4000
+  [ok] A pairwise distinct size=1024 ptr=0x7fff5fb9c000
+  [ok] A pairwise distinct size=4095 ptr=0x7fff5fb94000
+  [ok] A pairwise distinct size=4096 ptr=0x7fff5fb8c000
+  [ok] A pairwise distinct size=4097 ptr=0x7fff5fb84000
+  [ok] A pairwise distinct size=8192 ptr=0x7fff5fb7c000
+  [ok] A pairwise distinct size=16383 ptr=0x7fff5fb74000
+  [ok] A pairwise distinct size=16384 ptr=0x7fff5fb6c000
+  [ok] A pairwise distinct size=16385 ptr=0x7fff5fb60000
+  [ok] A pairwise distinct size=65536 ptr=0x7fff5fb4c000
+  [ok] A pairwise distinct size=100000 ptr=0x7fff5fb2c000
+  [ok] A pairwise distinct size=262144 ptr=0x7fff5fae8000
+OBSERVED A page-modulus: 33 of 33 live pointers were 0 mod pagesize (observation, not a claim)
+  [ok] A mimir_free(NULL) returned normally size=0 ptr=(nil)
+PHASE B mimir_calloc paths
+  [ok] B calloc non-null size=1 ptr=0x7fff5fe24000
+  [ok] B calloc aligned to max_align_t size=1 ptr=0x7fff5fe24000
+  [ok] B calloc extent zeroed size=1 ptr=0x7fff5fe24000
+  [ok] B calloc non-null size=21 ptr=0x7fff5fe24000
+  [ok] B calloc aligned to max_align_t size=21 ptr=0x7fff5fe24000
+  [ok] B calloc extent zeroed size=21 ptr=0x7fff5fe24000
+  [ok] B calloc non-null size=512 ptr=0x7fff5fe24000
+  [ok] B calloc aligned to max_align_t size=512 ptr=0x7fff5fe24000
+  [ok] B calloc extent zeroed size=512 ptr=0x7fff5fe24000
+  [ok] B calloc non-null size=10000 ptr=0x7fff5fe24000
+  [ok] B calloc aligned to max_align_t size=10000 ptr=0x7fff5fe24000
+  [ok] B calloc extent zeroed size=10000 ptr=0x7fff5fe24000
+  [ok] B calloc non-null size=65537 ptr=0x7fff5fde4000
+  [ok] B calloc aligned to max_align_t size=65537 ptr=0x7fff5fde4000
+  [ok] B calloc extent zeroed size=65537 ptr=0x7fff5fde4000
+PHASE C mimir_realloc paths
+  [ok] C seed aligned size=37 ptr=0x7fff5fe24000
+  [ok] C grow-1000 aligned size=1000 ptr=0x7fff5fdf4000
+  [ok] C grow preserves 37 size=1000 ptr=0x7fff5fdf4000
+  [ok] C grow-70000 aligned size=70000 ptr=0x7fff5fddc000
+  [ok] C grow preserves 1000 size=70000 ptr=0x7fff5fddc000
+  [ok] C shrink-13 aligned size=13 ptr=0x7fff5fddc000
+  [ok] C shrink preserves 13 size=13 ptr=0x7fff5fddc000
+  [ok] C realloc(NULL,41) aligned size=41 ptr=0x7fff5fe24000
+PHASE D host malloc/calloc/realloc ladder
+  [ok] D host malloc aligned to max_align_t size=1 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=2 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=3 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=5 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=7 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=8 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=15 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=16 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=17 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=24 ptr=0x55560fc1d2b0
+  [ok] D host malloc aligned to max_align_t size=31 ptr=0x55560fc1d2d0
+  [ok] D host malloc aligned to max_align_t size=32 ptr=0x55560fc1d2d0
+  [ok] D host malloc aligned to max_align_t size=33 ptr=0x55560fc1d2d0
+  [ok] D host malloc aligned to max_align_t size=63 ptr=0x55560fc1d300
+  [ok] D host malloc aligned to max_align_t size=64 ptr=0x55560fc1d300
+  [ok] D host malloc aligned to max_align_t size=65 ptr=0x55560fc1d300
+  [ok] D host malloc aligned to max_align_t size=100 ptr=0x55560fc1d350
+  [ok] D host malloc aligned to max_align_t size=127 ptr=0x55560fc1d3c0
+  [ok] D host malloc aligned to max_align_t size=128 ptr=0x55560fc1d3c0
+  [ok] D host malloc aligned to max_align_t size=255 ptr=0x55560fc1d450
+  [ok] D host malloc aligned to max_align_t size=256 ptr=0x55560fc1d450
+  [ok] D host malloc aligned to max_align_t size=1000 ptr=0x55560fc1d560
+  [ok] D host malloc aligned to max_align_t size=1024 ptr=0x55560fc1d950
+  [ok] D host malloc aligned to max_align_t size=4095 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=4096 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=4097 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=8192 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=16383 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=16384 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=16385 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=65536 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=100000 ptr=0x55560fc1dd60
+  [ok] D host malloc aligned to max_align_t size=262144 ptr=0x7fff5fbdc010
+  [ok] D host calloc aligned size=21 ptr=0x55560fc1dd60
+  [ok] D host realloc aligned size=1000 ptr=0x55560fc1dd80
+PHASE E defined failures + observed postures
+  [ok] E oversize malloc returns NULL size=0 ptr=(nil)
+  [ok] E calloc overflow returns NULL size=0 ptr=(nil)
+  [ok] E calloc overflow swapped NULL size=0 ptr=(nil)
+OBSERVED mimir_malloc(0) -> (nil) (U-09 unresolved; posture only)
+OBSERVED mimir_calloc(0,8) -> (nil) (U-09 unresolved; posture only)
+OBSERVED mimir_calloc(8,0) -> (nil) (U-09 unresolved; posture only)
+OBSERVED mimir_realloc(live,0) -> (nil) (U-12 unresolved; posture only)
+OBSERVED original block byte0=0x5A after realloc(live,0)
+OBSERVED mimir_realloc(NULL,0) -> (nil) (U-09 unresolved; posture only)
+OBSERVED errno after failed mimir_malloc(SIZE_MAX) = 0 (U-10: errno NOT promised for mimir_ symbols; value is incidental)
+OBSERVED errno after failed host malloc(SIZE_MAX) = 12 ENOMEM=12 (host libc fact, this host only)
+OBSERVED host malloc(0) -> non-null (host libc fact, this host only)
+CHECKS: 163 run, 0 failed
+ALLOCATIONS: 43 FREES: 41
+RESULT: PASS
