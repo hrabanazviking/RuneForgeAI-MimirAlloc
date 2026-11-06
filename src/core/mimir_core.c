@@ -85,6 +85,14 @@
  * as an implementation posture only, continuous with the
  * C-001 stub's posture. It does NOT settle U-09 and no caller
  * or test may cite it as doing so.
+ *
+ * C-004 addendum (B-007 completeness audit): two literal gaps
+ * in this file were closed -- the B-007 A9 pointer-range check
+ * is now an explicit code check before publication (it was
+ * construction-only in C-003), and the B-007 A10 bookkeeping
+ * check now also covers the live_mappings increment (C-003
+ * checked only live_bytes). No other behaviour changed. The
+ * full audit is tests/core/AUDIT_B007_C004.md.
  */
 
 #include "mimir_core.h"
@@ -228,11 +236,12 @@ void *mimir_core_alloc(size_t size)
     }
     total_unrounded = usable_offset + size;
 
-    /* Bookkeeping check before any mapping (B-007 A10 form):
-     * the eventual live_bytes addition must be representable.
-     * mapping_length >= total_unrounded, so testing against
-     * total_unrounded is necessary but not sufficient; the
-     * exact test runs after acquire, before publication. */
+    /* No bookkeeping check is evaluated before the mapping:
+     * mapping_length is not yet known here (it is at least
+     * total_unrounded). The exact B-007 A10 counter checks
+     * run after acquire, before publication, below.
+     * (C-004 / INC-C004-04: the C-003 heading of this comment
+     * claimed a pre-acquire check that no code performed.) */
 
     /* L6 acquire, lock held across the call (S9.4 DECISION).
      * L6 applies the checked page round-up (B-007 A5/A6) and
@@ -259,10 +268,26 @@ void *mimir_core_alloc(size_t size)
         return NULL;
     }
 
-    /* B-007 A10: exact counter check, before publication. On
+    /* B-007 A9: pointer-range check, before the addition is
+     * ever evaluated on the return path: base + usable_offset
+     * must not wrap the address space. (C-004: this check was
+     * discharged only by construction in C-003 -- A8 plus the
+     * live-mapping extent; it is now stated in code, as A9
+     * requires, before publication.) On failure the mapping
+     * is released and nothing is published (A.3). */
+    if (usable_offset > (size_t)(UINTPTR_MAX - (uintptr_t)base)) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        (void)mimir_platform_global_unlock();
+        return NULL;
+    }
+
+    /* B-007 A10: exact counter checks, before publication. On
      * failure the mapping is released and nothing is
-     * published (A.3: registry and counters unchanged). */
-    if (mapping_length > SIZE_MAX - mimir_live_bytes) {
+     * published (A.3: registry and counters unchanged).
+     * (C-004: the live_mappings increment is now checked too;
+     * C-003 checked only the live_bytes addition.) */
+    if (mapping_length > SIZE_MAX - mimir_live_bytes ||
+        mimir_live_mappings == SIZE_MAX) {
         (void)mimir_platform_map_release(base, mapping_length);
         (void)mimir_platform_global_unlock();
         return NULL;
@@ -270,9 +295,10 @@ void *mimir_core_alloc(size_t size)
 
     /* Publication (B-006 S11.1 step 8; B-007 C1.4): write the
      * descriptor in full, then link it and update counters in
-     * this same locked section. B-007 A9: base + usable_offset
-     * cannot wrap -- usable_offset < mapping_length and the
-     * whole extent is one live mapping. */
+     * this same locked section. B-007 A9 is discharged by the
+     * explicit pointer-range check above (C-004), backed by
+     * usable_offset <= mapping_length and the whole extent
+     * being one live mapping. */
     desc = (struct mimir_descriptor *)base;
     desc->magic = MIMIR_DESCRIPTOR_MAGIC;
     desc->mapping_base = base;
