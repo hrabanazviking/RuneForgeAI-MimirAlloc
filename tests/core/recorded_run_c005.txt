@@ -1,0 +1,266 @@
+=== C-005 recorded run ===
+2026-11-06T13:45:14-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+getconf PAGE_SIZE: 16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+--- make clean && make test (full session) ---
+rm -rf build
+mkdir -p build
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/api/mimir_alloc.c -o build/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/core/mimir_core.c -o build/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/platform/mimir_platform.c -o build/mimir_platform.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/contract/test_smoke.c -o build/test_smoke.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_smoke.o -o build/test_smoke
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_core.c -o build/test_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_core.o -o build/test_core
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_b007.c -o build/test_b007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_b007.o -o build/test_b007
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_c005.c -o build/test_c005.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c005.o -o build/test_c005
+./build/test_smoke
+PASS header include guard MIMIR_ALLOC_H defined
+PASS mimir_malloc prototype matches void *(*)(size_t)
+PASS mimir_free prototype matches void (*)(void *)
+PASS mimir_calloc prototype matches void *(*)(size_t, size_t)
+PASS mimir_realloc prototype matches void *(*)(void *, size_t)
+PASS mimir_malloc(1) returns non-NULL (real allocator)
+PASS mimir_malloc(1) storage writable/readable by owner
+PASS mimir_malloc(1024) returns non-NULL (real allocator)
+PASS mimir_malloc(1024) storage writable/readable by owner
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_malloc(0) returns NULL (posture only, U-09 unresolved)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free(mimir_malloc(8) result) returns normally
+PASS mimir_calloc(4, 8) returns non-NULL (C-005)
+PASS mimir_calloc(4, 8) storage reads zero at return
+PASS mimir_realloc(calloc block, 128) returns non-NULL (C-005)
+PASS mimir_realloc grow preserves first byte
+PASS mimir_realloc(NULL, 32) returns non-NULL (acts as malloc)
+SMOKE 18/18 checks passed
+./build/test_core
+C-003 core allocator test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered
+  [ok] malloc(1) non-null
+  [ok] malloc(1) aligned to max_align_t
+  [ok] malloc(1) pattern verifies over full extent
+  [ok] malloc(64) non-null
+  [ok] malloc(64) aligned to max_align_t
+  [ok] malloc(64) pattern verifies over full extent
+  [ok] malloc(1000) non-null
+  [ok] malloc(1000) aligned to max_align_t
+  [ok] malloc(1000) pattern verifies over full extent
+  [ok] malloc(16384) non-null
+  [ok] malloc(16384) aligned to max_align_t
+  [ok] malloc(16384) pattern verifies over full extent
+  [ok] malloc(16385) non-null
+  [ok] malloc(16385) aligned to max_align_t
+  [ok] malloc(16385) pattern verifies over full extent
+  [ok] malloc(49275) non-null
+  [ok] malloc(49275) aligned to max_align_t
+  [ok] malloc(49275) pattern verifies over full extent
+  [ok] four simultaneous allocations succeed
+  [ok] live blocks pairwise non-overlapping
+  [ok] live blocks hold distinct patterns undisturbed
+  [ok] all live blocks freed exactly once, no crash
+  [ok] mimir_free(NULL) returns normally
+  [ok] malloc(SIZE_MAX) returns NULL (oversize refusal)
+  [ok] malloc(SIZE_MAX - 8) returns NULL (oversize refusal)
+  [ok] malloc(0) returns NULL (posture only, U-09 unresolved)
+  [ok] allocation after frees succeeds
+  [ok] post-free allocation pattern verifies
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+./build/test_b007
+C-004 B-007 audit test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered (A2 input)
+  [ok] C2/F-08: first call in process succeeds, no init step
+  [ok] B.1: first pointer system-page aligned by construction
+  [ok] C1.4: first descriptor fully clean-initialised
+  [ok] C1.2: first block pattern verifies over full extent
+  [ok] A5/A6: malloc(1) non-null
+  [ok] B.1: malloc(1) system-page aligned
+  [ok] B.1: malloc(1) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(1) descriptor clean, mapping_length == 32768
+  [ok] C1.2: malloc(1) pattern verifies over full extent
+  [ok] A5/A6: malloc(16383) non-null
+  [ok] B.1: malloc(16383) system-page aligned
+  [ok] B.1: malloc(16383) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(16383) descriptor clean, mapping_length == 32768
+  [ok] C1.2: malloc(16383) pattern verifies over full extent
+  [ok] A5/A6: malloc(16384) non-null
+  [ok] B.1: malloc(16384) system-page aligned
+  [ok] B.1: malloc(16384) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(16384) descriptor clean, mapping_length == 32768
+  [ok] C1.2: malloc(16384) pattern verifies over full extent
+  [ok] A5/A6: malloc(16385) non-null
+  [ok] B.1: malloc(16385) system-page aligned
+  [ok] B.1: malloc(16385) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(16385) descriptor clean, mapping_length == 49152
+  [ok] C1.2: malloc(16385) pattern verifies over full extent
+  [ok] A5/A6: malloc(32767) non-null
+  [ok] B.1: malloc(32767) system-page aligned
+  [ok] B.1: malloc(32767) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(32767) descriptor clean, mapping_length == 49152
+  [ok] C1.2: malloc(32767) pattern verifies over full extent
+  [ok] A5/A6: malloc(32768) non-null
+  [ok] B.1: malloc(32768) system-page aligned
+  [ok] B.1: malloc(32768) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(32768) descriptor clean, mapping_length == 49152
+  [ok] C1.2: malloc(32768) pattern verifies over full extent
+  [ok] A5/A6: malloc(32769) non-null
+  [ok] B.1: malloc(32769) system-page aligned
+  [ok] B.1: malloc(32769) aligned to max_align_t
+  [ok] C1.4/A5/A6/A8: malloc(32769) descriptor clean, mapping_length == 65536
+  [ok] C1.2: malloc(32769) pattern verifies over full extent
+  [ok] C1.4: 24 alloc/free cycles, every descriptor clean-init
+  [ok] interleave: eight simultaneous allocations succeed
+  [ok] interleave: four allocations after partial frees succeed
+  [ok] C1.2: surviving blocks undisturbed by frees and new allocations
+  [ok] fresh allocation after interleaved frees succeeds
+  [ok] sentinel allocation succeeds
+  [ok] D.0: malloc(SIZE_MAX (oversize, A.3)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX (oversize, A.3)
+  [ok] A.3: fresh allocation works after SIZE_MAX (oversize, A.3)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX - 8 (oversize, A.3)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX - 8 (oversize, A.3)
+  [ok] A.3: fresh allocation works after SIZE_MAX - 8 (oversize, A.3)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX - page + 1 (fails A3 check)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX - page + 1 (fails A3 check)
+  [ok] A.3: fresh allocation works after SIZE_MAX - page + 1 (fails A3 check)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX - page (passes A3, fails A5 check)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX - page (passes A3, fails A5 check)
+  [ok] A.3: fresh allocation works after SIZE_MAX - page (passes A3, fails A5 check)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: malloc(SIZE_MAX / 2 (representable, unsatisfiable, F-01)) returns NULL
+  [ok] A.3: sentinel undisturbed after SIZE_MAX / 2 (representable, unsatisfiable, F-01)
+  [ok] A.3: fresh allocation works after SIZE_MAX / 2 (representable, unsatisfiable, F-01)
+  [ok] A.3: post-failure allocation pattern verifies
+  [ok] D.0: mimir_free(NULL) returns normally after failures
+  [ok] allocation after all failures and frees succeeds
+  [ok] post-failure allocation pattern verifies
+  [ok] malloc(0) returns NULL (posture only, U-09 unresolved)
+CHECKS: 70 run, 0 failed
+RESULT: PASS
+./build/test_c005
+C-005 calloc/realloc test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered
+  [ok] calloc(1, 1) non-null
+  [ok] calloc(1, 1) aligned to max_align_t
+  [ok] calloc(1, 1) every requested byte zero (byte-by-byte)
+  [ok] calloc(1, 1) extent owner-writable, pattern verifies
+  [ok] calloc(1, 7) non-null
+  [ok] calloc(1, 7) aligned to max_align_t
+  [ok] calloc(1, 7) every requested byte zero (byte-by-byte)
+  [ok] calloc(1, 7) extent owner-writable, pattern verifies
+  [ok] calloc(7, 1) non-null
+  [ok] calloc(7, 1) aligned to max_align_t
+  [ok] calloc(7, 1) every requested byte zero (byte-by-byte)
+  [ok] calloc(7, 1) extent owner-writable, pattern verifies
+  [ok] calloc(4, 16) non-null
+  [ok] calloc(4, 16) aligned to max_align_t
+  [ok] calloc(4, 16) every requested byte zero (byte-by-byte)
+  [ok] calloc(4, 16) extent owner-writable, pattern verifies
+  [ok] calloc(10, 100) non-null
+  [ok] calloc(10, 100) aligned to max_align_t
+  [ok] calloc(10, 100) every requested byte zero (byte-by-byte)
+  [ok] calloc(10, 100) extent owner-writable, pattern verifies
+  [ok] calloc(3, 1000) non-null
+  [ok] calloc(3, 1000) aligned to max_align_t
+  [ok] calloc(3, 1000) every requested byte zero (byte-by-byte)
+  [ok] calloc(3, 1000) extent owner-writable, pattern verifies
+  [ok] calloc(1, 16385) non-null
+  [ok] calloc(1, 16385) aligned to max_align_t
+  [ok] calloc(1, 16385) every requested byte zero (byte-by-byte)
+  [ok] calloc(1, 16385) extent owner-writable, pattern verifies
+  [ok] calloc(2, 16384) non-null
+  [ok] calloc(2, 16384) aligned to max_align_t
+  [ok] calloc(2, 16384) every requested byte zero (byte-by-byte)
+  [ok] calloc(2, 16384) extent owner-writable, pattern verifies
+  [ok] sentinel allocation succeeds
+  [ok] calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+  [ok] calloc(2, SIZE_MAX) returns NULL (overflow refusal)
+  [ok] calloc(SIZE_MAX/2+1, 2) returns NULL (overflow refusal)
+  [ok] calloc(2, SIZE_MAX/2+1) returns NULL (overflow refusal)
+  [ok] calloc(SIZE_MAX/16+1, 16) returns NULL (overflow refusal)
+  [ok] sentinel undisturbed after calloc overflow refusals
+  [ok] calloc(1, SIZE_MAX) returns NULL (representable, unsatisfiable)
+  [ok] calloc(SIZE_MAX, 1) returns NULL (representable, unsatisfiable)
+  [ok] sentinel undisturbed after unsatisfiable calloc
+  [ok] calloc succeeds after overflow/unsatisfiable failures
+  [ok] post-failure calloc extent reads zero
+  [ok] calloc(0, 16) returns NULL (posture only, U-09 unresolved)
+  [ok] calloc(16, 0) returns NULL (posture only, U-09 unresolved)
+  [ok] calloc(0, 0) returns NULL (posture only, U-09 unresolved)
+  [ok] calloc(8, 8) non-null (pairing setup)
+  [ok] calloc(8, 8) extent reads zero
+  [ok] realloc of calloc block to 256 non-null
+  [ok] grown calloc block: preserved 64 bytes still zero
+  [ok] realloc(NULL, 128) non-null (acts as malloc)
+  [ok] realloc(NULL, 128) aligned to max_align_t
+  [ok] realloc(NULL, 128) extent owner-writable, pattern verifies
+  [ok] realloc(NULL, 128) block freed exactly once, no crash
+  [ok] realloc(NULL, SIZE_MAX) returns NULL (malloc failure case)
+  [ok] realloc(NULL, 0) returns NULL (posture only, U-09 unresolved)
+  [ok] malloc(64) non-null (grow setup)
+  [ok] realloc grow 64 -> 5000 non-null
+  [ok] grow preserves first min(old, new) = 64 bytes
+  [ok] grow moved to a new block (design observation, B-008 S4.4; not a contract claim)
+  [ok] grown extent fully owner-writable, pattern verifies
+  [ok] malloc(100) non-null (multi-page grow setup)
+  [ok] realloc grow 100 -> 3*page+123 non-null
+  [ok] multi-page grow preserves first 100 bytes
+  [ok] malloc(200) non-null (same-size setup)
+  [ok] realloc same size 200 -> 200 non-null
+  [ok] same-size realloc preserves full extent
+  [ok] same-size returns input pointer (design decision, B-008 S4.3; not a contract claim)
+  [ok] malloc(5000) non-null (shrink setup)
+  [ok] realloc shrink 5000 -> 100 non-null
+  [ok] shrink preserves prefix of first 100 bytes
+  [ok] shrink returns input pointer (design-level fact, B-008 S4.4; not a contract claim)
+  [ok] shrunken extent owner-writable, pattern verifies
+  [ok] realloc grow after shrink 100 -> 2000 non-null
+  [ok] grow after shrink preserves recorded 100 bytes
+  [ok] malloc(3*page) non-null (shrink+free setup)
+  [ok] realloc shrink 3*page -> 50 non-null
+  [ok] allocation after shrink+free succeeds
+  [ok] malloc(256) non-null (failure-preservation setup)
+  [ok] realloc(ptr, SIZE_MAX) returns NULL (failure)
+  [ok] original intact after SIZE_MAX realloc failure
+  [ok] realloc(ptr, SIZE_MAX/2) returns NULL (unsatisfiable)
+  [ok] original intact after unsatisfiable realloc failure
+  [ok] original still usable: grow succeeds after failures
+  [ok] grow after failures preserves first 256 bytes
+  [ok] malloc(128) non-null (freeable-after-failure setup)
+  [ok] realloc(ptr, SIZE_MAX) returns NULL (second block)
+  [ok] second original intact after failed realloc
+  [ok] allocation after freeing failure-preserved block succeeds
+  [ok] malloc(300) non-null (realloc(ptr, 0) posture setup)
+  [ok] realloc(ptr, 0) returns NULL (posture only, U-12 unresolved)
+  [ok] original intact after realloc(ptr, 0) (posture record)
+  [ok] original was freeable after realloc(ptr, 0); later allocation succeeds (posture record)
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+make test exit code: 0
+--- nm exported-symbol check: nm -g --defined-only build/mimir_alloc.o ---
+000000000000003c T mimir_calloc
+000000000000001c T mimir_free
+0000000000000000 T mimir_malloc
+0000000000000060 T mimir_realloc
+only mimir_malloc, mimir_free, mimir_calloc and mimir_realloc are exported from the API translation unit (C-005: the B-008 S7.2 amended surface); its only undefined symbols are the internal mimir_core_alloc, mimir_core_free, mimir_core_calloc and mimir_core_realloc (nm build/mimir_alloc.o verified in session)
+--- sha256 of slice sources as tested ---
+64d86e7b23032d0ea7b7c23c8ecae0e7193a3b1def03ea58c41a5d7633c55a8b  Makefile
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+96519dd94d560a2b69b712c759a2cffc5336efc33ca049befb194974e70f68f5  src/core/mimir_core.c
+3b6506c3ac5ac1f2b50438fdfde4ed4525c7f12ae5e80b7f7b0f15709ee83e7a  src/core/mimir_core.h
+965cbd0700eacd559593ba17729dbbfd12950c246033937ba7d59b45dec03154  src/api/mimir_alloc.c
+a81b69c464318f743eb3a397997ae343fef62c95e7690cd98bc3eaa4f1aec95e  tests/core/test_c005.c
+2cc85896b95fde058bec17b32201909bf5a8db85f4c9ad73a13650201fa95118  tests/core/NOTES_C005.md
+9211bd409a5c9bbb164c02785bf4eda91e94244da55c1a434f9a961f4107789d  tests/core/test_core.c
+d0a5f389cd6ba8d71b06a48caf5cedb98d31972ab4d55d72379e178757dfa7ec  tests/core/test_b007.c
+21b69030762aa2699747d65729ecced0d20a8691ee6b5cc01eff4afeb9d2a9f4  tests/contract/test_smoke.c

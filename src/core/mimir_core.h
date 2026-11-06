@@ -28,4 +28,24 @@ void *mimir_core_alloc(size_t size);
  * behaviour with no defined error (B-006 S8.3). */
 void mimir_core_free(void *ptr);
 
+/* Calloc (C-005, B-008 S3 by analogy under U-03): checked
+ * nmemb * size product (overflow refused before the
+ * multiplication is relied on, no wrapped allocation),
+ * usable extent explicitly zeroed before publication.
+ * Zero factor: returns NULL as an implementation posture
+ * only; U-09 remains UNRESOLVED (MA-6.1-CALLOC-04). */
+void *mimir_core_calloc(size_t nmemb, size_t size);
+
+/* Realloc (C-005, B-008 S4 by analogy under U-03): NULL ptr
+ * behaves as mimir_core_alloc(new_size); grow moves and
+ * preserves min(old, new); shrink retains the mapping and
+ * updates only the requested-size record; any failure
+ * returns NULL with the original block LIVE, unchanged and
+ * caller-owned. new_size == 0 with a live ptr: returns NULL
+ * with the original preserved, as an implementation posture
+ * only; U-12 remains UNRESOLVED (MA-6.1-REALLOC-04).
+ * Invalid pointers are undefined behaviour with no defined
+ * error (MA-6.1-REALLOC-05). */
+void *mimir_core_realloc(void *ptr, size_t new_size);
+
 #endif /* MIMIR_CORE_H */
