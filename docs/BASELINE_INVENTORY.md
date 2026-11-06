@@ -16,7 +16,7 @@ from document-derived claims.
 
 There is no measured baseline in this repository. No benchmark result,
 raw benchmark log, CSV, harness, or script is tracked: this team
-verified the tracked file list (95 files) and the only files with
+verified the tracked file list (95 files at base b0b8374) and the only files with
 benchmark in the name are research documents (Research synthesis
 10_EXPERIMENTS_AND_BENCHMARKS.md and llm_computers
 07_VERIFICATION_AND_BENCHMARKS.md), which are plans, not results.
@@ -174,7 +174,7 @@ checked first (free -g and uptime, load average about 1.3, about
 
     command: git ls-files (in the team-03 worktree) counted, and
              filtered for bench, .log, results, .csv
-    output:  95 tracked files; the only matches were the two research
+    output:  95 tracked files at base b0b8374; the only matches were the two research
              documents named in Section 1. No raw log, CSV, results
              file, or harness is tracked.
 
