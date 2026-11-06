@@ -124,7 +124,7 @@ test-c007: $(BUILD)/test_c007
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test test-c007 test-d003 test-d004 test-d005 clean
+.PHONY: all test test-c007 test-d003 test-d004 test-d005 test-d006 clean
 
 $(BUILD)/test_d003.o: tests/platform/test_d003.c include/mimir_alloc.h src/platform/mimir_platform.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/platform/test_d003.c -o $@
@@ -148,3 +148,14 @@ test-d004: $(BUILD)/test_d004
 # on the Pi. See docs/PHASE_4_CROSS_COMPILATION_AND_CI.md.
 test-d005:
 	./scripts/cross/build_x86_64_freestanding_probe.sh
+
+# D-006: Android toolchain readiness probe - runs the
+# read-only probe (scripts/android/probe_android_
+# toolchain.sh) and reports PRESENT/ABSENT for every
+# component of an Android NDK build road on this host.
+# Standalone on purpose: it is NOT part of `make test`
+# and proves nothing about building or running the
+# allocator for Android - no Android NDK exists on the
+# Pi. See docs/PHASE_4_ANDROID_BUILD_PLAN.md.
+test-d006:
+	./scripts/android/probe_android_toolchain.sh
