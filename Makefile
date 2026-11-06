@@ -1,4 +1,4 @@
-# MimirAlloc - Phase 3 build (slices C-001..C-005).
+# MimirAlloc - Phase 3 build (slices C-001..C-006).
 # Plain Makefile per D-006: portable C11 core, C ABI.
 # C-001: public header, stub, contract smoke test.
 # C-002: L6 platform layer (src/platform/), exercised by its
@@ -13,6 +13,10 @@
 # C-005: calloc/realloc per B-008 - the evidence test under
 #        tests/core/ (test_c005.c) runs in `make test`;
 #        the slice record is tests/core/NOTES_C005.md.
+# C-006: section 6.3 startup / error-path audit - the
+#        evidence test under tests/core/ (test_c006.c) runs
+#        in `make test`; the audit itself is
+#        tests/core/AUDIT_6_3_C006.md. No src/ change.
 
 CC      = cc
 CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
@@ -21,7 +25,7 @@ BUILD   = build
 LIBOBJS = $(BUILD)/mimir_alloc.o $(BUILD)/mimir_core.o \
           $(BUILD)/mimir_platform.o
 
-all: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005
+all: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005 $(BUILD)/test_c006
 
 $(BUILD):
 	mkdir -p $(BUILD)
@@ -47,6 +51,9 @@ $(BUILD)/test_b007.o: tests/core/test_b007.c include/mimir_alloc.h | $(BUILD)
 $(BUILD)/test_c005.o: tests/core/test_c005.c include/mimir_alloc.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/core/test_c005.c -o $@
 
+$(BUILD)/test_c006.o: tests/core/test_c006.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_c006.c -o $@
+
 $(BUILD)/test_smoke: $(LIBOBJS) $(BUILD)/test_smoke.o
 	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_smoke.o -o $@
 
@@ -59,11 +66,15 @@ $(BUILD)/test_b007: $(LIBOBJS) $(BUILD)/test_b007.o
 $(BUILD)/test_c005: $(LIBOBJS) $(BUILD)/test_c005.o
 	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_c005.o -o $@
 
-test: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005
+$(BUILD)/test_c006: $(LIBOBJS) $(BUILD)/test_c006.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_c006.o -o $@
+
+test: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005 $(BUILD)/test_c006
 	./$(BUILD)/test_smoke
 	./$(BUILD)/test_core
 	./$(BUILD)/test_b007
 	./$(BUILD)/test_c005
+	./$(BUILD)/test_c006
 
 clean:
 	rm -rf $(BUILD)
