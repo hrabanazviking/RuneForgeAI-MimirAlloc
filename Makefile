@@ -124,7 +124,7 @@ test-c007: $(BUILD)/test_c007
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test test-c007 test-d003 test-d004 test-d005 test-d006 clean
+.PHONY: all test test-c007 test-d003 test-d004 test-d005 test-d006 test-d007 clean
 
 $(BUILD)/test_d003.o: tests/platform/test_d003.c include/mimir_alloc.h src/platform/mimir_platform.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/platform/test_d003.c -o $@
@@ -159,3 +159,20 @@ test-d005:
 # Pi. See docs/PHASE_4_ANDROID_BUILD_PLAN.md.
 test-d006:
 	./scripts/android/probe_android_toolchain.sh
+
+# D-007: Android physical-device test program - the
+# on-device test under tests/android/ (test_d007.c),
+# built and run NATIVELY here as a logic check only.
+# Standalone on purpose: it is NOT part of `make test`
+# and a native PASS is NOT an Android result - the
+# on-device run on the Samsung SM-X400 is OWED until an
+# NDK build road (D-006) and a device road exist. See
+# docs/PHASE_4_ANDROID_DEVICE_PACKET.md.
+$(BUILD)/test_d007.o: tests/android/test_d007.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/android/test_d007.c -o $@
+
+$(BUILD)/test_d007: $(LIBOBJS) $(BUILD)/test_d007.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_d007.o -o $@
+
+test-d007: $(BUILD)/test_d007
+	./$(BUILD)/test_d007
