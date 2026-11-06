@@ -1,0 +1,396 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/classification-record.schema.json",
+  "title": "MimirAlloc Classification Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_id",
+    "run_id",
+    "packet_path",
+    "packet_verification",
+    "scope_question",
+    "classifier",
+    "synthetic",
+    "primary",
+    "contributing",
+    "tied_candidates",
+    "possible_candidates",
+    "considered_and_rejected",
+    "confidence",
+    "evidence_cited",
+    "negative_evidence",
+    "missing_evidence",
+    "next_investigation_step",
+    "evidence_level",
+    "evidence_level_basis",
+    "claim_scope",
+    "supersedes",
+    "status",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "record_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "packet_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "packet_verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256sum_c",
+        "harness_verify",
+        "verified_on_host_env_class",
+        "notes"
+      ],
+      "properties": {
+        "sha256sum_c": {
+          "enum": [
+            "pass",
+            "fail",
+            "not-run-hypothetical"
+          ]
+        },
+        "harness_verify": {
+          "enum": [
+            "pass",
+            "fail",
+            "not-run-hypothetical"
+          ]
+        },
+        "verified_on_host_env_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "scope_question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "method",
+        "date_utc"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date_utc": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "synthetic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "is_synthetic",
+        "basis"
+      ],
+      "properties": {
+        "is_synthetic": {
+          "type": "boolean"
+        },
+        "basis": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "primary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "category",
+            "non-category"
+          ]
+        },
+        "id": {
+          "enum": [
+            "source-compile",
+            "link",
+            "loader-startup",
+            "address-space-configuration",
+            "system-call-or-sandbox",
+            "resource-pressure",
+            "allocator-correctness",
+            "not-a-failure",
+            "expected-synthetic",
+            "insufficient-evidence",
+            "multiple-candidate",
+            "harness-or-capture-error",
+            "out-of-scope-environment"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "contributing": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "confidence",
+          "evidence_refs"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "source-compile",
+              "link",
+              "loader-startup",
+              "address-space-configuration",
+              "system-call-or-sandbox",
+              "resource-pressure",
+              "allocator-correctness"
+            ]
+          },
+          "confidence": {
+            "enum": [
+              "probable",
+              "possible"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "tied_candidates": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "source-compile",
+          "link",
+          "loader-startup",
+          "address-space-configuration",
+          "system-call-or-sandbox",
+          "resource-pressure",
+          "allocator-correctness"
+        ]
+      }
+    },
+    "possible_candidates": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "source-compile",
+          "link",
+          "loader-startup",
+          "address-space-configuration",
+          "system-call-or-sandbox",
+          "resource-pressure",
+          "allocator-correctness"
+        ]
+      }
+    },
+    "considered_and_rejected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "source-compile",
+              "link",
+              "loader-startup",
+              "address-space-configuration",
+              "system-call-or-sandbox",
+              "resource-pressure",
+              "allocator-correctness"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "confidence": {
+      "enum": [
+        "confirmed",
+        "probable",
+        "possible",
+        "unclassifiable"
+      ]
+    },
+    "evidence_cited": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "value",
+          "source_file",
+          "supports"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {},
+          "source_file": {
+            "enum": [
+              "manifest.json",
+              "case.json",
+              "command.txt",
+              "stdout.log",
+              "stderr.log",
+              "SHA256SUMS"
+            ]
+          },
+          "supports": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "negative_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "value",
+          "source_file",
+          "against"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {},
+          "source_file": {
+            "enum": [
+              "manifest.json",
+              "case.json",
+              "command.txt",
+              "stdout.log",
+              "stderr.log",
+              "SHA256SUMS"
+            ]
+          },
+          "against": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "missing_evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_investigation_step": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_level": {
+      "enum": [
+        "Proposed",
+        "Implemented",
+        "Host-tested",
+        "Device-tested",
+        "Integration-proven",
+        "Performance-measured",
+        "Blocked",
+        "Not assigned"
+      ]
+    },
+    "evidence_level_basis": {
+      "type": "string"
+    },
+    "claim_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packet_claim_scope",
+        "classification_claim"
+      ],
+      "properties": {
+        "packet_claim_scope": {
+          "type": "string"
+        },
+        "classification_claim": {
+          "type": "string"
+        }
+      }
+    },
+    "supersedes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "current",
+        "superseded"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "source": {
+    "document": "docs/MimirAlloc_Research_and_Development_Roadmap.md",
+    "section": "3.2",
+    "note": "Categories and clues are roadmap text; non_categories, confidence_levels and all field-level clue mappings are A-006 additions."
+  },
+  "categories": [
+    {
+      "id": "source-compile",
+      "label": "Source compile",
+      "roadmap_clues": "C/C++ errors, unsupported intrinsics or headers",
+      "roadmap_investigation": "Reproduce the single target; identify platform macros and compiler/NDK version.",
+      "positive_fields": [
+        "stage",
+        "error_lines",
+        "first_relevant_error",
+        "stderr.log",
+        "exit_code",
+        "signal",
+        "timed_out"
+      ],
+      "negative_fields": [
+        "stage",
+        "stderr.log"
+      ],
+      "missing_fields": [
+        "compiler diagnostic line in logs",
+        "toolchain.cc/clang version corroboration when null"
+      ],
+      "single_packet_confidence_cap": "confirmed"
+    },
+    {
+      "id": "link",
+      "label": "Link",
+      "roadmap_clues": "Undefined symbols, duplicate definitions, incompatible ELF or missing library",
+      "roadmap_investigation": "Inspect the link line, ABI, linkage and symbol table.",
+      "positive_fields": [
+        "stage",
+        "error_lines",
+        "first_relevant_error",
+        "stderr.log",
+        "toolchain.ld"
+      ],
+      "negative_fields": [
+        "stage",
+        "target_ldd"
+      ],
+      "missing_fields": [
+        "link line (not captured by A-005)",
+        "symbol table (not captured; target_ldd is ldd output only)"
+      ],
+      "single_packet_confidence_cap": "confirmed"
+    },
+    {
+      "id": "loader-startup",
+      "label": "Loader/startup",
+      "roadmap_clues": "Missing interpreter or shared library, startup crash",
+      "roadmap_investigation": "Inspect ELF interpreter, dynamic dependencies and libc environment.",
+      "positive_fields": [
+        "stage",
+        "target_ldd",
+        "first_relevant_error",
+        "stderr.log",
+        "stdout.log",
+        "duration_ms"
+      ],
+      "negative_fields": [
+        "target_ldd",
+        "stdout.log"
+      ],
+      "missing_fields": [
+        "ELF interpreter field (not in A-005 manifest)",
+        "confirmed requires not-found/missing-library log or target_ldd evidence; startup crash alone caps probable"
+      ],
+      "single_packet_confidence_cap": "confirmed"
+    },
+    {
+      "id": "address-space-configuration",
+      "label": "Address-space configuration",
+      "roadmap_clues": "Failed mapping or tag/address assumptions",
+      "roadmap_investigation": "Verify actual virtual-address layout and source configuration; do not infer only from CPU name.",
+      "positive_fields": [
+        "stderr.log",
+        "error_lines",
+        "page_size_bytes",
+        "meminfo_before.MemAvailable",
+        "meminfo_after.MemAvailable"
+      ],
+      "negative_fields": [
+        "meminfo_before",
+        "meminfo_after"
+      ],
+      "missing_fields": [
+        "VA layout/VA width field (not captured)",
+        "mmap errno field (not captured)",
+        "never infer from uname.machine alone"
+      ],
+      "single_packet_confidence_cap": "probable"
+    },
+    {
+      "id": "system-call-or-sandbox",
+      "label": "System call or sandbox",
+      "roadmap_clues": "Unsupported syscall, seccomp, permissions",
+      "roadmap_investigation": "Capture errno and environment; compare native Linux, Android and proot.",
+      "positive_fields": [
+        "stderr.log",
+        "error_lines",
+        "first_relevant_error",
+        "env_class"
+      ],
+      "negative_fields": [
+        "env_class"
+      ],
+      "missing_fields": [
+        "errno field (not captured)",
+        "seccomp status (not captured)",
+        "kernel/audit log (not captured)",
+        "single packet cap is possible; probable requires >=2 packets same case_id different env_class",
+        "negative evidence is env_class: identical failure in a second native packet"
+      ],
+      "single_packet_confidence_cap": "possible"
+    },
+    {
+      "id": "resource-pressure",
+      "label": "Resource pressure",
+      "roadmap_clues": "ENOMEM, OOM kill, huge virtual reservation",
+      "roadmap_investigation": "Record RSS/PSS, address-space limits, memory pressure and kernel logs where accessible.",
+      "positive_fields": [
+        "stderr.log",
+        "error_lines",
+        "timed_out",
+        "signal",
+        "meminfo_before.MemAvailable",
+        "meminfo_after.MemAvailable",
+        "child_peak_rss_kb",
+        "meminfo_before.MemTotal",
+        "df_free_bytes_cwd"
+      ],
+      "negative_fields": [
+        "meminfo_before.MemAvailable",
+        "meminfo_after.MemAvailable",
+        "child_peak_rss_kb"
+      ],
+      "missing_fields": [
+        "kernel OOM log (not captured)",
+        "PSS (not captured)",
+        "loadavg_before is supporting colour only, never positive evidence alone",
+        "confirmed requires ENOMEM/OOM log text plus corroborating meminfo/RSS field; signal 9 or timeout alone cap possible"
+      ],
+      "single_packet_confidence_cap": "confirmed"
+    },
+    {
+      "id": "allocator-correctness",
+      "label": "Allocator correctness",
+      "roadmap_clues": "Reproducible invalid free, race, corruption",
+      "roadmap_investigation": "Minimize; use sanitizers or trace tools on an appropriate host and inspect ownership.",
+      "positive_fields": [
+        "stderr.log",
+        "error_lines",
+        "signal",
+        "stage"
+      ],
+      "negative_fields": [
+        "stage",
+        "exit_code",
+        "signal"
+      ],
+      "missing_fields": [
+        "stack trace (not captured unless child printed it)",
+        "ownership trace (not captured)",
+        "sanitizer-run field (not captured)",
+        "reproducibility cannot be established by one packet",
+        "single packet cap is probable; confirmed requires >=2 packets same case_id agreeing on stable fields plus sanitizer/minimised evidence"
+      ],
+      "single_packet_confidence_cap": "probable"
+    }
+  ],
+  "non_categories": [
+    {
+      "id": "not-a-failure",
+      "label": "Not a failure",
+      "definition": "packet verifies and outcome==pass (exit_code 0, timed_out false, signal null); no failure to classify."
+    },
+    {
+      "id": "expected-synthetic",
+      "label": "Expected synthetic failure",
+      "definition": "packet verifies, case synthetic as evidenced inside the packet, matches_expected==true; evidence about capture path only; mimicked category never assigned."
+    },
+    {
+      "id": "insufficient-evidence",
+      "label": "Insufficient evidence",
+      "definition": "verifies, failure occurred, no category reaches primary threshold or required fields missing."
+    },
+    {
+      "id": "multiple-candidate",
+      "label": "Multiple candidates",
+      "definition": ">=2 categories meet primary threshold, no discriminating field separates them, none chosen."
+    },
+    {
+      "id": "harness-or-capture-error",
+      "label": "Harness or capture error",
+      "definition": "packet cannot be trusted (hash/verify failure, incomplete packet, or no valid child result); no category may be assigned; host-mismatch verifier sub-checks alone are not capture errors."
+    },
+    {
+      "id": "out-of-scope-environment",
+      "label": "Out of scope environment",
+      "definition": "packet verifies but env_class does not match scope_question environment; classification stops at scope gate."
+    }
+  ],
+  "confidence_levels": [
+    {
+      "id": "confirmed",
+      "definition": "verified packet, >=2 independent positives incl. directly diagnostic log text + structured field, no unexplained negative, no required field missing, cap permits."
+    },
+    {
+      "id": "probable",
+      "definition": "exactly 1 diagnostic positive + >=1 corroborating field, no contradictory negative; or confirmed pattern with one required field missing or cap probable."
+    },
+    {
+      "id": "possible",
+      "definition": "diagnostic positive but corroboration missing or negative unresolved, or cap possible; non-diagnostic clues alone can never make a category primary."
+    },
+    {
+      "id": "unclassifiable",
+      "definition": "used only when primary is insufficient-evidence or multiple-candidate; a statement about the packet, not a weak category claim."
+    }
+  ],
+  "evidence_levels": [
+    "Proposed",
+    "Implemented",
+    "Host-tested",
+    "Device-tested",
+    "Integration-proven",
+    "Performance-measured",
+    "Blocked",
+    "Not assigned"
+  ],
+  "outcome_gate": [
+    {
+      "condition": "outcome == pass",
+      "result": "not-a-failure - stop; no failure to classify"
+    },
+    {
+      "condition": "synthetic == true and matches_expected == true",
+      "result": "expected-synthetic - stop; mimicked category never assigned"
+    },
+    {
+      "condition": "capture invalid (hash/verify failure, incomplete packet, or no valid child result)",
+      "result": "harness-or-capture-error - stop; no category may be assigned"
+    },
+    {
+      "condition": "timed_out == true",
+      "result": "proceed to clue matching; timed_out is a resource-pressure corroborating clue only"
+    },
+    {
+      "condition": "signal == 9",
+      "result": "proceed to clue matching; signal 9 is a resource-pressure corroborating clue only"
+    },
+    {
+      "condition": "signal == 11 or signal == 6",
+      "result": "proceed to clue matching; signal is a clue only, category is determined from stage and log evidence"
+    },
+    {
+      "condition": "matches_expected == false on a real failure",
+      "result": "proceed on actual outcome; classify the observed failure"
+    },
+    {
+      "condition": "other non-zero exit_code",
+      "result": "proceed to clue matching"
+    }
+  ]
+}

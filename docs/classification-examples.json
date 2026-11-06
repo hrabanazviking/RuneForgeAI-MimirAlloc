@@ -1,0 +1,885 @@
+[
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-20261106T114752Z-smoke-fail-0f4a3c",
+    "run_id": "20261106T114752Z-smoke-fail-0f4a3c",
+    "packet_path": "evidence/runs/20261106T114752Z-smoke-fail-0f4a3c",
+    "packet_verification": {
+      "sha256sum_c": "pass",
+      "harness_verify": "pass",
+      "verified_on_host_env_class": "arm64-linux",
+      "notes": "Packet verified in evidence/runs/20261106T114752Z-smoke-fail-0f4a3c on Mimir: sha256sum -c passed for all 5 files listed in SHA256SUMS and harness verify returned VERIFY PASS."
+    },
+    "scope_question": "Why did case smoke-fail produce its recorded result in env_class arm64-linux on Mimir?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "manifest.json notes: \"Synthetic case. NOT the Mojo/tcmalloc failure.\"",
+        "case.json notes: \"Synthetic case. NOT the Mojo/tcmalloc failure.\"",
+        "manifest.json matches_expected=true against expected exit_code 3 and outcome fail"
+      ]
+    },
+    "primary": {
+      "kind": "non-category",
+      "id": "expected-synthetic",
+      "label": "Expected synthetic failure"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "resource-pressure",
+        "reason": "Discriminating fields meminfo_after.MemAvailable=14442880 of meminfo_after.MemTotal=16598576 and child_peak_rss_kb=18224 show ample memory and a tiny child; timed_out=false, signal=null, and no ENOMEM/OOM wording appears."
+      },
+      {
+        "id": "allocator-correctness",
+        "reason": "Discriminating fields signal=null and first_relevant_error=\"smoke: first relevant error: deliberate exit 3\" show no crash, no corruption wording, and exit_code=3 is the designed exit, not an allocator failure."
+      },
+      {
+        "id": "source-compile",
+        "reason": "Discriminating field stage=\"other\" (not \"compile\") and first_relevant_error=\"smoke: first relevant error: deliberate exit 3\" contain no compiler diagnostic; no diagnostic evidence for this category."
+      },
+      {
+        "id": "link",
+        "reason": "Discriminating field stage=\"other\" (not \"link\") and first_relevant_error=\"smoke: first relevant error: deliberate exit 3\" contain no linker output or undefined reference; no diagnostic evidence for this category."
+      },
+      {
+        "id": "loader-startup",
+        "reason": "Discriminating fields outcome=\"fail\" with exit_code=3 and stdout showing the workload ran (\"smoke: deliberate failure workload ran\") show startup succeeded; no missing interpreter/library error; no diagnostic evidence for this category."
+      },
+      {
+        "id": "address-space-configuration",
+        "reason": "Discriminating field first_relevant_error=\"smoke: first relevant error: deliberate exit 3\" contains no mapping/VA failure and signal=null; no diagnostic evidence for this category."
+      },
+      {
+        "id": "system-call-or-sandbox",
+        "reason": "Discriminating fields env_class=\"arm64-linux\" and first_relevant_error=\"smoke: first relevant error: deliberate exit 3\" contain no errno, EPERM or seccomp wording; no diagnostic evidence for this category."
+      }
+    ],
+    "confidence": "confirmed",
+    "evidence_cited": [
+      {
+        "field": "notes",
+        "value": "Synthetic case. NOT the Mojo/tcmalloc failure.",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "expected",
+        "value": {
+          "exit_code": 3,
+          "outcome": "fail"
+        },
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "exit_code",
+        "value": 3,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "outcome",
+        "value": "fail",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "matches_expected",
+        "value": true,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": null,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "first_relevant_error",
+        "value": "smoke: first relevant error: deliberate exit 3",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "classification_hint",
+        "value": null,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "classification",
+        "value": "unclassified",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "stage",
+        "value": "other",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "failing_process",
+        "value": "other",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "claim_scope",
+        "value": "harness-evidence-only: proves this command ran here with this result; not evidence of the Mojo/tcmalloc blocker",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "packet_verification",
+        "value": "sha256sum -c: all 5 files OK; harness verify: VERIFY PASS",
+        "source_file": "SHA256SUMS",
+        "supports": "gate:step-1"
+      }
+    ],
+    "negative_evidence": [
+      {
+        "field": "meminfo_after.MemAvailable",
+        "value": 14442880,
+        "source_file": "manifest.json",
+        "against": "resource-pressure"
+      },
+      {
+        "field": "child_peak_rss_kb",
+        "value": 18224,
+        "source_file": "manifest.json",
+        "against": "resource-pressure"
+      }
+    ],
+    "missing_evidence": [
+      "No category evidence is missing for this record: the Step 1 gates (packet verification passed, and the synthetic case matched its expected result) decide the outcome before clue matching, so no category clue is required to reach expected-synthetic.",
+      "General framework gaps, not missing for this record: the A-005 packet does not capture errno, a symbol table, virtual-address layout, or kernel logs. Those gaps matter for future real cases; they do not block this record, whose gates decide first."
+    ],
+    "next_investigation_step": "None for any real blocker. Use the packet only as harness/capture-path proof; capture the real case when its command and revisions are known.",
+    "evidence_level": "Device-tested",
+    "evidence_level_basis": "Assigned in docs/failure-capture.md (A-005): \"Device-tested (harness, on Mimir)\"; the classification adds no level.",
+    "claim_scope": {
+      "packet_claim_scope": "harness-evidence-only: proves this command ran here with this result; not evidence of the Mojo/tcmalloc blocker",
+      "classification_claim": "This record classifies only run 20261106T114752Z-smoke-fail-0f4a3c in env_class arm64-linux; it is not evidence about the Mojo/tcmalloc blocker."
+    },
+    "notes": "not-a-failure was rejected because the child outcome is fail (outcome=\"fail\", exit_code=3): the run did fail, by design. Gate precedence puts a matched synthetic failure at expected-synthetic, ahead of any category clue matching, and no category is assigned."
+  },
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-EXAMPLE-source-compile",
+    "run_id": "SYNTHETIC-EXAMPLE-source-compile",
+    "packet_path": "none (hypothetical example, no packet exists)",
+    "packet_verification": {
+      "sha256sum_c": "not-run-hypothetical",
+      "harness_verify": "not-run-hypothetical",
+      "verified_on_host_env_class": null,
+      "notes": "Hypothetical example: no packet exists, so no verification was run."
+    },
+    "scope_question": "Hypothetical: why did the invented compile-stage case fail with the excerpt shown?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "record itself is a labelled hypothetical example"
+      ]
+    },
+    "primary": {
+      "kind": "category",
+      "id": "source-compile",
+      "label": "Source compile"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "link",
+        "reason": "Discriminating field stage=\"compile\" and error_lines[0].text is a compile-time header error, not linker output; no undefined reference appears."
+      },
+      {
+        "id": "loader-startup",
+        "reason": "Discriminating field stage=\"compile\" shows compilation never produced a binary to load; no interpreter/library error appears."
+      }
+    ],
+    "confidence": "confirmed",
+    "evidence_cited": [
+      {
+        "field": "stage",
+        "value": "compile",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "exit_code",
+        "value": 1,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": null,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "error_lines[0].text",
+        "value": "widget.c:42:10: fatal error: 'arm_neon_extra.h' file not found",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "toolchain.clang",
+        "value": "Debian clang version 14.0.6",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      }
+    ],
+    "negative_evidence": [
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "against": "resource-pressure"
+      }
+    ],
+    "missing_evidence": [
+      "Platform macros actually defined for the target (not captured by A-005).",
+      "NDK version (not captured by A-005; no NDK fields exist in the packet).",
+      "Full compiler output beyond the first relevant error."
+    ],
+    "next_investigation_step": "Reproduce the single target; identify platform macros and compiler/NDK version.",
+    "evidence_level": "Not assigned",
+    "evidence_level_basis": "No level assigned in the packet or its source document; hypothetical example has no packet",
+    "claim_scope": {
+      "packet_claim_scope": "none (hypothetical example, no packet exists)",
+      "classification_claim": "This record classifies only the invented excerpt for source-compile; it is not a real run and is not evidence."
+    },
+    "notes": "Invented excerpt: a missing-header compiler diagnostic at stage compile with exit_code 1 is diagnostic of source-compile, so confidence is confirmed."
+  },
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-EXAMPLE-link",
+    "run_id": "SYNTHETIC-EXAMPLE-link",
+    "packet_path": "none (hypothetical example, no packet exists)",
+    "packet_verification": {
+      "sha256sum_c": "not-run-hypothetical",
+      "harness_verify": "not-run-hypothetical",
+      "verified_on_host_env_class": null,
+      "notes": "Hypothetical example: no packet exists, so no verification was run."
+    },
+    "scope_question": "Hypothetical: why did the invented link-stage case fail with the excerpt shown?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "record itself is a labelled hypothetical example"
+      ]
+    },
+    "primary": {
+      "kind": "category",
+      "id": "link",
+      "label": "Link"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "source-compile",
+        "reason": "Discriminating field stage=\"link\" and first_relevant_error is an ld undefined-reference message, not a compiler diagnostic."
+      },
+      {
+        "id": "loader-startup",
+        "reason": "Discriminating field stage=\"link\" shows the failure happened while linking, before any loader ran; no missing-library-at-load error appears."
+      }
+    ],
+    "confidence": "confirmed",
+    "evidence_cited": [
+      {
+        "field": "stage",
+        "value": "link",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "exit_code",
+        "value": 1,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": null,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "first_relevant_error",
+        "value": "/usr/bin/ld: main.o: undefined reference to 'mimir_alloc'",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "toolchain.ld",
+        "value": "GNU ld (GNU Binutils for Debian) 2.40",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      }
+    ],
+    "negative_evidence": [],
+    "missing_evidence": [
+      "Full link line (not captured by A-005).",
+      "Symbol table for main.o and the candidate libraries (not captured by A-005).",
+      "ABI/linkage details for the objects on the link line."
+    ],
+    "next_investigation_step": "Inspect the link line, ABI, linkage and symbol table.",
+    "evidence_level": "Not assigned",
+    "evidence_level_basis": "No level assigned in the packet or its source document; hypothetical example has no packet",
+    "claim_scope": {
+      "packet_claim_scope": "none (hypothetical example, no packet exists)",
+      "classification_claim": "This record classifies only the invented excerpt for link; it is not a real run and is not evidence."
+    },
+    "notes": "Invented excerpt: an ld undefined reference at stage link is diagnostic of link, so confidence is confirmed."
+  },
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-EXAMPLE-loader-startup",
+    "run_id": "SYNTHETIC-EXAMPLE-loader-startup",
+    "packet_path": "none (hypothetical example, no packet exists)",
+    "packet_verification": {
+      "sha256sum_c": "not-run-hypothetical",
+      "harness_verify": "not-run-hypothetical",
+      "verified_on_host_env_class": null,
+      "notes": "Hypothetical example: no packet exists, so no verification was run."
+    },
+    "scope_question": "Hypothetical: why did the invented generated-startup case fail with the excerpt shown?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "record itself is a labelled hypothetical example"
+      ]
+    },
+    "primary": {
+      "kind": "category",
+      "id": "loader-startup",
+      "label": "Loader/startup"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "link",
+        "reason": "Discriminating field stage=\"generated-startup\" shows linking had completed and the binary was produced; the failure is a library not found at load time, recorded in target_ldd."
+      },
+      {
+        "id": "source-compile",
+        "reason": "Discriminating field stage=\"generated-startup\" (not \"compile\") and no compiler diagnostic appears."
+      }
+    ],
+    "confidence": "probable",
+    "evidence_cited": [
+      {
+        "field": "stage",
+        "value": "generated-startup",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "exit_code",
+        "value": 127,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": null,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "target_ldd",
+        "value": "linux-vdso.so.1 (0x00007fff02898000)\n\tlibmimir.so => not found\n\tlibc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff02640000)",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "stdout.log",
+        "value": "",
+        "source_file": "stdout.log",
+        "supports": "primary"
+      },
+      {
+        "field": "duration_ms",
+        "value": 3,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      }
+    ],
+    "negative_evidence": [],
+    "missing_evidence": [
+      "ELF interpreter field (the packet captures no interpreter field; readelf -l output is not captured by A-005).",
+      "Loader search path / LD_LIBRARY_PATH in effect for the child.",
+      "Full dynamic section (DT_NEEDED list) for the generated binary."
+    ],
+    "next_investigation_step": "Inspect ELF interpreter, dynamic dependencies and libc environment.",
+    "evidence_level": "Not assigned",
+    "evidence_level_basis": "No level assigned in the packet or its source document; hypothetical example has no packet",
+    "claim_scope": {
+      "packet_claim_scope": "none (hypothetical example, no packet exists)",
+      "classification_claim": "This record classifies only the invented excerpt for loader-startup; it is not a real run and is not evidence."
+    },
+    "notes": "Confidence is probable, not confirmed, because no ELF interpreter field exists in the packet: target_ldd shows libmimir.so => not found and the run ended in 3 ms with empty stdout, which is strong but does not by itself prove whether the interpreter or a needed library is the exact loader failure point."
+  },
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-EXAMPLE-address-space-configuration",
+    "run_id": "SYNTHETIC-EXAMPLE-address-space-configuration",
+    "packet_path": "none (hypothetical example, no packet exists)",
+    "packet_verification": {
+      "sha256sum_c": "not-run-hypothetical",
+      "harness_verify": "not-run-hypothetical",
+      "verified_on_host_env_class": null,
+      "notes": "Hypothetical example: no packet exists, so no verification was run."
+    },
+    "scope_question": "Hypothetical: why did the invented runtime case fail with the excerpt shown?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "record itself is a labelled hypothetical example"
+      ]
+    },
+    "primary": {
+      "kind": "category",
+      "id": "address-space-configuration",
+      "label": "Address-space configuration"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "resource-pressure",
+        "reason": "Discriminating fields meminfo_before.MemAvailable=14000000 and meminfo_after.MemAvailable=14000000 (invented) show ample memory before and after, and stderr.log says \"Invalid argument\", not ENOMEM."
+      },
+      {
+        "id": "system-call-or-sandbox",
+        "reason": "Discriminating field stderr.log=\"mmap failed: Invalid argument\" reports EINVAL on a mapping request, with no EPERM/seccomp wording; the sandbox category has no diagnostic evidence here."
+      }
+    ],
+    "confidence": "probable",
+    "evidence_cited": [
+      {
+        "field": "stage",
+        "value": "runtime",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": null,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "stderr.log",
+        "value": "mmap failed: Invalid argument",
+        "source_file": "stderr.log",
+        "supports": "primary"
+      },
+      {
+        "field": "page_size_bytes",
+        "value": 16384,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "meminfo_before.MemAvailable",
+        "value": 14000000,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "meminfo_after.MemAvailable",
+        "value": 14000000,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      }
+    ],
+    "negative_evidence": [
+      {
+        "field": "meminfo_after.MemAvailable",
+        "value": 14000000,
+        "source_file": "manifest.json",
+        "against": "resource-pressure"
+      }
+    ],
+    "missing_evidence": [
+      "Actual virtual-address layout of the process (not captured by A-005).",
+      "Source configuration for VA width / tag assumptions.",
+      "The mmap arguments (address, length, flags) that returned EINVAL."
+    ],
+    "next_investigation_step": "Verify actual virtual-address layout and source configuration; do not infer only from CPU name.",
+    "evidence_level": "Not assigned",
+    "evidence_level_basis": "No level assigned in the packet or its source document; hypothetical example has no packet",
+    "claim_scope": {
+      "packet_claim_scope": "none (hypothetical example, no packet exists)",
+      "classification_claim": "This record classifies only the invented excerpt for address-space-configuration; it is not a real run and is not evidence."
+    },
+    "notes": "Invented excerpt: the meminfo values in this record are invented for the hypothetical. A failed mapping with EINVAL at runtime, ample memory, and page_size_bytes 16384 points to address-space configuration; confidence is capped at probable for this category."
+  },
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-EXAMPLE-system-call-or-sandbox",
+    "run_id": "SYNTHETIC-EXAMPLE-system-call-or-sandbox",
+    "packet_path": "none (hypothetical example, no packet exists)",
+    "packet_verification": {
+      "sha256sum_c": "not-run-hypothetical",
+      "harness_verify": "not-run-hypothetical",
+      "verified_on_host_env_class": null,
+      "notes": "Hypothetical example: no packet exists, so no verification was run."
+    },
+    "scope_question": "Hypothetical: why did the invented proot-android runtime case fail with the excerpt shown?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "record itself is a labelled hypothetical example"
+      ]
+    },
+    "primary": {
+      "kind": "category",
+      "id": "system-call-or-sandbox",
+      "label": "System call or sandbox"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "address-space-configuration",
+        "reason": "Discriminating field stderr.log=\"seccomp: operation not permitted (EPERM)\" reports a permission denial, not a mapping/VA failure; no mmap error appears."
+      },
+      {
+        "id": "resource-pressure",
+        "reason": "Discriminating field stderr.log contains no ENOMEM/OOM wording and signal=null; no memory-pressure evidence appears."
+      }
+    ],
+    "confidence": "possible",
+    "evidence_cited": [
+      {
+        "field": "env_class",
+        "value": "proot-android",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "stage",
+        "value": "runtime",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "exit_code",
+        "value": 1,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": null,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "stderr.log",
+        "value": "seccomp: operation not permitted (EPERM)",
+        "source_file": "stderr.log",
+        "supports": "primary"
+      }
+    ],
+    "negative_evidence": [],
+    "missing_evidence": [
+      "Numeric errno captured as its own field, separate from log text (not captured by A-005).",
+      "The syscall name/number that was blocked.",
+      "A comparison packet for the same command under native Linux and under Android (only one packet exists here).",
+      "proot version and seccomp policy in effect."
+    ],
+    "next_investigation_step": "Capture errno and environment; compare native Linux, Android and proot.",
+    "evidence_level": "Not assigned",
+    "evidence_level_basis": "No level assigned in the packet or its source document; hypothetical example has no packet",
+    "claim_scope": {
+      "packet_claim_scope": "none (hypothetical example, no packet exists)",
+      "classification_claim": "This record classifies only the invented excerpt for system-call-or-sandbox; it is not a real run and is not evidence."
+    },
+    "notes": "Single packet only: the framework cap for system-call-or-sandbox on a single packet is possible, even though the seccomp/EPERM wording is suggestive. A native-Linux/Android comparison packet is required before any higher confidence."
+  },
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-EXAMPLE-resource-pressure",
+    "run_id": "SYNTHETIC-EXAMPLE-resource-pressure",
+    "packet_path": "none (hypothetical example, no packet exists)",
+    "packet_verification": {
+      "sha256sum_c": "not-run-hypothetical",
+      "harness_verify": "not-run-hypothetical",
+      "verified_on_host_env_class": null,
+      "notes": "Hypothetical example: no packet exists, so no verification was run."
+    },
+    "scope_question": "Hypothetical: why did the invented runtime case fail with the excerpt shown?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "record itself is a labelled hypothetical example"
+      ]
+    },
+    "primary": {
+      "kind": "category",
+      "id": "resource-pressure",
+      "label": "Resource pressure"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "allocator-correctness",
+        "reason": "Discriminating fields stderr.log=\"Out of memory: Killed process\" and meminfo_after.MemAvailable=120000 show the kernel OOM killer acting under memory exhaustion, not an invalid free/corruption report; no sanitizer wording appears."
+      },
+      {
+        "id": "address-space-configuration",
+        "reason": "Discriminating field stderr.log is an OOM kill message, not a failed-mapping/EINVAL message; no VA-layout evidence appears."
+      }
+    ],
+    "confidence": "confirmed",
+    "evidence_cited": [
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": 9,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "stderr.log",
+        "value": "Out of memory: Killed process",
+        "source_file": "stderr.log",
+        "supports": "primary"
+      },
+      {
+        "field": "meminfo_before.MemAvailable",
+        "value": 12000000,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "meminfo_after.MemAvailable",
+        "value": 120000,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "child_peak_rss_kb",
+        "value": 15000000,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "meminfo_after.MemTotal",
+        "value": 16598576,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      }
+    ],
+    "negative_evidence": [],
+    "missing_evidence": [
+      "PSS for the child (not captured by A-005; only RSS is captured).",
+      "Address-space limits in effect (ulimit -v / cgroup limits).",
+      "Full kernel OOM log beyond the stderr excerpt, where accessible."
+    ],
+    "next_investigation_step": "Record RSS/PSS, address-space limits, memory pressure and kernel logs where accessible.",
+    "evidence_level": "Not assigned",
+    "evidence_level_basis": "No level assigned in the packet or its source document; hypothetical example has no packet",
+    "claim_scope": {
+      "packet_claim_scope": "none (hypothetical example, no packet exists)",
+      "classification_claim": "This record classifies only the invented excerpt for resource-pressure; it is not a real run and is not evidence."
+    },
+    "notes": "Invented excerpt: signal 9 alone would only be possible (a timeout or an external kill can also send signal 9). Confidence is confirmed here only because three independent fields agree: stderr.log records the kernel OOM kill, MemAvailable collapsed from 12000000 to 120000, and child_peak_rss_kb 15000000 approaches MemTotal 16598576, with timed_out=false excluding a harness timeout."
+  },
+  {
+    "schema_version": 1,
+    "supersedes": null,
+    "status": "current",
+    "record_id": "CLS-EXAMPLE-allocator-correctness",
+    "run_id": "SYNTHETIC-EXAMPLE-allocator-correctness",
+    "packet_path": "none (hypothetical example, no packet exists)",
+    "packet_verification": {
+      "sha256sum_c": "not-run-hypothetical",
+      "harness_verify": "not-run-hypothetical",
+      "verified_on_host_env_class": null,
+      "notes": "Hypothetical example: no packet exists, so no verification was run."
+    },
+    "scope_question": "Hypothetical: why did the invented runtime case fail with the excerpt shown?",
+    "classifier": {
+      "name": "TEAM-06 builder 3, MimirAlloc A-006",
+      "method": "docs/failure-classification.md procedure, taxonomy schema_version 1",
+      "date_utc": "2026-11-06"
+    },
+    "synthetic": {
+      "is_synthetic": true,
+      "basis": [
+        "record itself is a labelled hypothetical example"
+      ]
+    },
+    "primary": {
+      "kind": "category",
+      "id": "allocator-correctness",
+      "label": "Allocator correctness"
+    },
+    "contributing": [],
+    "tied_candidates": [],
+    "possible_candidates": [],
+    "considered_and_rejected": [
+      {
+        "id": "resource-pressure",
+        "reason": "Discriminating field stderr.log=\"AddressSanitizer: heap-use-after-free READ of size 8\" is a correctness report, with no ENOMEM/OOM wording and timed_out=false."
+      },
+      {
+        "id": "system-call-or-sandbox",
+        "reason": "Discriminating field signal=6 follows the sanitizer abort, and stderr.log contains no errno/EPERM/seccomp wording."
+      }
+    ],
+    "confidence": "probable",
+    "evidence_cited": [
+      {
+        "field": "stage",
+        "value": "runtime",
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "signal",
+        "value": 6,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "exit_code",
+        "value": 134,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      },
+      {
+        "field": "stderr.log",
+        "value": "AddressSanitizer: heap-use-after-free READ of size 8",
+        "source_file": "stderr.log",
+        "supports": "primary"
+      },
+      {
+        "field": "timed_out",
+        "value": false,
+        "source_file": "manifest.json",
+        "supports": "primary"
+      }
+    ],
+    "negative_evidence": [],
+    "missing_evidence": [
+      "A second packet reproducing the same failure (reproducibility cannot be shown by one packet).",
+      "A minimised reproduction case.",
+      "Full sanitizer report and ownership/allocation trace.",
+      "Whether the implicated allocator revision matches the failing build (no tcmalloc revision field is captured by A-005)."
+    ],
+    "next_investigation_step": "Minimize; use sanitizers or trace tools on an appropriate host and inspect ownership.",
+    "evidence_level": "Not assigned",
+    "evidence_level_basis": "No level assigned in the packet or its source document; hypothetical example has no packet",
+    "claim_scope": {
+      "packet_claim_scope": "none (hypothetical example, no packet exists)",
+      "classification_claim": "This record classifies only the invented excerpt for allocator-correctness; it is not a real run and is not evidence."
+    },
+    "notes": "Single packet only: the framework cap for allocator-correctness on a single packet is probable. The roadmap clue for this category requires reproducibility, which one packet cannot show; reproducibility needs a second packet capturing the same failure before any higher confidence."
+  }
+]
