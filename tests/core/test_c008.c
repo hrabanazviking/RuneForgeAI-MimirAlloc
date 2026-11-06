@@ -346,7 +346,17 @@ static void section_boundaries(size_t page)
 /* observed within the loop cap; 12 recovery under the limit failed;  */
 /* 13 setrlimit failed (parent reports the case SKIPPED).             */
 /* ------------------------------------------------------------------ */
-static void *rlimit_blocks[8192];
+/* D-003 (INC-D003-01): the loop cap must guarantee the
+ * RLIMIT_AS refusal is actually reached at BOTH admitted
+ * page sizes. One malloc(4096) costs at least one reserve
+ * page + one usable page of VA: 8192 bytes at 4096-byte
+ * pages, 32768 at 16384-byte pages. The old cap of 8192
+ * blocks could consume at most 8192*8192 = 64 MiB at
+ * 4096-byte pages -- below the 96 MiB limit, so the
+ * refusal was not guaranteed there. Cap 32768 guarantees
+ * it at both sizes (arithmetic proof: tests/platform/
+ * test_d003.c section B3). */
+static void *rlimit_blocks[32768];
 
 static void section_rlimit(void)
 {
@@ -371,7 +381,7 @@ static void section_rlimit(void)
         if (setrlimit(RLIMIT_AS, &rl) != 0) {
             _exit(13);
         }
-        for (i = 0; i < 8192; i++) {
+        for (i = 0; i < 32768; i++) {
             void *p = mimir_malloc(4096);
 
             if (p == NULL) {

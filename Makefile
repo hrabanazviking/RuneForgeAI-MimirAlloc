@@ -21,6 +21,11 @@
 #        under tests/contract/ (test_c007.c) runs in `make test`
 #        and standalone via `make test-c007`; the slice record
 #        is tests/contract/NOTES_C007.md.
+# D-003: page-size portability proof - the evidence test
+#        under tests/platform/ (test_d003.c) runs standalone
+#        via `make test-d003`; the audit itself is
+#        docs/PAGE_SIZE_PORTABILITY.md and the recorded run
+#        is tests/platform/recorded_run_d003.txt.
 # C-008: B-008 unsupported-behaviour audit + roadmap S9.3
 #        controlled-failure tests - the evidence test under
 #        tests/core/ (test_c008.c) runs in `make test`; the
@@ -106,4 +111,13 @@ test-c007: $(BUILD)/test_c007
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test test-c007 clean
+.PHONY: all test test-c007 test-d003 clean
+
+$(BUILD)/test_d003.o: tests/platform/test_d003.c include/mimir_alloc.h src/platform/mimir_platform.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/platform/test_d003.c -o $@
+
+$(BUILD)/test_d003: $(LIBOBJS) $(BUILD)/test_d003.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_d003.o -o $@
+
+test-d003: $(BUILD)/test_d003
+	./$(BUILD)/test_d003

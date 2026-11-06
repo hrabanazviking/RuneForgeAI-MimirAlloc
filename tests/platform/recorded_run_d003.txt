@@ -1,0 +1,154 @@
+MimirAlloc slice D-003 - recorded run of tests/platform/test_d003.c
+Date: 2026-11-06T15:54:03-05:00
+Host: Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+getconf PAGESIZE: 16384
+Command: make test-d003 (cc -std=c11 -Wall -Wextra -Werror -pthread)
+
+D-003 page-size portability test
+PART B [ARITHMETIC-LEVEL ONLY] checked round-up vs independent __int128 oracle, page sizes 4096 and 16384
+  [ok] B1 page=4096 x=0: ref==oracle (0)
+  [ok] B1 page=4096 x=0: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=1: ref==oracle (4096)
+  [ok] B1 page=4096 x=1: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=100: ref==oracle (4096)
+  [ok] B1 page=4096 x=100: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=4095: ref==oracle (4096)
+  [ok] B1 page=4096 x=4095: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=4096: ref==oracle (4096)
+  [ok] B1 page=4096 x=4096: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=4097: ref==oracle (8192)
+  [ok] B1 page=4096 x=4097: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=8191: ref==oracle (8192)
+  [ok] B1 page=4096 x=8191: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=8192: ref==oracle (8192)
+  [ok] B1 page=4096 x=8192: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=8193: ref==oracle (12288)
+  [ok] B1 page=4096 x=8193: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=16383: ref==oracle (16384)
+  [ok] B1 page=4096 x=16383: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=16384: ref==oracle (16384)
+  [ok] B1 page=4096 x=16384: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=16385: ref==oracle (20480)
+  [ok] B1 page=4096 x=16385: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=32768: ref==oracle (32768)
+  [ok] B1 page=4096 x=32768: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=32769: ref==oracle (36864)
+  [ok] B1 page=4096 x=32769: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=65536: ref==oracle (65536)
+  [ok] B1 page=4096 x=65536: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=1048576: ref==oracle (1048576)
+  [ok] B1 page=4096 x=1048576: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=1048577: ref==oracle (1052672)
+  [ok] B1 page=4096 x=1048577: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=0: ref==oracle (0)
+  [ok] B1 page=16384 x=0: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=1: ref==oracle (16384)
+  [ok] B1 page=16384 x=1: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=100: ref==oracle (16384)
+  [ok] B1 page=16384 x=100: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=4095: ref==oracle (16384)
+  [ok] B1 page=16384 x=4095: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=4096: ref==oracle (16384)
+  [ok] B1 page=16384 x=4096: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=4097: ref==oracle (16384)
+  [ok] B1 page=16384 x=4097: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=8191: ref==oracle (16384)
+  [ok] B1 page=16384 x=8191: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=8192: ref==oracle (16384)
+  [ok] B1 page=16384 x=8192: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=8193: ref==oracle (16384)
+  [ok] B1 page=16384 x=8193: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=16383: ref==oracle (16384)
+  [ok] B1 page=16384 x=16383: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=16384: ref==oracle (16384)
+  [ok] B1 page=16384 x=16384: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=16385: ref==oracle (32768)
+  [ok] B1 page=16384 x=16385: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=32768: ref==oracle (32768)
+  [ok] B1 page=16384 x=32768: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=32769: ref==oracle (49152)
+  [ok] B1 page=16384 x=32769: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=65536: ref==oracle (65536)
+  [ok] B1 page=16384 x=65536: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=1048576: ref==oracle (1048576)
+  [ok] B1 page=16384 x=1048576: result is a whole number of pages and >= x
+  [ok] B1 page=16384 x=1048577: ref==oracle (1064960)
+  [ok] B1 page=16384 x=1048577: result is a whole number of pages and >= x
+  [ok] B1 page=4096 x=SIZE_MAX: overflow refused
+  [ok] B1 page=16384 x=SIZE_MAX: overflow refused
+  [ok] B1 page=16384 x=SIZE_MAX-100: overflow refused
+  [ok] B2 page=4096 req=1: mapping length == 8192
+  [ok] B2 page=4096 req=4096: mapping length == 8192
+  [ok] B2 page=4096 req=4097: mapping length == 12288
+  [ok] B2 page=4096 req=32769: mapping length == 40960
+  [ok] B2 page=16384 req=1: mapping length == 32768
+  [ok] B2 page=16384 req=4096: mapping length == 32768
+  [ok] B2 page=16384 req=16385: mapping length == 49152
+  [ok] B2 page=16384 req=32769: mapping length == 65536
+  [ok] B3 min VA per malloc(4096): 8192 @4K pages, 32768 @16K pages
+  [ok] B3 old cap 8192 @4K pages: 64 MiB < 96 MiB limit (refusal NOT guaranteed -- the INC-D003-01 defect)
+  [ok] B3 fixed cap 32768: refusal guaranteed at both 4096 and 16384 page sizes
+PART A [MEASURED ON-DEVICE] runtime page size and allocator behaviour on this host
+runtime system page size: L6 reports 16384 bytes, independent sysconf(_SC_PAGESIZE) reports 16384
+  [ok] A1 L6 page-size discovery succeeds
+  [ok] A1 L6 value == independent sysconf value
+  [ok] A1 discovered page size is a nonzero power of two
+  [ok] A2 acquire(1): length == round_up(req, runtime page) == 16384
+  [ok] A2 acquire(1): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(16383): length == round_up(req, runtime page) == 16384
+  [ok] A2 acquire(16383): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(16384): length == round_up(req, runtime page) == 16384
+  [ok] A2 acquire(16384): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(16385): length == round_up(req, runtime page) == 32768
+  [ok] A2 acquire(16385): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A2 acquire(32769): length == round_up(req, runtime page) == 49152
+  [ok] A2 acquire(32769): base is runtime-page aligned
+  [ok] A2 whole mapped extent pattern verifies
+  [ok] A2 release with exact acquired pair succeeds
+  [ok] A3 malloc(1) succeeds
+  [ok] A3 malloc(1): user pointer is runtime-page aligned
+  [ok] A3 malloc(1): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(1): requested extent pattern verifies
+  [ok] A3 malloc(100) succeeds
+  [ok] A3 malloc(100): user pointer is runtime-page aligned
+  [ok] A3 malloc(100): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(100): requested extent pattern verifies
+  [ok] A3 malloc(4095) succeeds
+  [ok] A3 malloc(4095): user pointer is runtime-page aligned
+  [ok] A3 malloc(4095): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(4095): requested extent pattern verifies
+  [ok] A3 malloc(4096) succeeds
+  [ok] A3 malloc(4096): user pointer is runtime-page aligned
+  [ok] A3 malloc(4096): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(4096): requested extent pattern verifies
+  [ok] A3 malloc(4097) succeeds
+  [ok] A3 malloc(4097): user pointer is runtime-page aligned
+  [ok] A3 malloc(4097): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(4097): requested extent pattern verifies
+  [ok] A3 malloc(16383) succeeds
+  [ok] A3 malloc(16383): user pointer is runtime-page aligned
+  [ok] A3 malloc(16383): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(16383): requested extent pattern verifies
+  [ok] A3 malloc(16384) succeeds
+  [ok] A3 malloc(16384): user pointer is runtime-page aligned
+  [ok] A3 malloc(16384): descriptor usable_offset == runtime page, mapping_length == 32768, usable_size == mapping_length - page
+  [ok] A3 malloc(16384): requested extent pattern verifies
+  [ok] A3 malloc(16385) succeeds
+  [ok] A3 malloc(16385): user pointer is runtime-page aligned
+  [ok] A3 malloc(16385): descriptor usable_offset == runtime page, mapping_length == 49152, usable_size == mapping_length - page
+  [ok] A3 malloc(16385): requested extent pattern verifies
+  [ok] A3 malloc(32769) succeeds
+  [ok] A3 malloc(32769): user pointer is runtime-page aligned
+  [ok] A3 malloc(32769): descriptor usable_offset == runtime page, mapping_length == 65536, usable_size == mapping_length - page
+  [ok] A3 malloc(32769): requested extent pattern verifies
+CHECKS: 141 run, 0 failed
+RESULT: PASS
+exit_code: 0
