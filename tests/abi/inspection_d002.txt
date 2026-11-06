@@ -1,0 +1,488 @@
+MimirAlloc slice D-002 - raw ELF/ABI inspection output
+Date: 2026-11-06T15:29:35-05:00
+Host: Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+Tools: binutils 2.40 (readelf/nm/ar), file-5.44
+Artifacts: build/*.o and build/test_* from the banked Makefile, plus slice-built
+build/libmimiralloc.a (ar rcs) and build/libmimiralloc.so (cc -shared) made from
+the three library objects for inspection only - the Makefile has no library target.
+
+=== file build/* ===
+build/mimir_alloc.o:    ELF 64-bit LSB relocatable, ARM aarch64, version 1 (SYSV), not stripped
+build/mimir_core.o:     ELF 64-bit LSB relocatable, ARM aarch64, version 1 (SYSV), not stripped
+build/mimir_platform.o: ELF 64-bit LSB relocatable, ARM aarch64, version 1 (SYSV), not stripped
+build/test_smoke:       ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=4beeac81bd98cc9c974b4bee8ab89967d61ce7e2, for GNU/Linux 3.7.0, not stripped
+build/test_core:        ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=bb5cf73a8740bf189b39e4fa63ad9230109043f1, for GNU/Linux 3.7.0, not stripped
+build/libmimiralloc.so: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, BuildID[sha1]=1611d4c7f59e2e19b385101c5e6eb246d1195b72, not stripped
+
+=== ls -l build ===
+total 452
+-rw-r--r-- 1 pi pi 12070 Nov  6 15:27 libmimiralloc.a
+-rwxr-xr-x 1 pi pi 71120 Nov  6 15:27 libmimiralloc.so
+-rw-r--r-- 1 pi pi  2024 Nov  6 15:27 mimir_alloc.o
+-rw-r--r-- 1 pi pi  6304 Nov  6 15:27 mimir_core.o
+-rw-r--r-- 1 pi pi  3104 Nov  6 15:27 mimir_platform.o
+-rwxr-xr-x 1 pi pi 72720 Nov  6 15:27 test_b007
+-rw-r--r-- 1 pi pi 11888 Nov  6 15:27 test_b007.o
+-rwxr-xr-x 1 pi pi 72464 Nov  6 15:27 test_c005
+-rw-r--r-- 1 pi pi 16792 Nov  6 15:27 test_c005.o
+-rwxr-xr-x 1 pi pi 73736 Nov  6 15:27 test_c006
+-rw-r--r-- 1 pi pi 13808 Nov  6 15:27 test_c006.o
+-rwxr-xr-x 1 pi pi 75312 Nov  6 15:27 test_c007
+-rw-r--r-- 1 pi pi 77200 Nov  6 15:27 test_c007.o
+-rwxr-xr-x 1 pi pi 73344 Nov  6 15:27 test_c008
+-rw-r--r-- 1 pi pi 21864 Nov  6 15:27 test_c008.o
+-rwxr-xr-x 1 pi pi 72512 Nov  6 15:27 test_core
+-rw-r--r-- 1 pi pi  7312 Nov  6 15:27 test_core.o
+-rwxr-xr-x 1 pi pi 72568 Nov  6 15:27 test_smoke
+-rw-r--r-- 1 pi pi  6736 Nov  6 15:27 test_smoke.o
+
+=== readelf -h build/mimir_alloc.o ===
+ELF Header:
+  Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              REL (Relocatable file)
+  Machine:                           AArch64
+  Version:                           0x1
+  Entry point address:               0x0
+  Start of program headers:          0 (bytes into file)
+  Start of section headers:          1256 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           0 (bytes)
+  Number of program headers:         0
+  Size of section headers:           64 (bytes)
+  Number of section headers:         12
+  Section header string table index: 11
+=== readelf -h build/test_smoke ===
+ELF Header:
+  Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              DYN (Position-Independent Executable file)
+  Machine:                           AArch64
+  Version:                           0x1
+  Entry point address:               0x940
+  Start of program headers:          64 (bytes into file)
+  Start of section headers:          70648 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         9
+  Size of section headers:           64 (bytes)
+  Number of section headers:         30
+  Section header string table index: 29
+=== readelf -h build/libmimiralloc.so ===
+ELF Header:
+  Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+  Version:                           0x1
+  Entry point address:               0x0
+  Start of program headers:          64 (bytes into file)
+  Start of section headers:          69456 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         7
+  Size of section headers:           64 (bytes)
+  Number of section headers:         26
+  Section header string table index: 25
+=== readelf -l build/test_smoke ===
+
+Elf file type is DYN (Position-Independent Executable file)
+Entry point 0x940
+There are 9 program headers, starting at offset 64
+
+Program Headers:
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  PHDR           0x0000000000000040 0x0000000000000040 0x0000000000000040
+                 0x00000000000001f8 0x00000000000001f8  R      0x8
+  INTERP         0x0000000000000238 0x0000000000000238 0x0000000000000238
+                 0x000000000000001b 0x000000000000001b  R      0x1
+      [Requesting program interpreter: /lib/ld-linux-aarch64.so.1]
+  LOAD           0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000002284 0x0000000000002284  R E    0x10000
+  LOAD           0x000000000000fd88 0x000000000001fd88 0x000000000001fd88
+                 0x00000000000002e8 0x0000000000000340  RW     0x10000
+  DYNAMIC        0x000000000000fdb8 0x000000000001fdb8 0x000000000001fdb8
+                 0x00000000000001e0 0x00000000000001e0  RW     0x8
+  NOTE           0x0000000000000254 0x0000000000000254 0x0000000000000254
+                 0x0000000000000044 0x0000000000000044  R      0x4
+  GNU_EH_FRAME   0x0000000000001e7c 0x0000000000001e7c 0x0000000000001e7c
+                 0x00000000000000e4 0x00000000000000e4  R      0x4
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     0x10
+  GNU_RELRO      0x000000000000fd88 0x000000000001fd88 0x000000000001fd88
+                 0x0000000000000278 0x0000000000000278  R      0x1
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     
+   01     .interp 
+   02     .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt .init .plt .text .fini .rodata .eh_frame_hdr .eh_frame 
+   03     .init_array .fini_array .data.rel.ro .dynamic .got .got.plt .data .bss 
+   04     .dynamic 
+   05     .note.gnu.build-id .note.ABI-tag 
+   06     .eh_frame_hdr 
+   07     
+   08     .init_array .fini_array .data.rel.ro .dynamic .got 
+=== readelf -l build/libmimiralloc.so ===
+
+Elf file type is DYN (Shared object file)
+Entry point 0x0
+There are 7 program headers, starting at offset 64
+
+Program Headers:
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  LOAD           0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000001a94 0x0000000000001a94  R E    0x10000
+  LOAD           0x000000000000fdf0 0x000000000001fdf0 0x000000000001fdf0
+                 0x00000000000002a8 0x00000000000002f8  RW     0x10000
+  DYNAMIC        0x000000000000fe00 0x000000000001fe00 0x000000000001fe00
+                 0x00000000000001c0 0x00000000000001c0  RW     0x8
+  NOTE           0x00000000000001c8 0x00000000000001c8 0x00000000000001c8
+                 0x0000000000000024 0x0000000000000024  R      0x4
+  GNU_EH_FRAME   0x00000000000016f4 0x00000000000016f4 0x00000000000016f4
+                 0x00000000000000cc 0x00000000000000cc  R      0x4
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     0x10
+  GNU_RELRO      0x000000000000fdf0 0x000000000001fdf0 0x000000000001fdf0
+                 0x0000000000000210 0x0000000000000210  R      0x1
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     .note.gnu.build-id .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt .init .plt .text .fini .eh_frame_hdr .eh_frame 
+   01     .init_array .fini_array .dynamic .got .got.plt .data .bss 
+   02     .dynamic 
+   03     .note.gnu.build-id 
+   04     .eh_frame_hdr 
+   05     
+   06     .init_array .fini_array .dynamic .got 
+=== readelf -S build/mimir_alloc.o ===
+There are 12 section headers, starting at offset 0x4e8:
+
+Section Headers:
+  [Nr] Name              Type             Address           Offset
+       Size              EntSize          Flags  Link  Info  Align
+  [ 0]                   NULL             0000000000000000  00000000
+       0000000000000000  0000000000000000           0     0     0
+  [ 1] .text             PROGBITS         0000000000000000  00000040
+       0000000000000084  0000000000000000  AX       0     0     4
+  [ 2] .rela.text        RELA             0000000000000000  000003c8
+       0000000000000060  0000000000000018   I       9     1     8
+  [ 3] .data             PROGBITS         0000000000000000  000000c4
+       0000000000000000  0000000000000000  WA       0     0     1
+  [ 4] .bss              NOBITS           0000000000000000  000000c4
+       0000000000000000  0000000000000000  WA       0     0     1
+  [ 5] .comment          PROGBITS         0000000000000000  000000c4
+       0000000000000028  0000000000000001  MS       0     0     1
+  [ 6] .note.GNU-stack   PROGBITS         0000000000000000  000000ec
+       0000000000000000  0000000000000000           0     0     1
+  [ 7] .eh_frame         PROGBITS         0000000000000000  000000f0
+       0000000000000098  0000000000000000   A       0     0     8
+  [ 8] .rela.eh_frame    RELA             0000000000000000  00000428
+       0000000000000060  0000000000000018   I       9     7     8
+  [ 9] .symtab           SYMTAB           0000000000000000  00000188
+       00000000000001b0  0000000000000018          10    10     8
+  [10] .strtab           STRTAB           0000000000000000  00000338
+       000000000000008e  0000000000000000           0     0     1
+  [11] .shstrtab         STRTAB           0000000000000000  00000488
+       0000000000000059  0000000000000000           0     0     1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  D (mbind), p (processor specific)
+=== readelf -d build/test_smoke ===
+
+Dynamic section at offset 0xfdb8 contains 26 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000c (INIT)               0x820
+ 0x000000000000000d (FINI)               0x1a3c
+ 0x0000000000000019 (INIT_ARRAY)         0x1fd88
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x1fd90
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x298
+ 0x0000000000000005 (STRTAB)             0x450
+ 0x0000000000000006 (SYMTAB)             0x2b8
+ 0x000000000000000a (STRSZ)              222 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000015 (DEBUG)              0x0
+ 0x0000000000000003 (PLTGOT)             0x1ffe8
+ 0x0000000000000002 (PLTRELSZ)           288 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x700
+ 0x0000000000000007 (RELA)               0x580
+ 0x0000000000000008 (RELASZ)             384 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x000000006ffffffe (VERNEED)            0x550
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x52e
+ 0x000000006ffffff9 (RELACOUNT)          12
+ 0x0000000000000000 (NULL)               0x0
+=== readelf -d build/libmimiralloc.so ===
+
+Dynamic section at offset 0xfe00 contains 24 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000c (INIT)               0x940
+ 0x000000000000000d (FINI)               0x16e0
+ 0x0000000000000019 (INIT_ARRAY)         0x1fdf0
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x1fdf8
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x1f0
+ 0x0000000000000005 (STRTAB)             0x4d8
+ 0x0000000000000006 (SYMTAB)             0x250
+ 0x000000000000000a (STRSZ)              436 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000003 (PLTGOT)             0x1ffe8
+ 0x0000000000000002 (PLTRELSZ)           432 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x790
+ 0x0000000000000007 (RELA)               0x6e8
+ 0x0000000000000008 (RELASZ)             168 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffe (VERNEED)            0x6c8
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x68c
+ 0x000000006ffffff9 (RELACOUNT)          3
+ 0x0000000000000000 (NULL)               0x0
+=== ldd build/test_smoke ===
+	linux-vdso.so.1 (0x00007fff5e568000)
+	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff5e320000)
+	/lib/ld-linux-aarch64.so.1 (0x00007fff5e530000)
+=== ldd build/libmimiralloc.so ===
+	linux-vdso.so.1 (0x00007fff28298000)
+	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff28050000)
+	/lib/ld-linux-aarch64.so.1 (0x00007fff28260000)
+=== nm -g --defined-only (per object) ===
+-- build/mimir_alloc.o
+000000000000003c T mimir_calloc
+000000000000001c T mimir_free
+0000000000000000 T mimir_malloc
+0000000000000060 T mimir_realloc
+-- build/mimir_core.o
+0000000000000530 T mimir_core_alloc
+0000000000000588 T mimir_core_calloc
+000000000000077c T mimir_core_free
+0000000000000630 T mimir_core_realloc
+-- build/mimir_platform.o
+0000000000000274 T mimir_platform_global_lock
+00000000000002a4 T mimir_platform_global_unlock
+0000000000000118 T mimir_platform_map_acquire
+000000000000021c T mimir_platform_map_release
+0000000000000000 T mimir_platform_page_size
+=== nm -u (per library object) ===
+-- build/mimir_alloc.o
+                 U mimir_core_alloc
+                 U mimir_core_calloc
+                 U mimir_core_free
+                 U mimir_core_realloc
+-- build/mimir_core.o
+                 U memcpy
+                 U memset
+                 U mimir_platform_global_lock
+                 U mimir_platform_global_unlock
+                 U mimir_platform_map_acquire
+                 U mimir_platform_map_release
+                 U mimir_platform_page_size
+-- build/mimir_platform.o
+                 U mmap
+                 U munmap
+                 U pthread_mutex_lock
+                 U pthread_mutex_unlock
+                 U sysconf
+=== nm -S --defined-only (library objects) ===
+
+build/mimir_alloc.o:
+000000000000003c 0000000000000024 T mimir_calloc
+000000000000001c 0000000000000020 T mimir_free
+0000000000000000 000000000000001c T mimir_malloc
+0000000000000060 0000000000000024 T mimir_realloc
+
+build/mimir_core.o:
+00000000000002a8 0000000000000288 t alloc_locked
+0000000000000154 0000000000000060 t descriptor_is_live
+00000000000000ec 0000000000000068 t find_candidate_locked
+0000000000000530 0000000000000058 T mimir_core_alloc
+0000000000000588 00000000000000a8 T mimir_core_calloc
+000000000000077c 0000000000000088 T mimir_core_free
+0000000000000630 000000000000014c T mimir_core_realloc
+0000000000000010 0000000000000008 b mimir_live_bytes
+0000000000000008 0000000000000008 b mimir_live_mappings
+0000000000000000 0000000000000008 b mimir_registry_head
+0000000000000000 0000000000000068 t registry_insert
+0000000000000068 0000000000000084 t registry_remove
+00000000000001b4 00000000000000f4 t retire_locked
+
+build/mimir_platform.o:
+0000000000000000 0000000000000030 b mimir_global_lock
+0000000000000274 0000000000000030 T mimir_platform_global_lock
+00000000000002a4 0000000000000030 T mimir_platform_global_unlock
+0000000000000118 0000000000000104 T mimir_platform_map_acquire
+000000000000021c 0000000000000058 T mimir_platform_map_release
+0000000000000000 0000000000000080 T mimir_platform_page_size
+0000000000000080 0000000000000098 t page_round_up_checked
+=== ar t + nm build/libmimiralloc.a ===
+mimir_alloc.o
+mimir_core.o
+mimir_platform.o
+
+mimir_alloc.o:
+000000000000003c T mimir_calloc
+000000000000001c T mimir_free
+0000000000000000 T mimir_malloc
+0000000000000060 T mimir_realloc
+
+mimir_core.o:
+0000000000000530 T mimir_core_alloc
+0000000000000588 T mimir_core_calloc
+000000000000077c T mimir_core_free
+0000000000000630 T mimir_core_realloc
+
+mimir_platform.o:
+0000000000000274 T mimir_platform_global_lock
+00000000000002a4 T mimir_platform_global_unlock
+0000000000000118 T mimir_platform_map_acquire
+000000000000021c T mimir_platform_map_release
+0000000000000000 T mimir_platform_page_size
+=== nm -D --defined-only build/libmimiralloc.so ===
+0000000000000bc0 T mimir_calloc
+0000000000001138 T mimir_core_alloc
+0000000000001190 T mimir_core_calloc
+0000000000001384 T mimir_core_free
+0000000000001238 T mimir_core_realloc
+0000000000000ba0 T mimir_free
+0000000000000b84 T mimir_malloc
+0000000000001680 T mimir_platform_global_lock
+00000000000016b0 T mimir_platform_global_unlock
+0000000000001524 T mimir_platform_map_acquire
+0000000000001628 T mimir_platform_map_release
+000000000000140c T mimir_platform_page_size
+0000000000000be4 T mimir_realloc
+=== readelf --dyn-syms -W build/libmimiralloc.so ===
+
+Symbol table '.dynsym' contains 27 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 0000000000000940     0 SECTION LOCAL  DEFAULT    9 .init
+     2: 0000000000020090     0 SECTION LOCAL  DEFAULT   20 .data
+     3: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memcpy@GLIBC_2.17 (2)
+     4: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterTMCloneTable
+     5: 0000000000000000     0 FUNC    WEAK   DEFAULT  UND __cxa_finalize@GLIBC_2.17 (2)
+     6: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memset@GLIBC_2.17 (2)
+     7: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__
+     8: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND mmap@GLIBC_2.17 (2)
+     9: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND munmap@GLIBC_2.17 (2)
+    10: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND sysconf@GLIBC_2.17 (2)
+    11: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMCloneTable
+    12: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND pthread_mutex_lock@GLIBC_2.17 (2)
+    13: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND pthread_mutex_unlock@GLIBC_2.17 (2)
+    14: 0000000000001238   332 FUNC    GLOBAL DEFAULT   11 mimir_core_realloc
+    15: 0000000000001524   260 FUNC    GLOBAL DEFAULT   11 mimir_platform_map_acquire
+    16: 000000000000140c   128 FUNC    GLOBAL DEFAULT   11 mimir_platform_page_size
+    17: 0000000000001190   168 FUNC    GLOBAL DEFAULT   11 mimir_core_calloc
+    18: 0000000000001680    48 FUNC    GLOBAL DEFAULT   11 mimir_platform_global_lock
+    19: 00000000000016b0    48 FUNC    GLOBAL DEFAULT   11 mimir_platform_global_unlock
+    20: 0000000000001138    88 FUNC    GLOBAL DEFAULT   11 mimir_core_alloc
+    21: 0000000000001628    88 FUNC    GLOBAL DEFAULT   11 mimir_platform_map_release
+    22: 0000000000000b84    28 FUNC    GLOBAL DEFAULT   11 mimir_malloc
+    23: 0000000000001384   136 FUNC    GLOBAL DEFAULT   11 mimir_core_free
+    24: 0000000000000ba0    32 FUNC    GLOBAL DEFAULT   11 mimir_free
+    25: 0000000000000be4    36 FUNC    GLOBAL DEFAULT   11 mimir_realloc
+    26: 0000000000000bc0    36 FUNC    GLOBAL DEFAULT   11 mimir_calloc
+=== readelf --dyn-syms -W build/test_smoke ===
+
+Symbol table '.dynsym' contains 17 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 0000000000000820     0 SECTION LOCAL  DEFAULT   11 .init
+     2: 0000000000020060     0 SECTION LOCAL  DEFAULT   24 .data
+     3: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memcpy@GLIBC_2.17 (2)
+     4: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __libc_start_main@GLIBC_2.34 (3)
+     5: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterTMCloneTable
+     6: 0000000000000000     0 FUNC    WEAK   DEFAULT  UND __cxa_finalize@GLIBC_2.17 (2)
+     7: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memset@GLIBC_2.17 (2)
+     8: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__
+     9: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND abort@GLIBC_2.17 (2)
+    10: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND mmap@GLIBC_2.17 (2)
+    11: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND munmap@GLIBC_2.17 (2)
+    12: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND sysconf@GLIBC_2.17 (2)
+    13: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMCloneTable
+    14: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND printf@GLIBC_2.17 (2)
+    15: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND pthread_mutex_lock@GLIBC_2.17 (2)
+    16: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND pthread_mutex_unlock@GLIBC_2.17 (2)
+=== nm -D --defined-only build/test_smoke (executables export nothing) ===
+(empty above = no defined dynamic symbols in the executable)
+=== readelf -V build/test_smoke ===
+
+Version symbols section '.gnu.version' contains 17 entries:
+ Addr: 0x000000000000052e  Offset: 0x0000052e  Link: 5 (.dynsym)
+  000:   0 (*local*)       0 (*local*)       0 (*local*)       2 (GLIBC_2.17) 
+  004:   3 (GLIBC_2.34)    1 (*global*)      2 (GLIBC_2.17)    2 (GLIBC_2.17) 
+  008:   1 (*global*)      2 (GLIBC_2.17)    2 (GLIBC_2.17)    2 (GLIBC_2.17) 
+  00c:   2 (GLIBC_2.17)    1 (*global*)      2 (GLIBC_2.17)    2 (GLIBC_2.17) 
+  010:   2 (GLIBC_2.17) 
+
+Version needs section '.gnu.version_r' contains 1 entry:
+ Addr: 0x0000000000000550  Offset: 0x00000550  Link: 6 (.dynstr)
+  000000: Version: 1  File: libc.so.6  Cnt: 2
+  0x0010:   Name: GLIBC_2.34  Flags: none  Version: 3
+  0x0020:   Name: GLIBC_2.17  Flags: none  Version: 2
+=== readelf -n build/test_smoke ===
+
+Displaying notes found in: .note.gnu.build-id
+  Owner                Data size 	Description
+  GNU                  0x00000014	NT_GNU_BUILD_ID (unique build ID bitstring)
+    Build ID: 4beeac81bd98cc9c974b4bee8ab89967d61ce7e2
+
+Displaying notes found in: .note.ABI-tag
+  Owner                Data size 	Description
+  GNU                  0x00000010	NT_GNU_ABI_TAG (ABI version tag)
+    OS: Linux, ABI: 3.7.0
+=== readelf -n build/libmimiralloc.so ===
+
+Displaying notes found in: .note.gnu.build-id
+  Owner                Data size 	Description
+  GNU                  0x00000014	NT_GNU_BUILD_ID (unique build ID bitstring)
+    Build ID: 1611d4c7f59e2e19b385101c5e6eb246d1195b72
+=== readelf -r build/mimir_alloc.o ===
+
+Relocation section '.rela.text' at offset 0x3c8 contains 4 entries:
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+000000000010  000b0000011b R_AARCH64_CALL26  0000000000000000 mimir_core_alloc + 0
+00000000002c  000d0000011b R_AARCH64_CALL26  0000000000000000 mimir_core_free + 0
+000000000054  000f0000011b R_AARCH64_CALL26  0000000000000000 mimir_core_calloc + 0
+000000000078  00110000011b R_AARCH64_CALL26  0000000000000000 mimir_core_realloc + 0
+
+Relocation section '.rela.eh_frame' at offset 0x428 contains 4 entries:
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+00000000001c  000200000105 R_AARCH64_PREL32  0000000000000000 .text + 0
+00000000003c  000200000105 R_AARCH64_PREL32  0000000000000000 .text + 1c
+00000000005c  000200000105 R_AARCH64_PREL32  0000000000000000 .text + 3c
+00000000007c  000200000105 R_AARCH64_PREL32  0000000000000000 .text + 60
+=== sha256sum build artifacts ===
+682361d269daa8470593c4e9206618efed7ddec3f65c133529d308a4d4b84065  build/mimir_alloc.o
+6866ed8822fd0478a6dcbe638fa5565ea5fae79e2e32536203648c6197aaf1ba  build/mimir_core.o
+25a8debf3fdb5845965b495e3082ee44520031fa5aa34043cdb255f97b7e5709  build/mimir_platform.o
+349951d7972969fe48b9dd42935efc1fcb02ca1b53a53540e925935e36d974f4  build/test_smoke
+065ddb971728c69b6985d9af01da40a90fecbd610f959dd3142dc8ea2ca0f9c3  build/libmimiralloc.a
+3114d476ed17920979fcbec256feb0ca54a5b388b2449e13679f09935a1471e7  build/libmimiralloc.so
