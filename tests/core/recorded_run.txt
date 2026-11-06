@@ -1,0 +1,75 @@
+=== C-003 recorded run ===
+2026-11-06T12:37:32-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+getconf PAGE_SIZE: 16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+--- make clean && make test (full session) ---
+rm -rf build
+mkdir -p build
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/api/mimir_alloc.c -o build/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/core/mimir_core.c -o build/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/platform/mimir_platform.c -o build/mimir_platform.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/contract/test_smoke.c -o build/test_smoke.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_smoke.o -o build/test_smoke
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/core/test_core.c -o build/test_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_core.o -o build/test_core
+./build/test_smoke
+PASS header include guard MIMIR_ALLOC_H defined
+PASS mimir_malloc prototype matches void *(*)(size_t)
+PASS mimir_free prototype matches void (*)(void *)
+PASS mimir_malloc(1) returns non-NULL (real allocator)
+PASS mimir_malloc(1) storage writable/readable by owner
+PASS mimir_malloc(1024) returns non-NULL (real allocator)
+PASS mimir_malloc(1024) storage writable/readable by owner
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_malloc(0) returns NULL (posture only, U-09 unresolved)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free(mimir_malloc(8) result) returns normally
+SMOKE 11/11 checks passed
+./build/test_core
+C-003 core allocator test
+runtime system page size: 16384 bytes
+  [ok] runtime page size discovered
+  [ok] malloc(1) non-null
+  [ok] malloc(1) aligned to max_align_t
+  [ok] malloc(1) pattern verifies over full extent
+  [ok] malloc(64) non-null
+  [ok] malloc(64) aligned to max_align_t
+  [ok] malloc(64) pattern verifies over full extent
+  [ok] malloc(1000) non-null
+  [ok] malloc(1000) aligned to max_align_t
+  [ok] malloc(1000) pattern verifies over full extent
+  [ok] malloc(16384) non-null
+  [ok] malloc(16384) aligned to max_align_t
+  [ok] malloc(16384) pattern verifies over full extent
+  [ok] malloc(16385) non-null
+  [ok] malloc(16385) aligned to max_align_t
+  [ok] malloc(16385) pattern verifies over full extent
+  [ok] malloc(49275) non-null
+  [ok] malloc(49275) aligned to max_align_t
+  [ok] malloc(49275) pattern verifies over full extent
+  [ok] four simultaneous allocations succeed
+  [ok] live blocks pairwise non-overlapping
+  [ok] live blocks hold distinct patterns undisturbed
+  [ok] all live blocks freed exactly once, no crash
+  [ok] mimir_free(NULL) returns normally
+  [ok] malloc(SIZE_MAX) returns NULL (oversize refusal)
+  [ok] malloc(SIZE_MAX - 8) returns NULL (oversize refusal)
+  [ok] malloc(0) returns NULL (posture only, U-09 unresolved)
+  [ok] allocation after frees succeeds
+  [ok] post-free allocation pattern verifies
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+make test exit code: 0
+--- nm absent-symbol check: nm -g --defined-only build/mimir_alloc.o ---
+000000000000001c T mimir_free
+0000000000000000 T mimir_malloc
+only mimir_malloc and mimir_free are exported from the API translation unit; its only undefined symbols are the internal mimir_core_alloc and mimir_core_free (nm build/mimir_alloc.o verified in session)
+--- sha256 of slice sources as tested ---
+ad632a434f031801066bb23a0d4d2d4f8f2b2ac0b92ed38f0088a7bd8bdf3022  Makefile
+ed6effb402c9b11ae24c9f88774c4dda024ae2f4adc826607bcd38cd4debae6d  src/core/mimir_core.h
+4f2faf2a0252b28a3ac53dfb4e83cc5c0d7333d5f30c72c3b10b693f06dbd3fd  src/core/mimir_core.c
+5cb4979b6340c87e2803b71d23c7a92b676d7379fb15e6e44e49edaa53f961e3  src/api/mimir_alloc.c
+9211bd409a5c9bbb164c02785bf4eda91e94244da55c1a434f9a961f4107789d  tests/core/test_core.c
+31b929c8966d01a7c2bad20d47401260cc846d9c3d039c72b2aa73bd1d1b336a  tests/core/NOTES.md
+6b002a6016a0a7e7880f9a18107542234b7188eda70e3b9852655ad5afac20a1  tests/contract/test_smoke.c
