@@ -1,0 +1,31 @@
+=== C-002 recorded run ===
+2026-11-06T12:06:44-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+getconf PAGE_SIZE: 16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+--- compile attempt 1 (superseded, kept for honesty) ---
+Failed: MAP_ANONYMOUS undeclared under strict _POSIX_C_SOURCE 200809L with glibc 2.36 (Debian 12); fixed in-slice by also defining _DEFAULT_SOURCE in mimir_platform.c. Full attempt-1 output was observed in the C-002 session log.
+--- compile attempt 2 ---
+cc -std=c11 -Wall -Wextra -Werror -pthread src/platform/mimir_platform.c tests/platform/test_platform.c -o /tmp/test_platform_c002
+compile: OK (no warnings, -Werror)
+--- run ---
+C-002 platform layer test
+runtime system page size: 16384 bytes (status 0)
+  [ok] page size query succeeds
+  [ok] page size is a nonzero power of two
+acquire(0): status -1 (expect -1 ERR_INVALID)
+  [ok] zero request rejected as invalid, nothing mapped
+acquire(SIZE_MAX): status -2 (expect -2 ERR_OVERFLOW)
+  [ok] SIZE_MAX request rejected by checked arithmetic
+  [ok] release(NULL, page_size) rejected as invalid
+acquire(100): status 0, base 0x7fff51d80000, mapped length 16384
+  [ok] mapping acquired
+  [ok] mapped length is a whole number of system pages
+  [ok] pattern verified across whole mapping
+lock-exercised counter: 20000 (expect 20000)
+  [ok] lock/unlock succeeded in all worker calls
+  [ok] shared counter exact under the global lock
+release(base, 16384): status 0
+  [ok] mapping released
+RESULT: PASS
+exit code: 0
