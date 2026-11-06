@@ -45,7 +45,8 @@ leaves open. Statuses in this ledger mean:
 | D-002 | Contract-first API and ABI | Adopted | Section 6 | A-008 (specification slice) |
 | D-003 | ARM64-first targeting | Adopted | Sections 1, 5 | A-003 (target matrix slice) |
 | D-004 | Allocation-free startup and diagnostics | Adopted | Section 6.3 | A-008 (specification slice) |
-| D-005 | Implementation language (C11 vs C++17 core) | OPEN | Section 7.2 | A-009 |
+| D-005 | Implementation language (C11 vs C++17 core) | Superseded by D-006 | Section 7.2 | A-009 |
+| D-006 | Implementation language — C11 core | Adopted | Section 7.2 | A-009 |
 
 ---
 
@@ -129,6 +130,14 @@ leaves open. Statuses in this ledger mean:
   a working proof. Until A-009 appends a superseding entry, this decision remains OPEN
   and no slice may treat either language as settled.
 - **Supersedes:** None. **Status of entry:** Current (OPEN).
+
+## D-006 - Implementation language
+
+- **Status:** Adopted
+- **Roadmap basis:** Section 7.2, "Implementation language decision".
+- **Decision:** The MimirAlloc core starts as portable C11. The C ABI is the core's own ABI. No C++ is used in the core. Any C++ surface (e.g. operator new/delete variants, S6.1) is added only when a mapped integration actually requires it, and then only inside Layer 1, Public boundary, as a shim over the C ABI — it is not an eighth layer and it does not change the core language. A Mojo interface, where supported, is developed above the core (S7.2) and is never a bootstrap dependency.
+- **Working proof:** Doc `IMPLEMENTATION_LANGUAGE_DECISION.md` Appendices A-B; purpleviking1, aarch64, gcc/g++ 12.2.0, both -std=c11 and -std=c++17 probes compiled/linked/ran exit 0, identical unmangled C symbol, no Mojo invoked; ceiling: proves toolchain/ABI feasibility only, not interposition/correctness/performance.
+- **Supersedes:** D-005. **Status of entry:** Current.
 
 ---
 
