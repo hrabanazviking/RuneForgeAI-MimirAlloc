@@ -124,7 +124,7 @@ test-c007: $(BUILD)/test_c007
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test test-c007 test-d003 test-d004 test-d005 test-d006 test-d007 clean
+.PHONY: all test test-c007 test-d003 test-d004 test-d005 test-d006 test-d007 test-d008 clean
 
 $(BUILD)/test_d003.o: tests/platform/test_d003.c include/mimir_alloc.h src/platform/mimir_platform.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/platform/test_d003.c -o $@
@@ -176,3 +176,21 @@ $(BUILD)/test_d007: $(LIBOBJS) $(BUILD)/test_d007.o
 
 test-d007: $(BUILD)/test_d007
 	./$(BUILD)/test_d007
+
+# D-008: libc / alignment compatibility probe - the
+# evidence test under tests/compat/ (test_d008.c) measures
+# returned-pointer alignment for the four public symbols
+# across odd, boundary and large sizes and the calloc /
+# realloc paths, checked against _Alignof(max_align_t).
+# Standalone on purpose via `make test-d008`: it is NOT
+# part of `make test`. See
+# docs/LIBC_ALIGNMENT_COMPATIBILITY.md and the recorded
+# run tests/compat/recorded_run_d008.txt.
+$(BUILD)/test_d008.o: tests/compat/test_d008.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/compat/test_d008.c -o $@
+
+$(BUILD)/test_d008: $(LIBOBJS) $(BUILD)/test_d008.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_d008.o -o $@
+
+test-d008: $(BUILD)/test_d008
+	./$(BUILD)/test_d008
