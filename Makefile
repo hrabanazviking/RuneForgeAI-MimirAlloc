@@ -21,6 +21,12 @@
 #        under tests/contract/ (test_c007.c) runs in `make test`
 #        and standalone via `make test-c007`; the slice record
 #        is tests/contract/NOTES_C007.md.
+# C-008: B-008 unsupported-behaviour audit + roadmap S9.3
+#        controlled-failure tests - the evidence test under
+#        tests/core/ (test_c008.c) runs in `make test`; the
+#        audit itself is tests/core/AUDIT_B008_C008.md and
+#        the slice record is tests/core/NOTES_C008.md.
+#        No src/ change.
 
 CC      = cc
 CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
@@ -29,7 +35,7 @@ BUILD   = build
 LIBOBJS = $(BUILD)/mimir_alloc.o $(BUILD)/mimir_core.o \
           $(BUILD)/mimir_platform.o
 
-all: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005 $(BUILD)/test_c006 $(BUILD)/test_c007
+all: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005 $(BUILD)/test_c006 $(BUILD)/test_c007 $(BUILD)/test_c008
 
 $(BUILD):
 	mkdir -p $(BUILD)
@@ -61,6 +67,9 @@ $(BUILD)/test_c006.o: tests/core/test_c006.c include/mimir_alloc.h | $(BUILD)
 $(BUILD)/test_c007.o: tests/contract/test_c007.c include/mimir_alloc.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/contract/test_c007.c -o $@
 
+$(BUILD)/test_c008.o: tests/core/test_c008.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_c008.c -o $@
+
 $(BUILD)/test_smoke: $(LIBOBJS) $(BUILD)/test_smoke.o
 	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_smoke.o -o $@
 
@@ -79,13 +88,17 @@ $(BUILD)/test_c006: $(LIBOBJS) $(BUILD)/test_c006.o
 $(BUILD)/test_c007: $(LIBOBJS) $(BUILD)/test_c007.o
 	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_c007.o -o $@
 
-test: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005 $(BUILD)/test_c006 $(BUILD)/test_c007
+$(BUILD)/test_c008: $(LIBOBJS) $(BUILD)/test_c008.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_c008.o -o $@
+
+test: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005 $(BUILD)/test_c006 $(BUILD)/test_c007 $(BUILD)/test_c008
 	./$(BUILD)/test_smoke
 	./$(BUILD)/test_core
 	./$(BUILD)/test_b007
 	./$(BUILD)/test_c005
 	./$(BUILD)/test_c006
 	./$(BUILD)/test_c007
+	./$(BUILD)/test_c008
 
 test-c007: $(BUILD)/test_c007
 	./$(BUILD)/test_c007
