@@ -124,7 +124,7 @@ test-c007: $(BUILD)/test_c007
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test test-c007 test-d003 test-d004 clean
+.PHONY: all test test-c007 test-d003 test-d004 test-d005 clean
 
 $(BUILD)/test_d003.o: tests/platform/test_d003.c include/mimir_alloc.h src/platform/mimir_platform.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/platform/test_d003.c -o $@
@@ -137,3 +137,14 @@ test-d003: $(BUILD)/test_d003
 
 test-d004: $(BUILD)/test_d004
 	./$(BUILD)/test_d004
+
+# D-005: cross-compilation probe - builds and runs the
+# freestanding x86-64 probe (tests/cross/probe_freestanding.c)
+# via clang --target=x86_64-linux-gnu + ld.gold, executed
+# under Box64/binfmt (scripts/cross/build_x86_64_
+# freestanding_probe.sh). Standalone on purpose: it is NOT
+# part of `make test` and proves nothing about running the
+# allocator itself on x86-64 - no x86-64 libc sysroot exists
+# on the Pi. See docs/PHASE_4_CROSS_COMPILATION_AND_CI.md.
+test-d005:
+	./scripts/cross/build_x86_64_freestanding_probe.sh

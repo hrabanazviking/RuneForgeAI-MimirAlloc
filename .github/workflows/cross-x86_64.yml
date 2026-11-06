@@ -1,0 +1,55 @@
+# MimirAlloc D-005 - PROPOSED CI workflow. UNEXECUTED.
+#
+# Status (2026-11-06, slice D-005): this file has never run.
+# The repository had NO CI configuration of any kind when
+# D-005 checked (no .github/workflows, no .gitlab-ci.yml,
+# no Jenkinsfile, no .circleci). This proposal is recorded
+# for the day Volmarr enables it; nothing here has produced
+# evidence, and no result may be cited from it until a real
+# run exists. Per the project's standing rule (manual-only
+# workflows, in-house verification preferred), the ONLY
+# trigger is workflow_dispatch - it never fires on push.
+#
+# What a run WOULD prove, per job:
+#  - suite-x86-64: the portable suite built and RUN on a
+#    real x86-64 host. This is the run owed since C-007 /
+#    C-009 for the Phase 3 exit tally - on a hosted runner
+#    it is native x86-64 evidence, honestly labelled with
+#    the runner image, never presented as Pi evidence.
+#  - cross-aarch64-from-x86-64: the reverse cross leg
+#    (gcc-aarch64-linux-gnu + qemu-aarch64) as a smoke check
+#    that the sources stay cross-clean in both directions.
+#    An emulated run, labelled as such; it does not replace
+#    the Pi-native recorded runs.
+name: mimiralloc-cross (proposed, manual only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  suite-x86-64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the portable suite natively (x86-64)
+        run: |
+          make clean
+          make test
+          make test-d003
+  cross-aarch64-from-x86-64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross toolchain and qemu user emulation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
+      - name: Cross-build the suite for aarch64 and run it emulated
+        run: |
+          make clean
+          make test CC=aarch64-linux-gnu-gcc
+          # NOTE: the Makefile runs the binaries directly;
+          # on the x86-64 runner the run leg needs qemu:
+          #   qemu-aarch64 ./build/test_smoke (etc.)
+          # Wire that explicitly before enabling this job;
+          # as written it is a build-leg smoke check only.
