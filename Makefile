@@ -963,3 +963,32 @@ test-i003: $(BUILD)/test_i003
 	./$(BUILD)/test_i003
 
 .PHONY: test-i003
+
+# I-004: Phase 9 genuine allocation-failure evidence test -
+# the test under tests/core/ (test_i004.c) verifies the
+# failure-handling contract of docs/PHASE_9_FAILURE_HANDLING.md
+# (contract per I-002 Section 6.3, FC-1..FC-6) against the
+# test-only fault-injection shim
+# (tests/core/mimir_fault_shim_i004.c, declared in
+# tests/core/mimir_fault_i004.h): the shim object is linked
+# ONLY into this binary, with -Wl,--wrap on the four L6
+# platform entries, so the Nth mapping / release / lock /
+# page-size call can be failed on demand (roadmap S9.3).
+# No production object is changed and no other binary is
+# wrapped. Standalone via `make test-i004`; NOT part of
+# `make test`, whose composition is unchanged. Recorded
+# run: tests/core/recorded_run_i004.txt; slice record:
+# docs/PHASE_9_FAILURE_HANDLING.md.
+$(BUILD)/mimir_fault_shim_i004.o: tests/core/mimir_fault_shim_i004.c tests/core/mimir_fault_i004.h src/platform/mimir_platform.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/mimir_fault_shim_i004.c -o $@
+
+$(BUILD)/test_i004.o: tests/core/test_i004.c include/mimir_alloc.h tests/core/mimir_fault_i004.h tests/core/mimir_small_g003.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h tests/core/mimir_drain_h001.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_i004.c -o $@
+
+$(BUILD)/test_i004: $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/test_i004.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/test_i004.o -Wl,--wrap=mimir_platform_map_acquire -Wl,--wrap=mimir_platform_map_release -Wl,--wrap=mimir_platform_global_lock -Wl,--wrap=mimir_platform_page_size -o $@
+
+test-i004: $(BUILD)/test_i004
+	./$(BUILD)/test_i004
+
+.PHONY: test-i004
