@@ -1,0 +1,177 @@
+=== S0 environment ===
+2026-11-06T19:45:42-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+16384
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+966214d28501ea003fa935fd36f1f38d75d21b12
+ M Makefile
+ M src/api/mimir_alloc.c
+ M src/core/mimir_core.c
+?? build/
+?? hidden_files/
+?? tests/abi/mimir_audit_e005.h
+?? tests/abi/recorded_run_e005.txt
+?? tests/abi/test_e005.c
+?? tests/abi/test_e005_audit_link_probe.c
+?? tests/abi/test_e005_dyn.c
+=== S1 baseline: make clean; make test ===
+rm -rf build
+clean exit: 0
+make test exit: 0
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+7
+=== S2 static leg: make test-e005 ===
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/test_e005.c -o build/test_e005.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_e005.o -o build/test_e005
+./build/test_e005
+E-005 audit-counter test (static leg, library objects linked directly)
+AUDIT start call_malloc=0 call_calloc=0 call_realloc=0 call_free=0 published=0 retired=0 live=0
+  [ok] expect("start", 0, 0, 0, 0, 0, 0)
+  [ok] m[i] != NULL
+  [ok] m[i] != NULL
+  [ok] m[i] != NULL
+  [ok] m[i] != NULL
+  [ok] m[i] != NULL
+AUDIT phase1-mimir-malloc-x5 call_malloc=5 call_calloc=0 call_realloc=0 call_free=0 published=5 retired=0 live=5
+  [ok] expect("phase1-mimir-malloc-x5", 5, 0, 0, 0, 5, 0)
+  [ok] x != NULL && y != NULL && z != NULL
+  [ok] z2 != NULL
+AUDIT phase2-libc-bypass call_malloc=5 call_calloc=0 call_realloc=0 call_free=0 published=5 retired=0 live=5
+  [ok] expect("phase2-libc-bypass", 5, 0, 0, 0, 5, 0)
+  [ok] c[i] != NULL
+  [ok] zeroed
+  [ok] c[i] != NULL
+  [ok] zeroed
+  [ok] c[i] != NULL
+  [ok] zeroed
+AUDIT phase3-mimir-calloc-x3 call_malloc=5 call_calloc=3 call_realloc=0 call_free=0 published=8 retired=0 live=8
+  [ok] expect("phase3-mimir-calloc-x3", 5, 3, 0, 0, 8, 0)
+  [ok] g != NULL
+  [ok] preserved
+  [ok] g != NULL
+AUDIT phase4a-realloc-grow-x2 call_malloc=5 call_calloc=3 call_realloc=2 call_free=0 published=10 retired=2 live=8
+  [ok] expect("phase4a-realloc-grow-x2", 5, 3, 2, 0, 10, 2)
+  [ok] s == m[4]
+  [ok] s == m[3]
+AUDIT phase4b-realloc-shrink-same call_malloc=5 call_calloc=3 call_realloc=4 call_free=0 published=10 retired=2 live=8
+  [ok] expect("phase4b-realloc-shrink-same", 5, 3, 4, 0, 10, 2)
+  [ok] big == NULL
+  [ok] ovf == NULL
+AUDIT phase5-defined-failures call_malloc=6 call_calloc=4 call_realloc=4 call_free=0 published=10 retired=2 live=8
+  [ok] expect("phase5-defined-failures", 6, 4, 4, 0, 10, 2)
+AUDIT phase6a-free-null call_malloc=6 call_calloc=4 call_realloc=4 call_free=1 published=10 retired=2 live=8
+  [ok] expect("phase6a-free-null", 6, 4, 4, 1, 10, 2)
+AUDIT phase6b-free-x4 call_malloc=6 call_calloc=4 call_realloc=4 call_free=5 published=10 retired=6 live=4
+  [ok] expect("phase6b-free-x4", 6, 4, 4, 5, 10, 6)
+AUDIT phase7-free-rest call_malloc=6 call_calloc=4 call_realloc=4 call_free=9 published=10 retired=10 live=0
+  [ok] expect("phase7-free-rest", 6, 4, 4, 9, 10, 10)
+  [ok] load(&mimir_audit_alloc_published) == load(&mimir_audit_mapping_retired)
+CHECKS: 31 run, 0 failed
+RESULT: PASS
+test-e005 exit: 0
+=== S3 dynamic leg: make test-e005-dyn ===
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/test_e005_dyn.c -o build/test_e005_dyn.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/test_e005_dyn.o -Lbuild -lmimiralloc -Wl,-rpath,'$ORIGIN' -o build/test_e005_dyn
+./build/test_e005_dyn
+E-005 call-path test (dynamic leg, linked against libmimiralloc.so only)
+  [ok] page_sz > 0
+PAGE: 16384
+MAPPED base=2539520
+  [ok] base > 0
+  [ok] p[i] != NULL
+  [ok] p[i] != NULL
+  [ok] p[i] != NULL
+  [ok] p[i] != NULL
+  [ok] validated == site_malloc
+MAPPED after_mimir_malloc_x4=2670592 delta=131072
+  [ok] after_mimir - base == 4 * mapping_len_for(64)
+  [ok] q[i] != NULL
+  [ok] q[i] != NULL
+  [ok] q[i] != NULL
+  [ok] q[i] != NULL
+MAPPED after_libc_malloc_x4=2670592 delta_vs_mimir=0
+  [ok] after_libc == after_mimir
+  [ok] mapped_bytes() == after_mimir
+  [ok] c[i] != NULL
+  [ok] zeroed
+  [ok] c[i] != NULL
+  [ok] zeroed
+  [ok] validated == site_malloc + site_calloc
+MAPPED after_mimir_calloc_x2=2736128 delta=65536
+  [ok] after_calloc - after_mimir == 2 * mapping_len_for(128)
+  [ok] g != NULL
+  [ok] descriptor_valid(g, 96)
+  [ok] preserved
+  [ok] mapped_bytes() == after_calloc
+MAPPED final=2539520 base=2539520
+  [ok] final_bytes == base
+CHECKS: 25 run, 0 failed
+RESULT: PASS
+test-e005-dyn exit: 0
+=== S4 export discipline ===
+0000000000000988 T mimir_calloc
+0000000000000954 T mimir_free
+0000000000000924 T mimir_malloc
+00000000000009c0 T mimir_realloc
+nm -D defined count: 4
+-- audit symbols in the .so (full nm; all local b) --
+0000000000020080 b mimir_audit_alloc_published
+0000000000020068 b mimir_audit_call_calloc
+0000000000020078 b mimir_audit_call_free
+0000000000020060 b mimir_audit_call_malloc
+0000000000020070 b mimir_audit_call_realloc
+0000000000020088 b mimir_audit_mapping_retired
+-- audit symbols in the static-leg binary (global B) --
+00000000000200c8 B mimir_audit_alloc_published
+00000000000200b0 B mimir_audit_call_calloc
+00000000000200c0 B mimir_audit_call_free
+00000000000200a8 B mimir_audit_call_malloc
+00000000000200b8 B mimir_audit_call_realloc
+00000000000200d0 B mimir_audit_mapping_retired
+-- dynamic consumer DT_NEEDED --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+	libmimiralloc.so => /home/pi/mimiralloc-team-05/build/libmimiralloc.so (0x00007fff872a0000)
+=== S5 negative link probe vs .so (expected FAIL) ===
+/usr/bin/ld: /tmp/cc9vHiie.o: in function `main':
+test_e005_audit_link_probe.c:(.text+0x8): undefined reference to `mimir_audit_call_malloc'
+/usr/bin/ld: test_e005_audit_link_probe.c:(.text+0xc): undefined reference to `mimir_audit_call_malloc'
+collect2: error: ld returned 1 exit status
+probe link exit: 1 (expected 1)
+=== S6 clean re-run (reproducibility) ===
+clean exit: 0
+re-run test-e005 exit: 0
+AUDIT phase7-free-rest call_malloc=6 call_calloc=4 call_realloc=4 call_free=9 published=10 retired=10 live=0
+CHECKS: 31 run, 0 failed
+RESULT: PASS
+re-run test-e005-dyn exit: 0
+MAPPED final=2539520 base=2539520
+CHECKS: 25 run, 0 failed
+RESULT: PASS
+re-run make test exit: 0
+=== S7 README and diff scope ===
+0
+ Makefile              | 39 +++++++++++++++++++++++++++++++++++++++
+ src/api/mimir_alloc.c | 36 ++++++++++++++++++++++++++++++++++++
+ src/core/mimir_core.c | 31 +++++++++++++++++++++++++++++++
+ 3 files changed, 106 insertions(+)
+ M Makefile
+ M src/api/mimir_alloc.c
+ M src/core/mimir_core.c
+?? build/
+?? hidden_files/
+?? tests/abi/mimir_audit_e005.h
+?? tests/abi/recorded_run_e005.txt
+?? tests/abi/test_e005.c
+?? tests/abi/test_e005_audit_link_probe.c
+?? tests/abi/test_e005_dyn.c

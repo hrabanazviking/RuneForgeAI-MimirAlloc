@@ -181,6 +181,33 @@ static struct mimir_descriptor *mimir_registry_head; /* NULL: empty */
 static size_t mimir_live_mappings;                   /* 0 at start  */
 static size_t mimir_live_bytes;                      /* 0 at start  */
 
+/*
+ * E-005 audit counters (docs/PHASE_5_AUDIT_HOOK_E005.md;
+ * INC-E001-07 shape (b)): mimir_audit_alloc_published
+ * increments exactly once when a new mapping is published
+ * LIVE in alloc_locked (the single publication point, so
+ * it covers malloc, calloc, and realloc's grow-by-move
+ * construction); mimir_audit_mapping_retired increments
+ * exactly once when retire_locked successfully releases a
+ * mapping (the single retirement point, so it covers free
+ * and realloc's transfer of the old block). Their
+ * difference is the number of live MimirAlloc mappings.
+ * Like the L1 call counters, these are INTERNAL audit
+ * state: declared in no installed header, defined here
+ * with default visibility in this object only so a
+ * test-only static build can read them, and bound local
+ * in the shared library (this object is compiled
+ * -fvisibility=hidden for the .so and the version script
+ * binds every non-public name local), so they never
+ * appear in libmimiralloc.so's dynamic symbol table.
+ * Contract status: NOT part of the contract -
+ * Proposed-internal only. Increments happen with the
+ * global lock held (__atomic_fetch_add, relaxed, is used
+ * for uniformity with the L1 counters and is harmless).
+ */
+unsigned long mimir_audit_alloc_published;
+unsigned long mimir_audit_mapping_retired;
+
 /* Insert at the head of the registry. Caller holds the lock
  * and has fully written the descriptor (B-007 C1.4). */
 static void registry_insert(struct mimir_descriptor *desc)
@@ -279,6 +306,8 @@ static int retire_locked(struct mimir_descriptor *desc)
         mimir_live_bytes += mapping_length;
         return 0;
     }
+    __atomic_fetch_add(&mimir_audit_mapping_retired, 1UL,
+                       __ATOMIC_RELAXED);
     return 1;
 }
 
@@ -411,6 +440,8 @@ static void *alloc_locked(size_t size, int zero_user,
     registry_insert(desc);
     mimir_live_mappings += 1;
     mimir_live_bytes += mapping_length;
+    __atomic_fetch_add(&mimir_audit_alloc_published, 1UL,
+                       __ATOMIC_RELAXED);
 
     if (out_desc != NULL) {
         *out_desc = desc;

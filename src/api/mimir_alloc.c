@@ -87,22 +87,58 @@
 
 #include "../core/mimir_core.h"
 
+/*
+ * E-005 audit counters (docs/PHASE_5_AUDIT_HOOK_E005.md;
+ * INC-E001-07 shape (b)). These four counters count CALLS
+ * at this L1 boundary: each increments exactly once per
+ * invocation of its public entry point, whatever the
+ * outcome (success, defined failure, or unresolved-case
+ * posture). They are INTERNAL audit state, not a public
+ * facility: they are declared in no installed header (the
+ * public header include/mimir_alloc.h is unchanged and
+ * still declares exactly the four entry points), they are
+ * defined with default visibility in this object only so
+ * that a test-only static build can read them (see
+ * tests/abi/mimir_audit_e005.h), and in the shared library
+ * the E-002 version script (src/api/mimir_alloc.map,
+ * local: *) binds them local, so they never appear in
+ * libmimiralloc.so's dynamic symbol table. Contract
+ * status: NOT part of the contract - Proposed-internal,
+ * [UNRESOLVED: U-03] applies as it does to the whole
+ * namespaced surface; no caller may rely on them.
+ * Increments use __atomic_fetch_add (relaxed) so the
+ * counts stay exact under concurrent calls without
+ * taking the allocator lock on this layer's behalf.
+ */
+unsigned long mimir_audit_call_malloc;
+unsigned long mimir_audit_call_calloc;
+unsigned long mimir_audit_call_realloc;
+unsigned long mimir_audit_call_free;
+
 void *mimir_malloc(size_t size)
 {
+    __atomic_fetch_add(&mimir_audit_call_malloc, 1UL,
+                       __ATOMIC_RELAXED);
     return mimir_core_alloc(size);
 }
 
 void mimir_free(void *ptr)
 {
+    __atomic_fetch_add(&mimir_audit_call_free, 1UL,
+                       __ATOMIC_RELAXED);
     mimir_core_free(ptr);
 }
 
 void *mimir_calloc(size_t nmemb, size_t size)
 {
+    __atomic_fetch_add(&mimir_audit_call_calloc, 1UL,
+                       __ATOMIC_RELAXED);
     return mimir_core_calloc(nmemb, size);
 }
 
 void *mimir_realloc(void *ptr, size_t size)
 {
+    __atomic_fetch_add(&mimir_audit_call_realloc, 1UL,
+                       __ATOMIC_RELAXED);
     return mimir_core_realloc(ptr, size);
 }

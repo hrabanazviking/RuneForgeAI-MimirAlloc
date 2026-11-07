@@ -297,3 +297,42 @@ test-e004: $(BUILD)/test_e004
 	./$(BUILD)/test_e004
 
 .PHONY: test-e004
+
+# E-005: visible allocation counter / explicit audit hook -
+# the internal audit counters in src/api/mimir_alloc.c
+# (L1 call counters) and src/core/mimir_core.c (mapping
+# published/retired counters) are INC-E001-07 shape (b):
+# readable only through a test-only build, never exported
+# from libmimiralloc.so (proven in the recorded run by
+# nm -D staying at exactly 4 and by an audit-reference
+# link probe against the .so failing). Two standalone
+# legs: `make test-e005` links the library OBJECTS into
+# tests/abi/test_e005.c and checks the counters exactly
+# across a lifecycle script with a libc-bypass negative
+# phase; `make test-e005-dyn` links tests/abi/
+# test_e005_dyn.c against the .so only and proves the
+# same call path from outside via descriptor validation
+# and mapped-bytes accounting (shape (a) leg). The slice
+# record is docs/PHASE_5_AUDIT_HOOK_E005.md and the
+# recorded run is tests/abi/recorded_run_e005.txt.
+# Standalone on purpose: neither target is part of
+# `make test`, whose composition is unchanged.
+$(BUILD)/test_e005.o: tests/abi/test_e005.c tests/abi/mimir_audit_e005.h include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e005.c -o $@
+
+$(BUILD)/test_e005: $(LIBOBJS) $(BUILD)/test_e005.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_e005.o -o $@
+
+test-e005: $(BUILD)/test_e005
+	./$(BUILD)/test_e005
+
+$(BUILD)/test_e005_dyn.o: tests/abi/test_e005_dyn.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e005_dyn.c -o $@
+
+$(BUILD)/test_e005_dyn: $(BUILD)/libmimiralloc.so $(BUILD)/test_e005_dyn.o
+	$(CC) $(CFLAGS) $(BUILD)/test_e005_dyn.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+test-e005-dyn: $(BUILD)/test_e005_dyn
+	./$(BUILD)/test_e005_dyn
+
+.PHONY: test-e005 test-e005-dyn
