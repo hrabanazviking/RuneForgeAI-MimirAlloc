@@ -1,0 +1,79 @@
+MimirAlloc I-005 recorded run - Phase 9 constrained-memory runs (X5)
+date: 2026-11-07T06:33:26-05:00
+host: purpleviking1 aarch64
+pre-run free -g:
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+pre-run Samtal HTTP: 200
+command: timeout 120 make test-i005
+./build/test_i005
+test_i005: Phase 9 constrained-memory runs (X5)
+PARENT page=16384 small_cutoff=1024 large4096_va_pages=2 span_va_pages=1
+  [ok] 0: page size is 16384 B on this host (stated arithmetic)
+LEG A large-fill until clean NULL
+  baseline=2506752 limit=3555328 headroom_pages=64
+  large successes before NULL: 32
+  [ok] A: at least 4 large blocks served under limit
+  [ok] A: successes bounded by headroom arithmetic (<=64)
+  [ok] A: clean NULL reached (fill loop stopped on NULL)
+  [ok] A: live large blocks pairwise non-overlapping
+  [ok] A: all live block patterns intact at the limit
+  [ok] A: allocator serves again after freeing all
+  CHILD A large-fill until clean NULL checks=6 failures=0
+  child wall time approx 50 ms (bound 30000 ms)
+  [ok] A large-fill until clean NULL
+LEG B smaller served where headroom remains
+  baseline=2506752 limit=3555328 headroom_pages=64
+  [ok] B: filled to clean NULL first
+  [ok] B: large request served again in freed headroom
+  [ok] B: small 64 B request served in remaining headroom
+  CHILD B smaller served where headroom remains checks=3 failures=0
+  child wall time approx 50 ms (bound 30000 ms)
+  [ok] B smaller served where headroom remains
+LEG C realloc failure atomic under limit
+  baseline=2506752 limit=2768896 headroom_pages=16
+  [ok] C: original block allocated under limit
+  [ok] C: oversize realloc under limit returns exactly NULL
+  [ok] C: original byte-identical after failed realloc
+  [ok] C: allocator healthy after failed realloc
+  CHILD C realloc failure atomic under limit checks=4 failures=0
+  child wall time approx 50 ms (bound 30000 ms)
+  [ok] C realloc failure atomic under limit
+LEG D trim under pressure (largest level)
+  baseline=2506752 limit=4603904 headroom_pages=128
+  [ok] D: retention bound raised to 16 (test-only tune)
+  small blocks allocated: 1200
+  [ok] D: at least 1000 small blocks (4+ spans) allocated
+  retained after frees: spans=5 bytes=81920
+  [ok] D: at least 2 retained empty spans held under pressure setup
+  [ok] D: retained bytes == spans x page exactly
+  large successes before NULL: 61
+  [ok] D: clean NULL reached with retained spans held
+  trim released spans: 5
+  [ok] D: trim released exactly the retained spans
+  [ok] D: retained bytes 0 after trim
+  [ok] D: large request served after trim freed VA under the same limit
+  CHILD D trim under pressure (largest level) checks=8 failures=0
+  child wall time approx 50 ms (bound 30000 ms)
+  [ok] D trim under pressure (largest level)
+LEG E raw-mmap fragmentation
+  baseline=2506752 limit=3555328 headroom_pages=64
+  raw 1-page mmaps before MAP_FAILED: 64
+  [ok] E: raw mmap filled the headroom to MAP_FAILED
+  [ok] E: large request exactly NULL while VA exhausted by raw mmap
+  [ok] E: small request exactly NULL while VA exhausted by raw mmap
+  [ok] E: allocator healthy after raw mappings released
+  CHILD E raw-mmap fragmentation checks=4 failures=0
+  child wall time approx 50 ms (bound 30000 ms)
+  [ok] E raw-mmap fragmentation
+LEG F fresh-process health probe (parent, unlimited)
+  [ok] F: parent malloc works after constrained children
+  [ok] F: parent pattern intact
+  [ok] F: parent calloc works
+  [ok] F: calloc memory zeroed
+RESULT: PASS (10 checks, 0 failures)
+test-i005 exit: 0
+post-run free -g:
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+post-run Samtal HTTP: 200

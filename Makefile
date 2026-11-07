@@ -992,3 +992,29 @@ test-i004: $(BUILD)/test_i004
 	./$(BUILD)/test_i004
 
 .PHONY: test-i004
+
+# I-005: Phase 9 constrained-memory evidence test -
+# the test under tests/core/ (test_i005.c) runs the
+# designed Phase 9 constrained runs of
+# docs/PHASE_9_CONSTRAINED_RUNS.md (exit item X5):
+# forked children calibrate a per-process RLIMIT_AS from
+# their own measured VmSize baseline plus a headroom in
+# exact page arithmetic, then prove clean-NULL refusal,
+# non-overlap, smaller-request service, realloc failure
+# atomicity, trim under pressure (I-003 surface) and a
+# raw-mmap fragmentation leg under the real OS limit,
+# with a 30 s per-child wall bound enforced by the
+# parent. Standalone via `make test-i005`; NOT part of
+# `make test`, whose composition is unchanged. Recorded
+# run: tests/core/recorded_run_i005.txt; slice record:
+# docs/PHASE_9_CONSTRAINED_RUNS.md.
+$(BUILD)/test_i005.o: tests/core/test_i005.c include/mimir_alloc.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_i005.c -o $@
+
+$(BUILD)/test_i005: $(LIBOBJS) $(BUILD)/test_i005.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_i005.o -o $@
+
+test-i005: $(BUILD)/test_i005
+	./$(BUILD)/test_i005
+
+.PHONY: test-i005
