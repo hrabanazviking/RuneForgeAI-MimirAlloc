@@ -1,0 +1,29 @@
+/* mimir_alloc.map - MimirAlloc shared-library export contract (E-002).
+ *
+ * This version script is the machine-readable record of the
+ * libmimiralloc.so dynamic export contract: exactly the four
+ * public entry points declared in include/mimir_alloc.h are
+ * exported; every other symbol defined by the library objects
+ * (the internal mimir_core_* and mimir_platform_* functions) is
+ * bound locally and never appears in .dynsym as an exported
+ * global.
+ *
+ * The node is deliberately ANONYMOUS (no version name). A named
+ * node such as MIMIRALLOC_1.0 would (a) add an ABS version-name
+ * symbol to .dynsym, so the defined dynamic-symbol list would
+ * no longer be exactly the four public symbols, and (b) imply a
+ * symbol-version / ABI-stability promise that the public header
+ * expressly withholds: the namespaced API is [UNRESOLVED: U-03]
+ * and no symbol-version promise is made (B-008 N-10). A named
+ * version node belongs to the future slice that freezes the
+ * ABI, not to this one. See docs/SHARED_LIBRARY_BUILD.md.
+ */
+{
+  global:
+    mimir_malloc;
+    mimir_free;
+    mimir_calloc;
+    mimir_realloc;
+  local:
+    *;
+};

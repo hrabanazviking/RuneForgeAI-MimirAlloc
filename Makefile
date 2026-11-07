@@ -194,3 +194,54 @@ $(BUILD)/test_d008: $(LIBOBJS) $(BUILD)/test_d008.o
 
 test-d008: $(BUILD)/test_d008
 	./$(BUILD)/test_d008
+
+# E-002: shared-library build with controlled symbol
+# visibility - libmimiralloc.so is built from DEDICATED PIC
+# objects under build/pic/ (the banked objects are compiled
+# without -fPIC; see INC-D002-03) and linked with the export
+# contract in src/api/mimir_alloc.map. The API object is
+# compiled with -fvisibility=default (its only definitions
+# are the four public entry points); the core and platform
+# objects are compiled with -fvisibility=hidden, and the
+# version script additionally binds every non-public symbol
+# local, so the defined dynamic exports are exactly
+# mimir_malloc, mimir_free, mimir_calloc and mimir_realloc.
+# The consumer evidence test under tests/abi/ (test_e002.c)
+# links against the .so and runs standalone via
+# `make test-e002`; the recorded inspection is
+# tests/abi/recorded_run_e002.txt and the slice record is
+# docs/SHARED_LIBRARY_BUILD.md. Standalone on purpose: `lib`
+# and `test-e002` are NOT part of `make test`, whose
+# composition is unchanged by this slice.
+PICDIR  = $(BUILD)/pic
+PICOBJS = $(PICDIR)/mimir_alloc_pic.o $(PICDIR)/mimir_core_pic.o \
+          $(PICDIR)/mimir_platform_pic.o
+MAPFILE = src/api/mimir_alloc.map
+
+$(PICDIR):
+	mkdir -p $(PICDIR)
+
+$(PICDIR)/mimir_alloc_pic.o: src/api/mimir_alloc.c include/mimir_alloc.h src/core/mimir_core.h | $(PICDIR)
+	$(CC) $(CFLAGS) -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o $@
+
+$(PICDIR)/mimir_core_pic.o: src/core/mimir_core.c src/core/mimir_core.h src/platform/mimir_platform.h | $(PICDIR)
+	$(CC) $(CFLAGS) -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o $@
+
+$(PICDIR)/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mimir_platform.h | $(PICDIR)
+	$(CC) $(CFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
+
+$(BUILD)/libmimiralloc.so: $(PICOBJS) $(MAPFILE) | $(BUILD)
+	$(CC) -shared -Wl,--version-script=$(MAPFILE) -o $@ $(PICOBJS) -pthread
+
+lib: $(BUILD)/libmimiralloc.so
+
+$(BUILD)/test_e002.o: tests/abi/test_e002.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e002.c -o $@
+
+$(BUILD)/test_e002: $(BUILD)/libmimiralloc.so $(BUILD)/test_e002.o
+	$(CC) $(CFLAGS) $(BUILD)/test_e002.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+test-e002: $(BUILD)/test_e002
+	./$(BUILD)/test_e002
+
+.PHONY: lib test-e002

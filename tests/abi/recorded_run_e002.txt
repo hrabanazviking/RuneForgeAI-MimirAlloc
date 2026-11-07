@@ -1,0 +1,172 @@
+MimirAlloc slice E-002 - recorded run (shared library libmimiralloc.so, controlled visibility)
+Wave 5: remedy for INC-D002-02 - a shared library linked from the banked objects would
+export 13 dynamic symbols, not 4; this slice adds the library target, the version
+script src/api/mimir_alloc.map, and the consumer evidence test tests/abi/test_e002.c.
+Target: ARM64 Linux + glibc on this Pi (purpleviking1, Raspberry Pi, Cortex-A76).
+Date: 2026-11-06T18:52:04-05:00
+Host: Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+Compiler: cc (Debian 12.2.0-14+deb12u1) 12.2.0
+Base commit (HEAD at run time; slice uncommitted): 8619a4ba3b6badb58ea3a3cc8001a569a850053b
+Branch: yrsa/mimiralloc-02
+Page size: 16384
+
+=== Section 1: build the shared library (make lib) ===
+$ rm -rf build/pic build/libmimiralloc.so build/test_e002 build/test_e002.o
+rm exit: 0
+$ make lib
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+make lib exit: 0
+$ file build/libmimiralloc.so
+build/libmimiralloc.so: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, BuildID[sha1]=a25ec2c467958479ea71f4d57473076a2fb9abf2, not stripped
+file exit: 0
+$ ls -l build/libmimiralloc.so
+-rwxr-xr-x 1 pi pi 71048 Nov  6 18:52 build/libmimiralloc.so
+
+=== Section 2: defined dynamic exports (nm -D) - must be exactly the 4 public symbols ===
+$ nm -D --defined-only build/libmimiralloc.so
+0000000000000870 T mimir_calloc
+0000000000000850 T mimir_free
+0000000000000834 T mimir_malloc
+0000000000000894 T mimir_realloc
+nm exit: 0
+$ nm -D --defined-only build/libmimiralloc.so | wc -l
+4
+$ nm -D --defined-only build/libmimiralloc.so | grep -c mimir_core_ ; grep -c mimir_platform_ (expect 0 and 0)
+0
+0
+
+=== Section 3: full dynamic symbol table (readelf) ===
+$ readelf --dyn-syms -W build/libmimiralloc.so
+
+Symbol table '.dynsym' contains 18 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 0000000000000688     0 SECTION LOCAL  DEFAULT    9 .init
+     2: 0000000000020048     0 SECTION LOCAL  DEFAULT   20 .data
+     3: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memcpy@GLIBC_2.17 (2)
+     4: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterTMCloneTable
+     5: 0000000000000000     0 FUNC    WEAK   DEFAULT  UND __cxa_finalize@GLIBC_2.17 (2)
+     6: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memset@GLIBC_2.17 (2)
+     7: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__
+     8: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND mmap@GLIBC_2.17 (2)
+     9: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND munmap@GLIBC_2.17 (2)
+    10: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND sysconf@GLIBC_2.17 (2)
+    11: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMCloneTable
+    12: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND pthread_mutex_lock@GLIBC_2.17 (2)
+    13: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND pthread_mutex_unlock@GLIBC_2.17 (2)
+    14: 0000000000000834    28 FUNC    GLOBAL DEFAULT   11 mimir_malloc
+    15: 0000000000000850    32 FUNC    GLOBAL DEFAULT   11 mimir_free
+    16: 0000000000000894    36 FUNC    GLOBAL DEFAULT   11 mimir_realloc
+    17: 0000000000000870    36 FUNC    GLOBAL DEFAULT   11 mimir_calloc
+readelf exit: 0
+Reading: entries 14-17 are the only DEFINED dynamic symbols, all GLOBAL FUNC:
+mimir_malloc, mimir_free, mimir_calloc, mimir_realloc. All other .dynsym entries
+are UND imports (libc/pthread) or the null/section entries. No ABS version-name
+symbol exists because the version-script node is anonymous (see the map file).
+
+=== Section 4: internal symbols are LOCAL in the full symbol table (nm) ===
+$ nm --defined-only build/libmimiralloc.so | grep mimir
+0000000000000870 T mimir_calloc
+0000000000000de8 t mimir_core_alloc
+0000000000000e40 t mimir_core_calloc
+0000000000001034 t mimir_core_free
+0000000000000ee8 t mimir_core_realloc
+0000000000000850 T mimir_free
+0000000000020070 b mimir_global_lock
+0000000000020068 b mimir_live_bytes
+0000000000020060 b mimir_live_mappings
+0000000000000834 T mimir_malloc
+0000000000001330 t mimir_platform_global_lock
+0000000000001360 t mimir_platform_global_unlock
+00000000000011d4 t mimir_platform_map_acquire
+00000000000012d8 t mimir_platform_map_release
+00000000000010bc t mimir_platform_page_size
+0000000000000894 T mimir_realloc
+0000000000020058 b mimir_registry_head
+nm exit: 0
+Reading: T = exported global text; t = local text. Every mimir_core_* and
+mimir_platform_* definition is local (t); internal state is local data (b).
+
+=== Section 5: consumer test linked against the .so (make test-e002) ===
+$ make test-e002
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/test_e002.c -o build/test_e002.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/test_e002.o -Lbuild -lmimiralloc -Wl,-rpath,'$ORIGIN' -o build/test_e002
+./build/test_e002
+E-002 consumer test (linked against libmimiralloc.so)
+  [ok] a != NULL
+  [ok] ((uintptr_t)a % alignof(max_align_t)) == 0
+  [ok] b != NULL
+  [ok] a != b
+  [ok] intact
+  [ok] c != NULL
+  [ok] zeroed
+  [ok] c[0] == 0x3C && c[127] == 0x3C
+  [ok] g != NULL
+  [ok] g2 != NULL
+  [ok] preserved
+  [ok] g3 != NULL
+  [ok] g3[0] == 1 && g3[15] == 16
+  [ok] 1
+  [ok] d != NULL
+  [ok] d[0] == 0x77 && d[47] == 0x77
+CHECKS: 16 run, 0 failed
+RESULT: PASS
+make test-e002 exit: 0
+$ ldd build/test_e002
+	linux-vdso.so.1 (0x00007fff28bfc000)
+	libmimiralloc.so => /home/pi/mimiralloc-team-02/build/libmimiralloc.so (0x00007fff28b50000)
+	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff28970000)
+	/lib/ld-linux-aarch64.so.1 (0x00007fff28bb0000)
+ldd exit: 0
+$ ./build/test_e002 (standalone rerun)
+E-002 consumer test (linked against libmimiralloc.so)
+  [ok] a != NULL
+  [ok] ((uintptr_t)a % alignof(max_align_t)) == 0
+  [ok] b != NULL
+  [ok] a != b
+  [ok] intact
+  [ok] c != NULL
+  [ok] zeroed
+  [ok] c[0] == 0x3C && c[127] == 0x3C
+  [ok] g != NULL
+  [ok] g2 != NULL
+  [ok] preserved
+  [ok] g3 != NULL
+  [ok] g3[0] == 1 && g3[15] == 16
+  [ok] 1
+  [ok] d != NULL
+  [ok] d[0] == 0x77 && d[47] == 0x77
+CHECKS: 16 run, 0 failed
+RESULT: PASS
+consumer standalone exit: 0
+
+=== Section 6: native make test - composition unchanged, must exit 0 ===
+$ make test (full log captured; RESULT/CHECKS lines shown)
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 70 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+make test exit: 0
+Composition check: the test target prerequisite/recipe lines in the working-tree
+Makefile are byte-identical to HEAD (verified with git show HEAD:Makefile);
+lib and test-e002 are standalone targets, NOT part of make test.
+
+=== Verdict ===
+Defined dynamic exports of build/libmimiralloc.so: EXACTLY 4 - mimir_malloc,
+mimir_free, mimir_calloc, mimir_realloc. Consumer test: 16 checks run, 0 failed,
+RESULT PASS, exit 0. Native make test exit 0. INC-D002-02 remedy demonstrated
+on this Pi in this run; see docs/SHARED_LIBRARY_BUILD.md.
