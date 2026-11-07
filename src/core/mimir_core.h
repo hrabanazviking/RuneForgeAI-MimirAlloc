@@ -48,4 +48,22 @@ void *mimir_core_calloc(size_t nmemb, size_t size);
  * error (MA-6.1-REALLOC-05). */
 void *mimir_core_realloc(void *ptr, size_t new_size);
 
+/* Unload drain (H-001, docs/PHASE_7_UNLOAD_DRAIN_H001.md):
+ * under the one global lock, release every retained EMPTY
+ * span (live_count == 0) whole through L6 and return how
+ * many spans were actually released. Spans holding live
+ * blocks and live large mappings are never touched
+ * (INC-G008-03 posture). Non-terminal and idempotent:
+ * registries, counters and the lock are left fully valid
+ * and the allocator stays usable; a call with nothing
+ * retained returns 0, as does a call whose lock cannot be
+ * taken (nothing is released then). The image destructor
+ * registered in mimir_core.c calls this same entry point
+ * at dlclose and at process exit. Internal only: NOT
+ * part of the public surface in include/mimir_alloc.h,
+ * bound local in the shared library (nm -D stays exactly
+ * 4); the test-only redeclaration is
+ * tests/core/mimir_drain_h001.h (INC-E001-07 shape (b)). */
+size_t mimir_core_drain_retained(void);
+
 #endif /* MIMIR_CORE_H */

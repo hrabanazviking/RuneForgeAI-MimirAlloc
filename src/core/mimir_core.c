@@ -119,6 +119,19 @@
  * live in the G-003 block below, before
  * mimir_core_alloc. The slice record is
  * docs/PHASE_7_SMALL_OBJECT_PATH_G003.md.
+ *
+ * H-001 addendum (Phase 7 unload drain, commissioned fix
+ * for INC-G008-02): this file now registers ONE image
+ * destructor, which calls the internal drain entry point
+ * mimir_core_drain_retained: under the global lock it
+ * releases every retained EMPTY span whole through
+ * span_release_locked / L6, so a dlclose no longer
+ * orphans retained spans. Live blocks are deliberately
+ * untouched (INC-G008-03 posture: consumer duty, see
+ * docs/PHASE_7_UNLOAD_DRAIN_H001.md). The drain is
+ * non-terminal and idempotent; no public symbol is
+ * added and no constructor is registered --
+ * initialisation remains clean by construction (above).
  */
 
 #include "mimir_core.h"
@@ -995,6 +1008,105 @@ size_t mimir_tune_get_retention_bound(void)
     value = mimir_retention_bound;
     (void)mimir_platform_global_unlock();
     return value;
+}
+
+/*
+ * H-001 unload drain (docs/PHASE_7_UNLOAD_DRAIN_H001.md;
+ * commissioned fix for INC-G008-02). The G-003 span path
+ * retains up to mimir_retention_bound EMPTY spans per class
+ * after their last object is freed (G-005 RP-2/RP-5); those
+ * spans are separate L6 mappings, disjoint from the library
+ * image, so before this slice a dlclose unmapped the image
+ * and orphaned every retained span until process exit
+ * (G-008: exactly 49,152 B = 3 pages per cycle for the
+ * G-008 workload's 3 warmed classes). The drain below is
+ * the single entry point that releases them: it takes the
+ * one global lock, walks the span registry once, and
+ * releases every span whose live_count is 0 whole through
+ * span_release_locked (the banked L5/L6 release path, with
+ * its F-06 rollback), counting the spans actually
+ * released. A span holding even one live block is never
+ * touched (INC-G008-03 posture, H-001 slice doc Section
+ * 3): live blocks at unload stay exactly as live as they
+ * were, their span stays mapped, and freeing them after
+ * the image has unmapped remains undefined behaviour per
+ * the public header -- the consumer duty is to free
+ * before dlclose. Large mappings are not drained: the
+ * mapping path retains nothing after free (the Phase 3
+ * baseline), so there is nothing retained for it here.
+ *
+ * The drain is NON-TERMINAL and IDEMPOTENT (the
+ * INC-G006-03 safety property, re-examined in the H-001
+ * slice doc Section 4): it changes no registry, counter,
+ * or tuning state besides releasing the empty spans
+ * themselves (span_release_locked keeps the span counters
+ * exact), the lock is released before return, and the
+ * allocator is fully usable afterwards -- a later
+ * allocation simply acquires a fresh span. A second call
+ * with nothing retained releases nothing and returns 0.
+ * On lock failure nothing is released and 0 is returned:
+ * no unlocked progress is ever made (B-006 S9.5 / F-07).
+ * The walk captures each span's list_next before any
+ * release, because span_release_locked unlinks (and on
+ * its rollback path re-links) the span it is given; no
+ * other span's link is written by a release.
+ *
+ * The entry point itself is INC-E001-07 shape (b)
+ * internal state, exactly like the G-007 tuning pair:
+ * declared in src/core/mimir_core.h for the core's own
+ * translation units and re-declared for tests only in
+ * tests/core/mimir_drain_h001.h; in the shared library
+ * the core object is compiled -fvisibility=hidden and
+ * the version script binds every non-public name local,
+ * so it never appears in libmimiralloc.so's dynamic
+ * symbol table (nm -D stays exactly 4) and NO public
+ * symbol is added. Promotion to a public shutdown entry
+ * point would require a future contract slice
+ * (INC-G007-01 pattern).
+ */
+size_t mimir_core_drain_retained(void)
+{
+    size_t released = 0;
+    struct mimir_span_header *span = mimir_span_head;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return 0;
+    }
+    while (span != NULL) {
+        struct mimir_span_header *next = span->list_next;
+
+        if (span->live_count == 0 &&
+            span_release_locked(span)) {
+            released += 1;
+        }
+        span = next;
+    }
+    (void)mimir_platform_global_unlock();
+    return released;
+}
+
+/*
+ * The image destructor (H-001): registered in this
+ * translation unit, it runs when this image is finalised
+ * -- at dlclose, and at process exit for a statically
+ * linked or never-unloaded image -- in each case before
+ * the image unmaps. It does exactly one thing: call the
+ * drain above, so every retained EMPTY span is released
+ * through L6 while the code and the lock that own it are
+ * still mapped. It allocates nothing, reports nothing
+ * (no reporting channel exists at unload; the count is
+ * deliberately discarded), and touches no live block.
+ * Before this slice src/ registered no destructor at all
+ * (G-006, INC-G006-03); the surface this one creates,
+ * and why it stays safe, is re-examined in the H-001
+ * slice doc Section 4. There is deliberately NO
+ * constructor: initialisation stays clean by construction
+ * (B-007 C2), exactly as before.
+ */
+__attribute__((destructor))
+static void mimir_core_unload_drain(void)
+{
+    (void)mimir_core_drain_retained();
 }
 
 /*

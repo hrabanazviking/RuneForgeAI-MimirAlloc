@@ -769,3 +769,37 @@ test-g008: $(BUILD)/test_g008
 	bash tests/core/run_g008_probe.sh
 
 .PHONY: test-g008
+
+# H-001: Phase 7 unload drain evidence test - the test
+# under tests/core/ (test_h001.c) verifies the drain of
+# docs/PHASE_7_UNLOAD_DRAIN_H001.md (commissioned fix for
+# INC-G008-02) in two legs in one binary: a DLOPEN leg
+# consuming build/libmimiralloc.so only via
+# dlopen/dlsym/dlclose in the G-008 harness shape
+# (50 cycles, same workload), which must now record
+# anonymous rw growth of exactly 0 B per cycle and
+# img_after_close=0 throughout, plus the live-at-unload
+# probe (INC-G008-03: a block still live at dlclose is
+# deliberately NOT drained; its span and pattern
+# survive); and a DIRECT leg linking the library objects
+# (LIBOBJS), which reads the G-003 span counters
+# (tests/core/mimir_small_g003.h), the E-005 mapping
+# counters (tests/abi/mimir_audit_e005.h) and the drain
+# entry point itself (tests/core/mimir_drain_h001.h) to
+# prove the drain semantics exactly: only EMPTY spans
+# released, live blocks and mappings untouched,
+# idempotent, allocator usable afterwards. Standalone
+# via `make test-h001`; NOT part of `make test`, whose
+# composition is unchanged. Recorded run:
+# tests/core/recorded_run_h001.txt; slice record:
+# docs/PHASE_7_UNLOAD_DRAIN_H001.md.
+$(BUILD)/test_h001.o: tests/core/test_h001.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/core/mimir_drain_h001.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_h001.c -o $@
+
+$(BUILD)/test_h001: $(LIBOBJS) $(BUILD)/libmimiralloc.so $(BUILD)/test_h001.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_h001.o -o $@ -ldl
+
+test-h001: $(BUILD)/test_h001
+	./$(BUILD)/test_h001 $(BUILD)/libmimiralloc.so
+
+.PHONY: test-h001
