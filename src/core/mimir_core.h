@@ -187,5 +187,31 @@ int mimir_core_stats_snapshot(struct mimir_stats *out);
  * library (nm -D stays exactly 4 in both flavours). */
 int mimir_core_debug_verify_all(void);
 #endif
+#ifdef MIMIR_DEBUG
+
+/* J-005 debug-only quarantine surface
+ * (docs/PHASE_10_POISON_QUARANTINE.md; plan S5.2/S5.3).
+ * These three entry points exist ONLY in a MIMIR_DEBUG
+ * build; a production object does not contain them.
+ * mimir_debug_quarantine_count: blocks currently held in
+ * the bounded quarantine (capacity 32, slice doc S2).
+ * mimir_debug_quarantined_bytes: bytes_quarantined, the
+ * S5.3 own-named quantity -- the summed class extents of
+ * the held blocks, reported separately from D-CACHED,
+ * whose production definition is unchanged.
+ * mimir_debug_quarantine_verify: on-demand verification
+ * of every held block against the poison pattern; returns
+ * how many held blocks are corrupted (0 = all clean),
+ * -1 if the lock cannot be taken; it never aborts -- the
+ * allocator-triggered eviction check is the abort path,
+ * exercised only in disposable child processes.
+ * Internal only, INC-E001-07 shape (b) exactly like the
+ * trim surface above: re-declared for tests only in
+ * tests/core/mimir_quarantine_j005.h; bound local in the
+ * shared library (nm -D stays exactly 4 both flavours). */
+size_t mimir_debug_quarantine_count(void);
+size_t mimir_debug_quarantined_bytes(void);
+int mimir_debug_quarantine_verify(void);
+#endif /* MIMIR_DEBUG */
 
 #endif /* MIMIR_CORE_H */

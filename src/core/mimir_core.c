@@ -132,6 +132,16 @@
  * non-terminal and idempotent; no public symbol is
  * added and no constructor is registered --
  * initialisation remains clean by construction (above).
+ *
+ * J-005 addendum (Phase 10 debug-only poisoning +
+ * quarantine of freed blocks): under MIMIR_DEBUG only,
+ * a small-path free poisons the block's whole class
+ * extent (byte 0xDD) and holds the block in a bounded
+ * FIFO quarantine (capacity 32) inside its span before
+ * reuse; verification happens at quarantine eviction
+ * (the only road back to reuse) and on demand. The
+ * production build contains none of this code. The
+ * slice record is docs/PHASE_10_POISON_QUARANTINE.md.
  */
 
 #include "mimir_core.h"
@@ -152,6 +162,12 @@
 #endif
 
 #include "../platform/mimir_platform.h"
+#ifdef MIMIR_DEBUG
+/* J-005 only: abort() for the fail-clearly report path and
+ * write(2) for its fixed-buffer fd 2 report (INC-J005-05). */
+#include <stdlib.h>
+#include <unistd.h>
+#endif
 
 /* Descriptor state values (B-006 S7.3: state is LIVE or
  * RETIRED; 0 means never published). */
@@ -1016,6 +1032,15 @@ static int span_release_locked(struct mimir_span_header *span)
     return 1;
 }
 
+#ifdef MIMIR_DEBUG
+/* J-005 forward declaration: the quarantine block below
+ * defines this after this point in the file; the EMPTY
+ * tests here and in the trim/retained/stats walks all
+ * consult it (S5.3 guards). */
+static size_t debug_span_quarantine_count_locked(
+    const struct mimir_span_header *span);
+#endif
+
 /* Count retained EMPTY spans of one class (lock held). */
 static size_t empty_spans_of_class_locked(size_t class_index)
 {
@@ -1024,7 +1049,13 @@ static size_t empty_spans_of_class_locked(size_t class_index)
 
     while (span != NULL) {
         if (span->class_index == class_index &&
-            span->live_count == 0) {
+            span->live_count == 0
+#ifdef MIMIR_DEBUG
+            /* J-005: not EMPTY while quarantine holds
+             * blocks in it (S5.3). */
+            && debug_span_quarantine_count_locked(span) == 0
+#endif
+            ) {
             count++;
         }
         span = span->list_next;
@@ -1037,6 +1068,250 @@ static int span_can_serve(const struct mimir_span_header *span)
     return span->free_head != NULL ||
            span->carve_count < span_capacity(span);
 }
+
+/*
+ * J-005 (Phase 10 debug-only poisoning + quarantine of
+ * freed blocks; docs/PHASE_10_POISON_QUARANTINE.md; plan:
+ * docs/PHASE_10_FOUNDATION_PLAN.md S5.2/S5.3). Compiled
+ * ONLY under MIMIR_DEBUG (the one debug flag of S5.1);
+ * production objects contain none of this code at all.
+ *
+ * On a small-path free the block's whole class extent is
+ * filled with the poison pattern (byte 0xDD, stated here
+ * and in the slice doc) and the block is held in the
+ * bounded quarantine below instead of being threaded onto
+ * its span's free list. A quarantined block is verified
+ * (a) at eviction from the quarantine -- eviction is the
+ * only road back to reuse, so every reused block has
+ * passed verification first -- and (b) on demand through
+ * mimir_debug_quarantine_verify. A byte that no longer
+ * matches the pattern is a use-after-free write (or
+ * external corruption of allocator-held memory): the
+ * allocator-triggered path reports on fd 2 from a fixed
+ * stack buffer with write(2) and calls abort(); it
+ * allocates nothing and recurses into nothing (the
+ * Phase 10 rule). The on-demand verify reports by return
+ * value only and never aborts, so a test parent can prove
+ * detection without dying; the abort shape is exercised
+ * only in disposable child processes (slice doc S3).
+ *
+ * Capacity: exactly MIMIR_DEBUG_QUARANTINE_CAPACITY
+ * blocks, one global FIFO across classes, fixed static
+ * storage. No per-block metadata growth: the span header
+ * stays 96 bytes and class extents are unchanged, so
+ * debug layout overhead is 0 bytes per block; the table
+ * itself is CAPACITY entries of static storage.
+ *
+ * S5.3 honoured by construction + guards: quarantine
+ * lives INSIDE spans; a span holding quarantined blocks
+ * is never selected for release (retention release in
+ * small_free_locked, the shared trim/drain walk) and is
+ * never counted EMPTY by the retained/stats walks, so
+ * D-CACHED keeps its production definition (retention
+ * cache only) and quarantined bytes are reported as
+ * their own quantity, mimir_debug_quarantined_bytes
+ * (bytes_quarantined), with their own name.
+ */
+#ifdef MIMIR_DEBUG
+
+#define MIMIR_DEBUG_POISON_BYTE 0xDDu
+#define MIMIR_DEBUG_QUARANTINE_CAPACITY ((size_t)32)
+
+struct mimir_debug_quarantine_entry {
+    void *ptr;
+    struct mimir_span_header *span;
+};
+
+static struct mimir_debug_quarantine_entry
+    mimir_debug_quarantine[MIMIR_DEBUG_QUARANTINE_CAPACITY];
+static size_t mimir_debug_quarantine_len;
+
+static void debug_poison_fill(void *ptr, size_t extent)
+{
+    memset(ptr, (int)MIMIR_DEBUG_POISON_BYTE, extent);
+}
+
+static int debug_block_is_poisoned(const void *ptr, size_t extent)
+{
+    const unsigned char *p = (const unsigned char *)ptr;
+    size_t i;
+
+    for (i = 0; i < extent; i++) {
+        if (p[i] != (unsigned char)MIMIR_DEBUG_POISON_BYTE) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int debug_quarantine_contains_locked(const void *ptr)
+{
+    size_t i;
+
+    for (i = 0; i < mimir_debug_quarantine_len; i++) {
+        if (mimir_debug_quarantine[i].ptr == ptr) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static size_t debug_span_quarantine_count_locked(
+    const struct mimir_span_header *span)
+{
+    size_t i;
+    size_t n = 0;
+
+    for (i = 0; i < mimir_debug_quarantine_len; i++) {
+        if (mimir_debug_quarantine[i].span == span) {
+            n++;
+        }
+    }
+    return n;
+}
+
+/* Count quarantined blocks whose bytes no longer match
+ * the poison pattern (lock held). Reports by count only:
+ * never aborts, allocates nothing. */
+static size_t debug_quarantine_verify_locked(void)
+{
+    size_t i;
+    size_t bad = 0;
+
+    for (i = 0; i < mimir_debug_quarantine_len; i++) {
+        struct mimir_debug_quarantine_entry *e =
+            &mimir_debug_quarantine[i];
+
+        if (!debug_block_is_poisoned(e->ptr,
+                                     e->span->class_size)) {
+            bad++;
+        }
+    }
+    return bad;
+}
+
+/* Report + fail clearly (S5.2's stated exception; the
+ * Phase 10 fail-clearly posture): fixed stack buffer,
+ * write(2) to fd 2, abort(). No allocation, no stdio, no
+ * lock operation, no recursion. INC-J005-05: this
+ * debug-only code names write(2) directly because L6
+ * publishes no diagnostic channel; J-007 owns the
+ * production reporting channel and this call is to be
+ * re-homed to it at reconciliation. Called with the
+ * global lock held; abort() does not return. */
+static void debug_report_and_abort_locked(const void *ptr)
+{
+    static const char head[] =
+        "mimiralloc debug: poison check failed for quarantined block 0x";
+    static const char tail[] =
+        " (use-after-free write detected)\n";
+    char buf[160];
+    size_t n = 0;
+    size_t i;
+    uintptr_t v = (uintptr_t)ptr;
+    int shift;
+    ssize_t ignored;
+
+    for (i = 0; head[i] != '\0'; i++) {
+        buf[n++] = head[i];
+    }
+    for (shift = (int)(sizeof(uintptr_t) * 8) - 4;
+         shift >= 0; shift -= 4) {
+        unsigned digit = (unsigned)((v >> shift) & 0xFu);
+        buf[n++] = (char)(digit < 10 ? '0' + (int)digit
+                                     : 'a' + (int)(digit - 10));
+    }
+    for (i = 0; tail[i] != '\0'; i++) {
+        buf[n++] = tail[i];
+    }
+    ignored = write(2, buf, n);
+    (void)ignored;
+    abort();
+}
+
+/* Evict the oldest quarantined block (lock held): verify
+ * its poison first -- a corrupted block fails clearly
+ * here and never returns to reuse -- then thread it onto
+ * its span's free list, the production reuse home. Its
+ * first 8 bytes become the free-list link, exactly as a
+ * production free writes them (G-002 S7). */
+static void debug_quarantine_evict_oldest_locked(void)
+{
+    struct mimir_debug_quarantine_entry e =
+        mimir_debug_quarantine[0];
+
+    if (!debug_block_is_poisoned(e.ptr, e.span->class_size)) {
+        debug_report_and_abort_locked(e.ptr);
+    }
+    memmove(&mimir_debug_quarantine[0],
+            &mimir_debug_quarantine[1],
+            (mimir_debug_quarantine_len - 1) *
+                sizeof mimir_debug_quarantine[0]);
+    mimir_debug_quarantine_len -= 1;
+    *(void **)e.ptr = e.span->free_head;
+    e.span->free_head = e.ptr;
+}
+
+static void debug_quarantine_insert_locked(
+    void *ptr, struct mimir_span_header *span)
+{
+    if (mimir_debug_quarantine_len ==
+        MIMIR_DEBUG_QUARANTINE_CAPACITY) {
+        debug_quarantine_evict_oldest_locked();
+    }
+    mimir_debug_quarantine[mimir_debug_quarantine_len].ptr = ptr;
+    mimir_debug_quarantine[mimir_debug_quarantine_len].span = span;
+    mimir_debug_quarantine_len += 1;
+}
+
+/* Test-only surface (INC-E001-07 shape (b), exactly like
+ * the G-007 tuning pair): declared in src/core/
+ * mimir_core.h under MIMIR_DEBUG and re-declared for
+ * tests only in tests/core/mimir_quarantine_j005.h;
+ * bound local in the shared library (nm -D stays
+ * exactly 4 in both flavours). Getter posture is the
+ * G-007 one: (size_t)-1 / -1 when the lock cannot be
+ * taken, with nothing changed. */
+size_t mimir_debug_quarantine_count(void)
+{
+    size_t n;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    n = mimir_debug_quarantine_len;
+    (void)mimir_platform_global_unlock();
+    return n;
+}
+
+size_t mimir_debug_quarantined_bytes(void)
+{
+    size_t i;
+    size_t bytes = 0;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    for (i = 0; i < mimir_debug_quarantine_len; i++) {
+        bytes += mimir_debug_quarantine[i].span->class_size;
+    }
+    (void)mimir_platform_global_unlock();
+    return bytes;
+}
+
+int mimir_debug_quarantine_verify(void)
+{
+    size_t bad;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return -1;
+    }
+    bad = debug_quarantine_verify_locked();
+    (void)mimir_platform_global_unlock();
+    return (int)bad;
+}
+
+#endif /* MIMIR_DEBUG */
 
 /*
  * Ownership determination for the span registry (G-002
@@ -1058,6 +1333,17 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
 {
     struct mimir_span_header *span = mimir_span_head;
     uintptr_t target = (uintptr_t)ptr;
+
+#ifdef MIMIR_DEBUG
+    /* J-005: a quarantined block is already freed. It is
+     * not on its span's free list (the quarantine table is
+     * its only home), so without this guard it would pass
+     * the free-list walk below as if live and a double
+     * free would retire it twice. */
+    if (debug_quarantine_contains_locked(ptr)) {
+        return NULL;
+    }
+#endif
 
     while (span != NULL) {
         uintptr_t base = (uintptr_t)span->mapping_base;
@@ -1214,6 +1500,31 @@ static void small_free_locked(void *ptr)
      * NOT freed (report + defined stop inside). */
     mimir_dbg_check_or_abort(ptr, span->class_size, "free");
 #endif
+#ifdef MIMIR_DEBUG
+    /* J-005: poison the whole class extent and hold the
+     * block in the bounded quarantine instead of threading
+     * it onto the free list. live_count and the audit
+     * counters move exactly as in production: ownership
+     * left the caller at this instant; quarantine is an
+     * allocator-internal hold before reuse, not caller
+     * liveness. The retention release below additionally
+     * requires that the span hold no quarantined blocks:
+     * a span is never released out from under its
+     * quarantine (S5.3; INC-J005-02 records the retention
+     * convergence this implies). */
+    debug_poison_fill(ptr, span->class_size);
+    span->live_count -= 1;
+    mimir_live_small_objects -= 1;
+    __atomic_fetch_add(&mimir_audit_small_free, 1UL,
+                       __ATOMIC_RELAXED);
+    debug_quarantine_insert_locked(ptr, span);
+    if (span->live_count == 0 &&
+        debug_span_quarantine_count_locked(span) == 0 &&
+        empty_spans_of_class_locked(span->class_index) >
+            mimir_retention_bound) {
+        (void)span_release_locked(span);
+    }
+#else
     *(void **)ptr = span->free_head;
     span->free_head = ptr;
     span->live_count -= 1;
@@ -1226,6 +1537,7 @@ static void small_free_locked(void *ptr)
             mimir_retention_bound) {
         (void)span_release_locked(span);
     }
+#endif
 }
 
 #ifdef MIMIR_DEBUG
@@ -1372,7 +1684,12 @@ static size_t trim_some_locked(size_t max_spans)
 
             while (span != NULL) {
                 if (span->class_index == class_index &&
-                    span->live_count == 0) {
+                    span->live_count == 0
+#ifdef MIMIR_DEBUG
+                    /* J-005: never a quarantine holder. */
+                    && debug_span_quarantine_count_locked(span) == 0
+#endif
+                    ) {
                     victim = span;
                 }
                 span = span->list_next;
@@ -1404,7 +1721,14 @@ static void retained_snapshot_locked(size_t *out_spans,
     size_t bytes = 0;
 
     while (span != NULL) {
-        if (span->live_count == 0) {
+        if (span->live_count == 0
+#ifdef MIMIR_DEBUG
+            /* J-005: Q-RETAINED counts the retention cache
+             * only; quarantine-held spans are reported by
+             * their own quantity (S5.3). */
+            && debug_span_quarantine_count_locked(span) == 0
+#endif
+            ) {
             spans += 1;
             bytes += span->mapping_length;
         }
@@ -1652,7 +1976,14 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
                 (uint64_t)span->live_count;
             out->span_capacity_objects[idx] +=
                 (uint64_t)span_capacity(span);
-            if (span->live_count == 0) {
+            if (span->live_count == 0
+#ifdef MIMIR_DEBUG
+                /* J-005: D-CACHED keeps its production
+                 * definition; a quarantine-held span is
+                 * not EMPTY here (S5.3). */
+                && debug_span_quarantine_count_locked(span) == 0
+#endif
+                ) {
                 out->span_empty_spans[idx] += 1;
                 out->bytes_cached +=
                     (uint64_t)span->mapping_length;

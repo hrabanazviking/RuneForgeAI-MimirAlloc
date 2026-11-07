@@ -1217,3 +1217,70 @@ test-debug: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/t
 	@for t in test_smoke test_core test_b007 test_c005 test_c006 test_c007 test_c008 test_d004 test_j004; do ./$(BUILD)/$$t >/dev/null 2>&1; echo "test-debug $(BUILD)/$$t exit=$$?"; done
 
 .PHONY: test-j004 test-debug
+
+# J-005: Phase 10 debug flavour -- poisoning + quarantine
+# of freed blocks (docs/PHASE_10_POISON_QUARANTINE.md;
+# plan docs/PHASE_10_FOUNDATION_PLAN.md S5.1). The debug
+# flavour is the ONE flag MIMIR_DEBUG: every debug object
+# is compiled with -DMIMIR_DEBUG=1 into the SEPARATE
+# directory build-debug/, so no debug object can be
+# linked into a production artifact by stale-file
+# accident, and the production targets above are
+# untouched (plain make / make test / make lib build
+# exactly the banked production objects; `make DEBUG=1
+# test-j005` is accepted and identical, the flavour
+# being carried by these targets themselves). The debug
+# shared library (make lib-debug) is built from PIC
+# objects under build-debug/pic/ with the same version
+# script, so nm -D is exactly 4 in both flavours.
+# Standalone via `make test-j005`; NOT part of
+# `make test`, whose composition is unchanged.
+# Recorded run: tests/core/recorded_run_j005.txt.
+DBUILD  = build-debug
+DCFLAGS = $(CFLAGS) -DMIMIR_DEBUG=1
+DLIBOBJS = $(DBUILD)/mimir_alloc.o $(DBUILD)/mimir_core.o \
+          $(DBUILD)/mimir_platform.o
+
+$(DBUILD):
+	mkdir -p $(DBUILD)
+
+$(DBUILD)/mimir_alloc.o: src/api/mimir_alloc.c include/mimir_alloc.h src/core/mimir_core.h | $(DBUILD)
+	$(CC) $(DCFLAGS) -c src/api/mimir_alloc.c -o $@
+
+$(DBUILD)/mimir_core.o: src/core/mimir_core.c src/core/mimir_core.h src/platform/mimir_platform.h tests/core/mimir_quarantine_j005.h | $(DBUILD)
+	$(CC) $(DCFLAGS) -c src/core/mimir_core.c -o $@
+
+$(DBUILD)/mimir_platform.o: src/platform/mimir_platform.c src/platform/mimir_platform.h | $(DBUILD)
+	$(CC) $(DCFLAGS) -c src/platform/mimir_platform.c -o $@
+
+$(DBUILD)/test_j005.o: tests/core/test_j005.c include/mimir_alloc.h tests/core/mimir_quarantine_j005.h tests/core/mimir_stats_j002.h tests/core/mimir_trim_i003.h tests/core/mimir_drain_h001.h | $(DBUILD)
+	$(CC) $(DCFLAGS) -c tests/core/test_j005.c -o $@
+
+$(DBUILD)/test_j005: $(DLIBOBJS) $(DBUILD)/test_j005.o
+	$(CC) $(DCFLAGS) $(DLIBOBJS) $(DBUILD)/test_j005.o -o $@
+
+test-j005: $(DBUILD)/test_j005
+	./$(DBUILD)/test_j005
+
+DPICDIR  = $(DBUILD)/pic
+DPICOBJS = $(DPICDIR)/mimir_alloc_pic.o $(DPICDIR)/mimir_core_pic.o \
+          $(DPICDIR)/mimir_platform_pic.o
+
+$(DPICDIR): | $(DBUILD)
+	mkdir -p $(DPICDIR)
+
+$(DPICDIR)/mimir_alloc_pic.o: src/api/mimir_alloc.c include/mimir_alloc.h src/core/mimir_core.h | $(DPICDIR)
+	$(CC) $(DCFLAGS) -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o $@
+
+$(DPICDIR)/mimir_core_pic.o: src/core/mimir_core.c src/core/mimir_core.h src/platform/mimir_platform.h | $(DPICDIR)
+	$(CC) $(DCFLAGS) -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o $@
+
+$(DPICDIR)/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mimir_platform.h | $(DPICDIR)
+	$(CC) $(DCFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
+
+$(DBUILD)/libmimiralloc.so: $(DPICOBJS) $(MAPFILE) | $(DBUILD)
+	$(CC) -shared -Wl,--version-script=$(MAPFILE) -o $@ $(DPICOBJS) -pthread
+
+lib-debug: $(DBUILD)/libmimiralloc.so
+
+.PHONY: test-j005 lib-debug

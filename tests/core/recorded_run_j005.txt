@@ -1,0 +1,148 @@
+recorded_run_j005.txt - slice J-005 (Phase 10 debug-only poisoning + quarantine)
+host: purpleviking1  arch: aarch64  kernel: 6.12.112-v8-16k-hailo+
+date: 2026-11-07T07:42:30-05:00
+base HEAD: 1aab76258ccc8af8e29bb482c674484c47d8f117  branch: yrsa/mimiralloc-05
+samtal_before: 200
+free_available_mb: 13483
+
+=== make lib (production) ===
+make: Nothing to be done for 'lib'.
+=== nm -D --defined-only build/libmimiralloc.so (production) ===
+0000000000000a48 T mimir_calloc
+0000000000000a14 T mimir_free
+00000000000009e4 T mimir_malloc
+0000000000000a80 T mimir_realloc
+count: 4
+
+=== make lib-debug ===
+make: Nothing to be done for 'lib-debug'.
+=== nm -D --defined-only build-debug/libmimiralloc.so (debug) ===
+0000000000000b28 T mimir_calloc
+0000000000000af4 T mimir_free
+0000000000000ac4 T mimir_malloc
+0000000000000b60 T mimir_realloc
+count: 4
+
+=== README.md + include/mimir_alloc.h diff vs base 1aab762 ===
+0
+
+=== make test-j005 (debug flavour, MIMIR_DEBUG) ===
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -DMIMIR_DEBUG=1 -c tests/core/test_j005.c -o build-debug/test_j005.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -DMIMIR_DEBUG=1 build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_j005.o -o build-debug/test_j005
+./build-debug/test_j005
+mimiralloc debug: poison check failed for quarantined block 0x00007fff4430c0e0 (use-after-free write detected)
+test_j005: J-005 debug poisoning + quarantine
+  [ok] quarantine empty at start (got 0, want 0)
+  [ok] quarantine verifies clean at start
+Leg A: D-CACHED unmoved by quarantine (S5.3)
+  [ok] snapshot 0
+  [ok] two class-512 blocks allocated
+  [ok] two blocks held in quarantine (got 2, want 2)
+  [ok] bytes_quarantined = 2 x 512 (got 1024, want 1024)
+  [ok] snapshot 1
+  [ok] D-CACHED unmoved by quarantined span (got 0, want 0)
+  [ok] quarantine span stays mapped (one page) (got 16384, want 16384)
+  [ok] Q-RETAINED counts no quarantine-held span (got 0, want 0)
+  [ok] drain releases no quarantine-held span (got 0, want 0)
+  [ok] snapshot 2
+  [ok] mapped bytes unchanged by drain (got 16384, want 16384)
+Leg B: poison pattern after free
+  [ok] class-64 block allocated
+  [ok] third block held in quarantine (got 3, want 3)
+  [ok] all 64 user bytes are poison 0xDD after free
+  [ok] on-demand verify: all held blocks clean
+Leg C: quarantine bound exact at 32
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] bound-leg allocation
+  [ok] quarantine never exceeds 32
+  [ok] quarantine at exactly its bound (got 32, want 32)
+  [ok] bytes_quarantined = 32 x 224 at bound (got 7168, want 7168)
+  [ok] held blocks verify clean at bound
+  [ok] reuse allocation succeeds
+  [ok] reuse returns an evicted (verified) block
+  [ok] reused block fully writable and readable
+  [ok] quarantine back at bound after re-free (got 32, want 32)
+  [ok] double free of quarantined block is inert (got 32, want 32)
+  [ok] verify still clean after double free
+  [ok] snapshot at quiescence
+  [ok] no live small objects at quiescence (got 0, want 0)
+Leg D: defined-call outcomes unchanged
+  [ok] calloc extent zeroed in debug build
+  [ok] realloc grow succeeds
+  [ok] realloc grow preserves min bytes
+  [ok] large allocation succeeds
+  [ok] large free never enters quarantine (got 32, want 32)
+  [ok] zero-size posture NULL in debug build
+Leg E: overhead measurement
+  [info] debug alloc/free cycle x20000: 13757351 ns total, 687 ns/op (measurement only)
+  [info] quarantine capacity 32 blocks; static table 512 bytes; per-block layout overhead 0 bytes; held bytes now (32 x class 64 after the churn leg) 2048
+  [ok] timing leg ran
+Leg F: UAF detection in disposable children
+  [ok] child A ran
+  [ok] child A: UAF write detected by verify (1 bad)
+  [ok] child B ran
+  [ok] child B: eviction of corrupted block aborts
+  [ok] parent quarantine untouched by children
+J005 SUMMARY: checks=81 failures=0
+RESULT: PASS
+test_j005_exit=0
+
+=== make test (production flavour, unchanged) ===
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+make_test_pipe_exit=0
+samtal_after: 200
