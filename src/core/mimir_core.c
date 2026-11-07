@@ -355,8 +355,20 @@ static void registry_remove(struct mimir_descriptor *desc)
 static struct mimir_descriptor *find_candidate_locked(void *ptr)
 {
     struct mimir_descriptor *desc = mimir_registry_head;
+    size_t j006_steps = 0;
 
     while (desc != NULL) {
+        /* J-006: bound the walk by the live counter. A valid
+         * registry holds exactly mimir_live_mappings nodes,
+         * so no valid walk is cut; a corrupted list_next
+         * that cycles now ends in refusal instead of an
+         * unbounded loop. A list_next pointing at unmapped
+         * memory still faults on the dereference below --
+         * no in-process check can validate a pointer without
+         * reading it (INC-J006-01). */
+        if (++j006_steps > mimir_live_mappings) {
+            return NULL;
+        }
         if ((void *)((unsigned char *)desc->mapping_base +
                      desc->usable_offset) == ptr) {
             break;
@@ -373,9 +385,30 @@ static struct mimir_descriptor *find_candidate_locked(void *ptr)
  * part of the validation is find_candidate_locked itself. */
 static int descriptor_is_live(struct mimir_descriptor *desc)
 {
+    /* J-006 (docs/PHASE_10_METADATA_INTEGRITY.md): the S8.2
+     * checks above plus the exact layout relations
+     * publication writes in alloc_locked -- usable_offset
+     * lies inside the mapping, usable_size is exactly the
+     * mapping past that offset, and requested_size is a
+     * non-zero size no larger than the usable extent (a
+     * realloc shrink only ever lowers it). Valid metadata
+     * always satisfies every relation, so no defined
+     * behaviour changes; a descriptor whose length, offset
+     * or size fields were corrupted after publication now
+     * fails validation here and takes the non-destructive
+     * refusal course, instead of driving a wrong-length
+     * release in retire_locked or a wrong-length transfer
+     * copy in realloc. Fields corrupted CONSISTENTLY with
+     * these relations still pass (INC-J006-02). */
     return desc->magic == MIMIR_DESCRIPTOR_MAGIC &&
            desc->state == MIMIR_STATE_LIVE &&
-           desc->mapping_base == (void *)desc;
+           desc->mapping_base == (void *)desc &&
+           desc->usable_offset != 0 &&
+           desc->usable_offset <= desc->mapping_length &&
+           desc->usable_size ==
+               desc->mapping_length - desc->usable_offset &&
+           desc->requested_size != 0 &&
+           desc->requested_size <= desc->usable_size;
 }
 
 /*
@@ -898,12 +931,94 @@ static void span_registry_remove(struct mimir_span_header *span)
 
 static int span_header_is_live(const struct mimir_span_header *span)
 {
-    return span->magic == MIMIR_SPAN_MAGIC &&
-           span->state == MIMIR_STATE_LIVE &&
-           span->mapping_base == (const void *)span &&
-           span->usable_offset == MIMIR_SPAN_HEADER_SIZE &&
-           span->class_index < MIMIR_SMALL_CLASS_COUNT &&
-           span->class_size == mimir_class_sizes[span->class_index];
+    if (!(span->magic == MIMIR_SPAN_MAGIC &&
+          span->state == MIMIR_STATE_LIVE &&
+          span->mapping_base == (const void *)span &&
+          span->usable_offset == MIMIR_SPAN_HEADER_SIZE &&
+          span->class_index < MIMIR_SMALL_CLASS_COUNT &&
+          span->class_size == mimir_class_sizes[span->class_index])) {
+        return 0;
+    }
+    /* J-006 (docs/PHASE_10_METADATA_INTEGRITY.md): the exact
+     * relations publication writes in span_acquire_locked --
+     * the mapping holds the header plus at least one object,
+     * usable_size is exactly the mapping past the header,
+     * and the carve/live counts are ordered and within the
+     * capacity the header's own fields imply
+     * (live <= carve <= capacity). Valid spans always
+     * satisfy these, so no defined behaviour changes; a
+     * span whose length or count fields were corrupted
+     * inconsistently after publication now fails here and
+     * is refused or bypassed, instead of serving, freeing
+     * or releasing on false counts. Consistent corruption
+     * still passes (INC-J006-05, INC-J006-06). */
+    if (span->mapping_length <
+            MIMIR_SPAN_HEADER_SIZE + span->class_size ||
+        span->usable_size !=
+            span->mapping_length - MIMIR_SPAN_HEADER_SIZE ||
+        span->live_count > span->carve_count ||
+        span->carve_count > span_capacity(span)) {
+        return 0;
+    }
+    return 1;
+}
+
+/* J-006: shape validation for one free-list node of a span,
+ * using only the (already validated) header's own fields:
+ * a free node is a carved object start inside this span's
+ * object area. The node's own bytes are never read here,
+ * so a corrupt link value can be rejected without
+ * dereferencing it.
+ *
+ * Banking fix (2026-11-07): the shape is layout-relative.
+ * Production carves object k at first + k * class_size;
+ * a MIMIR_DEBUG build (J-004, banked on a sibling line)
+ * carves it at first + MIMIR_DBG_GUARD_SIZE +
+ * k * mimir_dbg_stride(class_size), so the production
+ * arithmetic rejected every legitimate debug free node
+ * (DEBUG test-j005 reuse leg, 81 checks / 1 failure).
+ * The debug branch below validates against the debug
+ * placement exactly as the J-004 code defines it, with
+ * the same strength: a node must sit exactly on a debug
+ * slot start, below carve_count, inside the mapping --
+ * guard bytes, slot interiors, uncarved slots and wild
+ * values are refused in both layouts. The production
+ * path is unchanged. In this slice tree alone there is
+ * no MIMIR_DEBUG flavour (J-004 owns it, INC-J006-08);
+ * the debug branch compiles where that flavour exists,
+ * i.e. in the banked merged tree. */
+static int span_free_node_valid(const struct mimir_span_header *span,
+                                const void *node)
+{
+    uintptr_t base;
+    uintptr_t addr;
+    uintptr_t first;
+
+    if (node == NULL) {
+        return 0;
+    }
+    base = (uintptr_t)span->mapping_base;
+    addr = (uintptr_t)node;
+#ifdef MIMIR_DEBUG
+    first = base + MIMIR_SPAN_HEADER_SIZE + MIMIR_DBG_GUARD_SIZE;
+    if (addr < first || addr >= base + span->mapping_length) {
+        return 0;
+    }
+    if ((addr - first) % mimir_dbg_stride(span->class_size) != 0) {
+        return 0;
+    }
+    return (addr - first) / mimir_dbg_stride(span->class_size) <
+           span->carve_count;
+#else
+    first = base + MIMIR_SPAN_HEADER_SIZE;
+    if (addr < first || addr >= base + span->mapping_length) {
+        return 0;
+    }
+    if ((addr - first) % span->class_size != 0) {
+        return 0;
+    }
+    return (addr - first) / span->class_size < span->carve_count;
+#endif
 }
 
 /* J-002 peak sampler: Q-MAPPED only ever grows at the two
@@ -1065,7 +1180,13 @@ static size_t empty_spans_of_class_locked(size_t class_index)
 
 static int span_can_serve(const struct mimir_span_header *span)
 {
-    return span->free_head != NULL ||
+    /* J-006: a corrupt free_head (wild, misaligned, or
+     * pointing outside the carved area) does not make the
+     * span servable and is never followed; the span may
+     * still serve by carving, which hands out only memory
+     * the header's own validated fields describe. */
+    return (span->free_head != NULL &&
+            span_free_node_valid(span, span->free_head)) ||
            span->carve_count < span_capacity(span);
 }
 
@@ -1333,6 +1454,7 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
 {
     struct mimir_span_header *span = mimir_span_head;
     uintptr_t target = (uintptr_t)ptr;
+    size_t j006_steps = 0;
 
 #ifdef MIMIR_DEBUG
     /* J-005: a quarantined block is already freed. It is
@@ -1346,6 +1468,14 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
 #endif
 
     while (span != NULL) {
+        /* J-006: registry-walk bound, as in
+         * find_candidate_locked: a valid registry holds
+         * exactly mimir_live_spans nodes; a cycling
+         * list_next ends in refusal, not a loop. A wild
+         * list_next still faults (INC-J006-01). */
+        if (++j006_steps > mimir_live_spans) {
+            return NULL;
+        }
         uintptr_t base = (uintptr_t)span->mapping_base;
         uintptr_t first = base + MIMIR_SPAN_HEADER_SIZE;
 
@@ -1376,11 +1506,45 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
                 return NULL; /* uncarved tail area */
             }
             node = span->free_head;
-            while (node != NULL) {
-                if (node == ptr) {
-                    return NULL; /* already freed */
+            {
+                /* J-006: the free-list walk range-checks
+                 * each node against the span's own mapped
+                 * object area BEFORE dereferencing it (the
+                 * bounds are hoisted into locals: full
+                 * shape validation per node measurably
+                 * taxed this hot walk, bench in the slice
+                 * doc S6), and the walk is bounded by
+                 * carve_count (a valid list holds
+                 * carve - live nodes). A corrupt link that
+                 * leaves the span, or cycles, now ends in
+                 * refusal of this free instead of a fault
+                 * or an unbounded loop; an in-area corrupt
+                 * link is followed at most carve_count
+                 * steps within mapped memory and then
+                 * refused or exhausted. */
+                size_t j006_nodes = 0;
+                const uintptr_t j006_lo =
+                    (uintptr_t)span->mapping_base +
+                    MIMIR_SPAN_HEADER_SIZE;
+                const uintptr_t j006_hi =
+                    (uintptr_t)span->mapping_base +
+                    span->mapping_length;
+
+                while (node != NULL) {
+                    if (node == ptr) {
+                        return NULL; /* already freed */
+                    }
+                    /* The bound is j006_hi - 8: the whole
+                     * 8-byte link read must lie inside the
+                     * span page, never straddle its end. */
+                    if ((uintptr_t)node < j006_lo ||
+                        (uintptr_t)node >
+                            j006_hi - sizeof(void *) ||
+                        ++j006_nodes > span->carve_count) {
+                        return NULL; /* corrupt free list */
+                    }
+                    node = *(void **)node;
                 }
-                node = *(void **)node;
             }
             return span;
         }
@@ -1430,7 +1594,8 @@ static void *small_alloc_locked(size_t size, int zero_user,
         mimir_class_active[class_index] = span;
     }
 
-    if (span->free_head != NULL) {
+    if (span->free_head != NULL &&
+        span_free_node_valid(span, span->free_head)) {
         obj = span->free_head;
         span->free_head = *(void **)obj;
 #ifdef MIMIR_DEBUG
@@ -1446,6 +1611,16 @@ static void *small_alloc_locked(size_t size, int zero_user,
                        span->carve_count *
                            mimir_dbg_stride(class_size));
 #else
+        /* J-006: a free_head that fails shape validation is
+         * never handed out and never followed; the span
+         * serves by carving (span_can_serve has already
+         * established carve room on this path). The corrupt
+         * head stays in place for the metadata checker to
+         * flag (mimir_core_metadata_check); the free nodes
+         * behind it are stranded, not trusted. A VALID-
+         * looking head that names a live object still
+         * passes -- shape cannot tell live from free
+         * (INC-J006-04). */
         obj = (void *)((unsigned char *)span->mapping_base +
                        MIMIR_SPAN_HEADER_SIZE +
                        span->carve_count * class_size);
@@ -1993,6 +2168,161 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
     }
     (void)mimir_platform_global_unlock();
     return 0;
+}
+
+/*
+ * J-006 metadata integrity check
+ * (docs/PHASE_10_METADATA_INTEGRITY.md; J-001 S5.2 "extra
+ * metadata consistency walks", the debug half of P10-9).
+ * Under the one global lock, walk both registries with
+ * bounded steps and verify, from the structures' own
+ * fields: every descriptor and span header passes its
+ * strengthened is_live validation; list_prev agrees with
+ * the walk order; walked counts and byte sums equal the
+ * static counters (live mappings / spans / bytes / small
+ * objects); every span's free list consists only of
+ * valid carved object starts and holds exactly
+ * carve_count - live_count nodes; each class's active
+ * hint is NULL or names a walked span of that class; and
+ * descriptor flags / reserved bytes are still the zero
+ * publication wrote (B-007 C1.4 -- the operational paths
+ * never read them, so only this walk detects their
+ * corruption). Returns the number of violations found
+ * (0 = consistent), or -1 if the lock cannot be taken.
+ * Nothing in the production entry points calls this
+ * walk: it exists for test and debug use through the
+ * INC-E001-07 shape (b) surface (declared here for the
+ * core, re-declared for tests only in
+ * tests/core/mimir_integrity_j006.h; bound local in the
+ * shared library, nm -D stays exactly 4). The walk
+ * follows registry links, so a list_next corrupted to
+ * unmapped memory faults the CHECKER exactly as it
+ * faults the operational walks (INC-J006-01); run it in
+ * a disposable process when corruption is suspected.
+ * No MIMIR_DEBUG build flavour exists at this base
+ * (J-004 owns it, on a sibling branch): gating automatic
+ * invocation under that flavour is INC-J006-08.
+ */
+int mimir_core_metadata_check(void)
+{
+    int violations = 0;
+    struct mimir_descriptor *desc;
+    struct mimir_descriptor *dprev = NULL;
+    struct mimir_span_header *span;
+    struct mimir_span_header *sprev = NULL;
+    size_t count = 0;
+    size_t bytes = 0;
+    size_t live_sum = 0;
+    size_t i;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return -1;
+    }
+    desc = mimir_registry_head;
+    count = 0;
+    bytes = 0;
+    while (desc != NULL) {
+        count++;
+        if (count > mimir_live_mappings) {
+            violations++; /* cycling registry */
+            break;
+        }
+        if (descriptor_is_live(desc)) {
+            bytes += desc->mapping_length;
+        } else {
+            violations++;
+        }
+        if (desc->list_prev != dprev) {
+            violations++;
+        }
+        if (desc->flags != 0) {
+            violations++;
+        }
+        for (i = 0; i < sizeof desc->reserved; i++) {
+            if (desc->reserved[i] != 0) {
+                violations++;
+                break;
+            }
+        }
+        dprev = desc;
+        desc = desc->list_next;
+    }
+    if (count != mimir_live_mappings) {
+        violations++;
+    }
+    if (bytes != mimir_live_bytes) {
+        violations++;
+    }
+    span = mimir_span_head;
+    count = 0;
+    bytes = 0;
+    while (span != NULL) {
+        count++;
+        if (count > mimir_live_spans) {
+            violations++; /* cycling registry */
+            break;
+        }
+        if (span_header_is_live(span)) {
+            void *node = span->free_head;
+            size_t nodes = 0;
+            int list_ok = 1;
+
+            bytes += span->mapping_length;
+            live_sum += span->live_count;
+            while (node != NULL) {
+                if (!span_free_node_valid(span, node) ||
+                    ++nodes > span->carve_count) {
+                    violations++;
+                    list_ok = 0;
+                    break;
+                }
+                node = *(void **)node;
+            }
+            if (list_ok &&
+                nodes + span->live_count != span->carve_count) {
+                violations++;
+            }
+        } else {
+            violations++;
+        }
+        if (span->list_prev != sprev) {
+            violations++;
+        }
+        sprev = span;
+        span = span->list_next;
+    }
+    if (count != mimir_live_spans) {
+        violations++;
+    }
+    if (bytes != mimir_live_span_bytes) {
+        violations++;
+    }
+    if (live_sum != mimir_live_small_objects) {
+        violations++;
+    }
+    for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
+        struct mimir_span_header *want = mimir_class_active[i];
+        struct mimir_span_header *walk = mimir_span_head;
+        size_t steps = 0;
+        int found = 0;
+
+        if (want == NULL) {
+            continue;
+        }
+        while (walk != NULL && ++steps <= mimir_live_spans) {
+            if (walk == want) {
+                found =
+                    (size_t)walk->class_index == i;
+                break;
+            }
+            walk = walk->list_next;
+        }
+        if (!found) {
+            violations++;
+        }
+    }
+    (void)mimir_platform_global_unlock();
+    return violations;
 }
 
 /*

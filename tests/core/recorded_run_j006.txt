@@ -1,0 +1,165 @@
+MimirAlloc J-006 recorded run - Phase 10 metadata integrity + corrupted-metadata posture
+Sat Nov  7 08:02:18 AM EST 2026
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+PAGESIZE=16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+1aab762 J-002 (Phase 10): statistics counters implementation - ONE locked snapshot (mimir_core_stats_snapshot, INC-E001-07 shape (b), test-only header tests/core/mimir_stats_j002.h, nm -D exactly 4); counters in I-002 vocabulary: bytes_requested/bytes_allocated cumulative at the two publication points, bytes_cached=Q-RETAINED and bytes_mapped=Q-MAPPED from the snapshot registry walk, bytes_released=Q-RELEASED at retire/span-release successes, peak_mapped=Q-PEAKMAPPED sampled at publications only, alloc_failures=Q-FAILED-OS with posture NULLs (U-09/U-12) counted separately in alloc_posture_nulls, per-class span occupancy; cross_thread_frees PARTIAL (mapping path only, owner thrd_t in reserve page past the 96-byte descriptor - first placement in descriptor reserved broke B-007 C1.4/test_b007 and was fixed in-slice, INC-J002-01); lock_contention ABSENT with reason (INC-J002-02); test_j002 550 checks / 0 failures incl. I-004-shim failure leg and 100-snapshot invariant sweep under churn; make test 4590/0; i003 72/0, i004 248/0, i005 PASS, i006 120/0, i007 63/0, i008 PASS; README and public header byte-identical; INC-J002-01..06 incl. J-001 reconciliation choices
+yrsa/mimiralloc-06
+ M Makefile
+ M src/core/mimir_core.c
+ M src/core/mimir_core.h
+?? docs/PHASE_10_METADATA_INTEGRITY.md
+?? hidden_files/
+?? tests/core/mimir_integrity_j006.h
+?? tests/core/recorded_run_j006.txt
+?? tests/core/test_j006.c
+Samtal_before: 200
+--- header and README integrity vs base 1aab762 ---
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  -
+--- make test-j006 ---
+./build/test_j006
+test_j006: Phase 10 metadata integrity (J-006), page=16384, 25 probes, each in a disposable child (10 s deadline)
+    valid metadata: check=0 before/after, all freed
+test_j006: Phase 10 metadata integrity (J-006), page=16384, 25 probes, each in a disposable child (10 s deadline)
+  [ok] probe 00 baseline-valid         exit=0 signal=0 timeout=0 (expected exit=0 signal=0)
+    desc magic corrupt: free refused (leak, no crash), checker flagged, restore+free ok
+  [ok] probe 01 desc-magic             exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    desc state corrupt: free refused, checker flagged, restore+free ok
+  [ok] probe 02 desc-state             exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    desc mapping_base corrupt: candidate miss, free refused, checker flagged
+  [ok] probe 03 desc-base              exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    desc mapping_length halved alone (J-006 relation): free refused -- previously a wrong-length munmap
+  [ok] probe 04 desc-len-incons        exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    desc length+usable consistently grown: free 'succeeded' and Q-RELEASED credited 4 pages for a 3-page mapping -- allocator silent, checker byte-sum flagged it first
+  [ok] probe 05 desc-len-consist       exit=42 signal=0 timeout=0 (expected exit=42 signal=0)
+    desc requested_size corrupt (J-006 relation): realloc refused NULL, original live; restore+shrink+free ok
+  [ok] probe 06 desc-requested         exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    desc usable_offset=0: candidate miss, free refused, checker flagged
+  [ok] probe 07 desc-uoff              exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    desc list_next cycle: free refused in bounded walk (parent deadline is the hang oracle), checker flagged
+  [ok] probe 08 desc-next-cycle        exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    desc list_next wild: about to free(a); walk dereferences the wild link
+  [ok] probe 09 desc-next-wild         exit=-1 signal=11 timeout=0 (expected exit=-1 signal=11)
+    desc flags/reserved corrupt: no operational effect (free succeeds), checker flagged the C1.4 violation
+  [ok] probe 10 desc-flags-reserved    exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    owner-thread scratch corrupt: free succeeds, cross_thread_frees falsely +1 -- statistics lie, memory unaffected
+  [ok] probe 11 desc-owner-scratch     exit=42 signal=0 timeout=0 (expected exit=42 signal=0)
+    span magic corrupt: free refused, span bypassed for new alloc (leak, no overlap), checker flagged
+  [ok] probe 12 span-magic             exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    span class_size corrupt alone: agreement check refuses free, checker flagged
+  [ok] probe 13 span-class-mismatch    exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    span class index+size consistently corrupt: a freed under the false class, b misread as interior and unfreeable; operational paths blind, checker catches it only via the class_active cross-check
+  [ok] probe 14 span-class-consist     exit=42 signal=0 timeout=0 (expected exit=42 signal=0)
+    span live_count=0 with live objects: drain released the span under live blocks (mincore ENOMEM) -- checker cross-sum flagged it, no operational path did
+  [ok] probe 15 span-live-zero         exit=42 signal=0 timeout=0 (expected exit=42 signal=0)
+    span carve_count=0 under 2 live (J-006 relation live<=carve): free refused -- previously re-carve could re-hand live offsets
+  [ok] probe 16 span-carve-reduced     exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    span carve_count inflated past capacity (J-006 relation): free refused, checker flagged
+  [ok] probe 17 span-carve-inflated    exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    span mapping_length halved alone (J-006 relation): free refused, checker flagged
+  [ok] probe 18 span-len-incons        exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    checker on consistently-doubled span length: 1 violation(s) (byte-sum)
+    span length+usable consistently doubled: allocator carved object 1017 at/past the real page end -- out-of-mapping handout, no write attempted
+  [ok] probe 19 span-len-consist       exit=42 signal=0 timeout=0 (expected exit=42 signal=0)
+    span free_head repointed at a live object: next alloc returned the SAME live object (write via one seen via other) -- silent overlap
+  [ok] probe 20 span-freehead-live     exit=42 signal=0 timeout=0 (expected exit=42 signal=0)
+    span free_head wild: alloc carved fresh instead of following it, free refused without deref, checker flagged -- previously a wild handout/crash
+  [ok] probe 21 span-freehead-wild     exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    in-object free-list link cycle: free refused in bounded walk, checker flagged
+  [ok] probe 22 span-freelist-cycle    exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    span list_next cycle: free refused in bounded walk, checker flagged
+  [ok] probe 23 span-next-cycle        exit=10 signal=0 timeout=0 (expected exit=10 signal=0)
+    span list_next wild: about to free(a); walk dereferences the wild link
+  [ok] probe 24 span-next-wild         exit=-1 signal=11 timeout=0 (expected exit=-1 signal=11)
+test_j006: checks=25 failed=0
+test_j006_exit=0
+--- make test (production, must stay 4590/0) ---
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+--- make test-j002 (regression) ---
+checks: 550, failures: 0
+RESULT: PASS
+--- nm -D --defined-only build/libmimiralloc.so ---
+0000000000000a48 T mimir_calloc
+0000000000000a14 T mimir_free
+00000000000009e4 T mimir_malloc
+0000000000000a80 T mimir_realloc
+4
+--- valid-path bench, interleaved A/B (base core from 1aab762 vs J-006 core) ---
+round 1 BASE:
+small alloc+free pair: 1400.2 ns/op
+large alloc+free pair: 8139.0 ns/op
+round 1 J006:
+small alloc+free pair: 1537.1 ns/op
+large alloc+free pair: 10817.4 ns/op
+round 2 BASE:
+small alloc+free pair: 1355.0 ns/op
+large alloc+free pair: 8088.4 ns/op
+round 2 J006:
+small alloc+free pair: 1635.6 ns/op
+large alloc+free pair: 11089.4 ns/op
+round 3 BASE:
+small alloc+free pair: 1354.1 ns/op
+large alloc+free pair: 7854.4 ns/op
+round 3 J006:
+small alloc+free pair: 1584.6 ns/op
+large alloc+free pair: 5885.5 ns/op
+--- diffstat vs base ---
+ Makefile              |  27 +++++
+ src/core/mimir_core.c | 326 ++++++++++++++++++++++++++++++++++++++++++++++++--
+ src/core/mimir_core.h |  13 ++
+ 3 files changed, 353 insertions(+), 13 deletions(-)
+Samtal_after: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+
+--- BANKING FIX VERIFICATION (appended 2026-11-07 by the fix lead; the run above is the original slice record, unaltered) ---
+Defect: span_free_node_valid validated free nodes by production
+layout only; under MIMIR_DEBUG (J-004) legitimate debug free
+nodes failed shape validation. Union tree before the fix:
+DEBUG=1 test-j005 checks=81 failures=1 ([FAIL] reuse returns
+an evicted (verified) block; logs /tmp/t5.log, /tmp/t5b.log on
+the Pi); the production battery on the same union was green.
+Fix: span_free_node_valid is layout-relative (see
+docs/PHASE_10_METADATA_INTEGRITY.md INC-J006-10); the
+production branch is unchanged.
+Team-06 tree, fix applied (production):
+make test: CHECKS: 4590 run, 0 failed (exit 0)
+make test-j006: test_j006: checks=25 failed=0 (exit 0)
+log: /tmp/t06prod.log (Pi-local)
+Fixed union tree (/home/pi/j006-fixverify: fresh copy of the
+coordinator-verified /home/pi/j006-verify merged tree with the
+one fixed function spliced in; merged src/core/mimir_core.c
+sha256 before e627301dd3ebb533a99295626b2ffb801829770afca1442ae778ef9f39bd37d5
+sha256 after  649e1a262c7acb3bd987e74d7a9951c448d167ea84eea7d75780083ccc545c19;
+diff vs the merged original is the one function only):
+make test: CHECKS: 4590 run, 0 failed (exit 0)
+make test-j002: checks: 550, failures: 0
+make test-j003: checks: 2155, failures: 0
+make test-j006: test_j006: checks=25 failed=0
+make DEBUG=1 test-j004: checks: 23, failures: 0 (RESULT: PASS)
+make DEBUG=1 test-j005: J005 SUMMARY: checks=81 failures=0
+  ([ok] reuse returns an evicted (verified) block)
+nm -D --defined-only: 4 (build/libmimiralloc.so),
+  4 (build-debug/libmimiralloc.so)
+Samtal_before: 200
+Samtal_after: 200
+log: /tmp/fixverify.log (Pi-local)

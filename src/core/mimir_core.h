@@ -214,4 +214,17 @@ size_t mimir_debug_quarantined_bytes(void);
 int mimir_debug_quarantine_verify(void);
 #endif /* MIMIR_DEBUG */
 
+/* J-006 metadata integrity check
+ * (docs/PHASE_10_METADATA_INTEGRITY.md): one locked walk
+ * over both registries verifying the per-structure
+ * invariants, the counter cross-sums, free-list shape and
+ * the C1.4 zero fields; returns the violation count
+ * (0 = consistent) or -1 on lock failure. Internal only,
+ * INC-E001-07 shape (b) exactly like the statistics
+ * surface above: declared here and re-declared for tests
+ * only in tests/core/mimir_integrity_j006.h; bound local
+ * in the shared library (nm -D stays exactly 4). No
+ * production entry point calls it. */
+int mimir_core_metadata_check(void);
+
 #endif /* MIMIR_CORE_H */

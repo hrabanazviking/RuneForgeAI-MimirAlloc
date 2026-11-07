@@ -1284,3 +1284,30 @@ $(DBUILD)/libmimiralloc.so: $(DPICOBJS) $(MAPFILE) | $(DBUILD)
 lib-debug: $(DBUILD)/libmimiralloc.so
 
 .PHONY: test-j005 lib-debug
+
+# J-006: Phase 10 metadata integrity + corrupted-metadata
+# posture evidence test - the test under tests/core/
+# (test_j006.c) inventories the allocator's metadata
+# structures (in-mapping descriptor, span header,
+# free lists, registries, counters) and probes each
+# corruption class in DISPOSABLE CHILD PROCESSES ONLY:
+# lookup-validation refusals, the test-only integrity
+# walk (tests/core/mimir_integrity_j006.h), bounded
+# registry/free-list walks, and the honestly silent
+# classes (consistent field corruption, free_head naming
+# a live object) recorded as INC-J006 items in
+# docs/PHASE_10_METADATA_INTEGRITY.md. Standalone via
+# `make test-j006`; NOT part of `make test`, whose
+# composition is unchanged. Recorded run:
+# tests/core/recorded_run_j006.txt; slice record:
+# docs/PHASE_10_METADATA_INTEGRITY.md.
+$(BUILD)/test_j006.o: tests/core/test_j006.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_drain_h001.h tests/core/mimir_integrity_j006.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_j006.c -o $@
+
+$(BUILD)/test_j006: $(LIBOBJS) $(BUILD)/test_j006.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_j006.o -o $@
+
+test-j006: $(BUILD)/test_j006
+	./$(BUILD)/test_j006
+
+.PHONY: test-j006
