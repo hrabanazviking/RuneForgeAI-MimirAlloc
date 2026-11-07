@@ -336,3 +336,29 @@ test-e005-dyn: $(BUILD)/test_e005_dyn
 	./$(BUILD)/test_e005_dyn
 
 .PHONY: test-e005 test-e005-dyn
+
+# E-006: aligned-allocation surface assessment -
+# the evidence test under tests/abi/ (test_e006.c) is
+# linked ONLY against the shared library built by
+# `make lib` (build/libmimiralloc.so), in the E-004
+# route, and measures the actual alignment of pointers
+# returned by the four public symbols across sizes and
+# through the calloc/realloc lifecycles: the contract
+# floor (_Alignof(max_align_t)) as checks, the page
+# modulus as printed observations only (INC-D008-08).
+# Standalone via `make test-e006`; NOT part of
+# `make test`, whose composition is unchanged. No
+# aligned-allocation entry point is added by this
+# slice (hard law: no silent ABI expansion). See
+# docs/PHASE_5_ALIGNED_SURFACE_E006.md and the recorded
+# run tests/abi/recorded_run_e006.txt.
+$(BUILD)/test_e006.o: tests/abi/test_e006.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e006.c -o $@
+
+$(BUILD)/test_e006: $(BUILD)/libmimiralloc.so $(BUILD)/test_e006.o
+	$(CC) $(CFLAGS) $(BUILD)/test_e006.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+test-e006: $(BUILD)/test_e006
+	./$(BUILD)/test_e006
+
+.PHONY: test-e006

@@ -1,0 +1,247 @@
+=== S0 environment ===
+2026-11-06T19:59:40-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+PAGESIZE=16384
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+ea1404895b67ebc0e51ddf2732ef1ac309914321
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/abi/recorded_run_e006.txt
+?? tests/abi/test_e006.c
+Samtal HTTP: 200
+=== S1 baseline: make clean; make test ===
+rm -rf build
+clean exit: 0
+make test exit: 0
+7
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+=== S2 shared library exports (nm -D) ===
+make lib exit: 0
+0000000000000988 T mimir_calloc
+0000000000000954 T mimir_free
+0000000000000924 T mimir_malloc
+00000000000009c0 T mimir_realloc
+defined dynamic symbol count: 4
+=== S3 alignment lifecycle: make test-e006 ===
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/test_e006.c -o build/test_e006.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/test_e006.o -Lbuild -lmimiralloc -Wl,-rpath,'$ORIGIN' -o build/test_e006
+./build/test_e006
+E-006 alignment lifecycle test (linked against libmimiralloc.so only)
+ENV pagesize=16384 alignof_max_align_t=16 sizeof_max_align_t=32 ptr_bits=64
+  [ok] page_sz > 0
+  [ok] _Alignof(max_align_t) == 16
+  [ok] sizeof(void *) * 8 == 64
+PHASE A mimir_malloc ladder (24 sizes)
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] live[i] != NULL
+  [ok] mod_ok(live[i], _Alignof(max_align_t))
+  [ok] live[i] != NULL && verified
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+  [ok] distinct
+PHASE B over-alignment demand via mimir_malloc
+  demand 32: ptr mod demand = 0
+  [ok] p != NULL
+  [ok] mod_ok(p, demands[k])
+  demand 64: ptr mod demand = 0
+  [ok] p != NULL
+  [ok] mod_ok(p, demands[k])
+  demand 128: ptr mod demand = 0
+  [ok] p != NULL
+  [ok] mod_ok(p, demands[k])
+  demand 256: ptr mod demand = 0
+  [ok] p != NULL
+  [ok] mod_ok(p, demands[k])
+  demand 1024: ptr mod demand = 0
+  [ok] p != NULL
+  [ok] mod_ok(p, demands[k])
+  demand 4096: ptr mod demand = 0
+  [ok] p != NULL
+  [ok] mod_ok(p, demands[k])
+  demand 16384: ptr mod demand = 0
+  [ok] p != NULL
+  [ok] mod_ok(p, demands[k])
+OBSERVED demand 32768 (2x page): ptr mod 32768 = 16384 (observation only; not delivered by construction)
+PHASE C mimir_calloc paths
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] p != NULL && zeroed
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] p != NULL && zeroed
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] p != NULL && zeroed
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] p != NULL && zeroed
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] p != NULL && zeroed
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] p != NULL && zeroed
+PHASE D mimir_realloc lifecycle chain
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] q != NULL
+  [ok] mod_ok(q, _Alignof(max_align_t))
+  [ok] q != NULL && preserved
+  [ok] q != NULL
+  [ok] mod_ok(q, _Alignof(max_align_t))
+  [ok] q != NULL && preserved
+  [ok] q != NULL
+  [ok] mod_ok(q, _Alignof(max_align_t))
+  [ok] q != NULL && preserved
+  [ok] q != NULL
+  [ok] mod_ok(q, _Alignof(max_align_t))
+  [ok] q != NULL && preserved
+  [ok] q != NULL
+  [ok] mod_ok(q, _Alignof(max_align_t))
+  [ok] p != NULL
+  [ok] mod_ok(p, _Alignof(max_align_t))
+  [ok] p != NULL && preserved
+PHASE E interleave lifecycle
+  [ok] c != NULL
+  [ok] mod_ok(c, _Alignof(max_align_t))
+  [ok] c != b
+  [ok] b != NULL && intact
+  [ok] 1
+PHASE F defined failures + recovery
+  [ok] bad == NULL
+  [ok] ovf == NULL
+  [ok] ok != NULL
+  [ok] mod_ok(ok, _Alignof(max_align_t))
+OBSERVED page-modulus: 49 of 49 non-null mimir_ returns were 0 mod pagesize=16384 (construction observation, NOT a claim; INC-D008-08)
+CHECKS: 159 run, 0 failed
+RESULT: PASS
+test-e006 exit: 0
+=== S4 absence of aligned entry points ===
+-- nm .so, any align-named defined symbol:
+grep exit: 1 (1 = none, as designed)
+-- grep aligned names in src/ and include/ (declarations/definitions):
+-- consumer undefined mimir_ references (nm build/test_e006):
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+=== S5 clean re-run (reproducibility) ===
+rm -rf build
+clean exit: 0
+make test exit: 0
+7
+test-e006 exit: 0
+OBSERVED page-modulus: 49 of 49 non-null mimir_ returns were 0 mod pagesize=16384 (construction observation, NOT a claim; INC-D008-08)
+CHECKS: 159 run, 0 failed
+RESULT: PASS
+4
+=== S6 README and diff scope ===
+ Makefile | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+README diff lines vs base: 0
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/abi/recorded_run_e006.txt
+?? tests/abi/test_e006.c
+=== S7 host after runs ===
+Samtal HTTP: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
