@@ -245,3 +245,30 @@ test-e002: $(BUILD)/test_e002
 	./$(BUILD)/test_e002
 
 .PHONY: lib test-e002
+
+# E-003: static library + static/dynamic link-route proof -
+# the archive target under build/libmimiralloc.a packages
+# the three banked library objects (LIBOBJS) with ar. The
+# consumer under tests/abi/ (test_e003.c) exercises the
+# full allocation lifecycle through the four public
+# symbols only. R1 (static) is proven by the standalone
+# `make test-e003` target and the recorded run
+# tests/abi/recorded_run_e003.txt; R2 (dynamic) is OWED
+# to E-002's shared library - no .so target exists at
+# this base. Standalone on purpose: `make test`
+# composition is unchanged. See
+# docs/PHASE_5_LINK_ROUTES_E003.md.
+STATICLIB = $(BUILD)/libmimiralloc.a
+
+$(BUILD)/libmimiralloc.a: $(LIBOBJS)
+	ar rcs $@ $(LIBOBJS)
+
+static-lib: $(BUILD)/libmimiralloc.a
+
+$(BUILD)/test_e003_static: tests/abi/test_e003.c $(BUILD)/libmimiralloc.a | $(BUILD)
+	$(CC) $(CFLAGS) tests/abi/test_e003.c $(BUILD)/libmimiralloc.a -o $@ -Wl,-Map,$(BUILD)/test_e003_static.map
+
+test-e003: $(BUILD)/test_e003_static
+	./$(BUILD)/test_e003_static
+
+.PHONY: static-lib test-e003
