@@ -483,7 +483,7 @@ static void *alloc_locked(size_t size, int zero_user,
  * publishes/frees nothing outside them. L3 remains the
  * banked pass-through (G-002 C-5): class selection lives
  * here in L4, spans are owned by L5-in-this-file, and no
- * thread-local cache exists in this slice (INC-G003-02).
+ * thread-local cache exists in this slice (INC-G003-04).
  *
  * Span header (G-002 S7, INC-G002-04 assignment made by
  * this slice): exactly 96 bytes at offset 0 of the span's
@@ -521,7 +521,7 @@ static void *alloc_locked(size_t size, int zero_user,
  * most MIMIR_MAX_EMPTY_SPANS_PER_CLASS (2) empty spans per
  * class are retained -- the empty span that would exceed
  * the bound is released whole via L6 with its exact
- * acquired pair in the same locked section (INC-G003-03).
+ * acquired pair in the same locked section (INC-G003-05).
  * Live spans are bounded by live demand, never by cache:
  * retained-after-free memory is therefore at most
  * 20 classes x 2 spans x one system page.
@@ -1185,7 +1185,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
     /* Span-registry block (G-003, G-002 R-3): the old
      * block's recorded size is its class size -- no
      * per-object requested-size record exists under the
-     * G-002 span layout (INC-G003-01). Staying cases need
+     * G-002 span layout (INC-G003-03). Staying cases need
      * no record: any new_size the old class can serve
      * returns the same pointer with every byte physically
      * preserved, which covers same-size, shrink (the B-008
@@ -1200,7 +1200,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
      * and is in-bounds on both sides; the bytes it copies
      * beyond the requested extent land in the new block's
      * unspecified range, where B-008 promises nothing
-     * (INC-G003-01). Retiring a span object cannot fail
+     * (INC-G003-03). Retiring a span object cannot fail
      * observably (small_free_locked), so no rollback
      * branch exists on this path. */
     {

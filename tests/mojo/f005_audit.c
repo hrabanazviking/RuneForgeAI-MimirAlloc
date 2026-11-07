@@ -63,3 +63,26 @@ unsigned long f005_audit_retired(void)
     return __atomic_load_n(&mimir_audit_mapping_retired,
                            __ATOMIC_RELAXED);
 }
+
+/* G-004 re-teach (INC-G004-05): the G-003 span/object
+ * counters (tests/core/mimir_small_g003.h semantics),
+ * exposed the same way so the audit leg's Mojo script
+ * can assert the two-registry expectations: this
+ * script's sizes are all <= 1024, so its publications
+ * and retirements land HERE, not in the mapping
+ * counters above - exactly the re-teach the C static
+ * leg (tests/abi/test_e005.c) received in G-003. */
+extern unsigned long mimir_audit_small_alloc;
+extern unsigned long mimir_audit_small_free;
+
+unsigned long f005_audit_small_alloc(void)
+{
+    return __atomic_load_n(&mimir_audit_small_alloc,
+                           __ATOMIC_RELAXED);
+}
+
+unsigned long f005_audit_small_free(void)
+{
+    return __atomic_load_n(&mimir_audit_small_free,
+                           __ATOMIC_RELAXED);
+}

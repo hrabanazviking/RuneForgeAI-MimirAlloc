@@ -639,3 +639,27 @@ test-g003: $(BUILD)/test_g003
 	./$(BUILD)/test_g003
 
 .PHONY: test-g003
+
+# G-004: Phase 7 central fallback integration evidence
+# test - the test under tests/core/ (test_g004.c) audits
+# the integration of the G-003 size-class span path with
+# the Phase 3 mapping-per-allocation central fallback:
+# R-1 boundary routing via both counter sets, span
+# exhaustion, retirement beyond the retention bound, the
+# two-registry free path (R-4) interleaved and under
+# posture probes, the realloc matrix (R-3), calloc (R-2)
+# and defined failures. Standalone via `make test-g004`;
+# NOT part of `make test`, whose composition is
+# unchanged. Recorded run: tests/core/
+# recorded_run_g004.txt; slice record:
+# docs/PHASE_7_CENTRAL_FALLBACK_G004.md.
+$(BUILD)/test_g004.o: tests/core/test_g004.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_g004.c -o $@
+
+$(BUILD)/test_g004: $(LIBOBJS) $(BUILD)/test_g004.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_g004.o -o $@
+
+test-g004: $(BUILD)/test_g004
+	./$(BUILD)/test_g004
+
+.PHONY: test-g004

@@ -20,30 +20,43 @@
 #
 # The phase script and its expected counts are E-005's
 # static script, unchanged in substance; the expectations
-# are derived from the calls themselves, not read back:
+# are derived from the calls themselves, not read back.
+# G-004 re-teach (INC-G004-05, mirroring the G-003
+# re-teach of the C static leg): every size in the
+# script is <= 1024, so from Phase 7 the script's
+# allocations are span-served and publish/retire in the
+# G-003 span/object counters, NOT in the mapping
+# counters. expect() therefore asserts both registries:
+# mapping published/retired stay 0 throughout, and the
+# small counters (small_alloc/small_free, the last two
+# expect() arguments) carry exactly the totals the
+# mapping counters carried at E-005:
 #   Phase 1: 5 mimir_malloc, all succeed
-#            -> call_malloc 5, published 5
+#            -> call_malloc 5, small_alloc 5
 #   Phase 2: libc bypass (3 malloc-family allocations,
 #            1 realloc, 3 frees) -> no counter moves
 #   Phase 3: 3 mimir_calloc, all succeed, extents zeroed
-#            -> call_calloc 3, published 8
-#   Phase 4: realloc grow x2 (each publishes a new mapping
-#            and retires the old), shrink x1, same-size x1
-#            -> call_realloc 4, published 10, retired 2
+#            -> call_calloc 3, small_alloc 8
+#   Phase 4: realloc grow x2 (each hands out a new span
+#            object and retires the old), shrink x1,
+#            same-size x1
+#            -> call_realloc 4, small_alloc 10, small_free 2
 #   Phase 5: oversize mimir_malloc fails NULL, overflow
 #            mimir_calloc fails NULL
-#            -> call_malloc 6, call_calloc 4, published 10
+#            -> call_malloc 6, call_calloc 4, small_alloc 10
 #   Phase 6: mimir_free(NULL) (call only), free 4 live
-#            -> call_free 5, retired 6
+#            -> call_free 5, small_free 6
 #   Phase 7: free the remaining 4 live blocks
-#            -> call_free 9, retired 10 = published (live 0)
+#            -> call_free 9, small_free 10 = small_alloc
 #
 # The Phase 6/7 counter movements are the strongest free
 # evidence this campaign has: mimir_free returns void
 # (INC-F003-04), but each free of a live block provably
-# retires exactly one mapping in the implementation, and
-# the books balance exactly (published == retired, live 0)
-# only if every free this program issued was serviced.
+# retires exactly one object in the implementation, and
+# the books balance exactly (published == retired in
+# the mapping registry at 0 == 0, small_alloc ==
+# small_free, live 0) only if every free this program
+# issued was serviced.
 #
 # One Mojo-specific construction: a literal null Pointer
 # cannot be written in Mojo source - the toolchain rejects
@@ -161,6 +174,14 @@ def a_retired() -> UInt64:
     return external_call["f005_audit_retired", UInt64]()
 
 
+def a_small_alloc() -> UInt64:
+    return external_call["f005_audit_small_alloc", UInt64]()
+
+
+def a_small_free() -> UInt64:
+    return external_call["f005_audit_small_free", UInt64]()
+
+
 def verdict(ok: Bool, label: String) -> Int:
     if ok:
         print("  [ok]", label)
@@ -177,6 +198,8 @@ def expect(
     cf: UInt64,
     pub: UInt64,
     ret: UInt64,
+    sa: UInt64,
+    sf: UInt64,
 ) -> Int:
     var ok = (
         a_malloc() == cm
@@ -185,6 +208,8 @@ def expect(
         and a_free() == cf
         and a_published() == pub
         and a_retired() == ret
+        and a_small_alloc() == sa
+        and a_small_free() == sf
     )
     print(
         "AUDIT",
@@ -203,6 +228,10 @@ def expect(
         a_retired(),
         " live=",
         a_published() - a_retired(),
+        " small_alloc=",
+        a_small_alloc(),
+        " small_free=",
+        a_small_free(),
     )
     if ok:
         return 0
@@ -217,7 +246,7 @@ def main() raises:
 
     # Start state: every counter zero before any call.
     run += 1
-    failed += expect("start", 0, 0, 0, 0, 0, 0)
+    failed += expect("start", 0, 0, 0, 0, 0, 0, 0, 0)
 
     # Phase 1: five mimir_malloc through the public path.
     var m0 = mimir_malloc(32)
@@ -237,7 +266,7 @@ def main() raises:
     m3[unsafe_offset=0] = UInt8(0x43)
     m4[unsafe_offset=0] = UInt8(0x44)
     run += 1
-    failed += expect("phase1-mimir-malloc-x5", 5, 0, 0, 0, 5, 0)
+    failed += expect("phase1-mimir-malloc-x5", 5, 0, 0, 0, 0, 0, 5, 0)
 
     # Phase 2 (NEGATIVE): libc calls in the same process
     # bypass MimirAlloc entirely; no counter may move.
@@ -259,7 +288,7 @@ def main() raises:
     libc_free(y)
     libc_free(z)
     run += 1
-    failed += expect("phase2-libc-bypass", 5, 0, 0, 0, 5, 0)
+    failed += expect("phase2-libc-bypass", 5, 0, 0, 0, 0, 0, 5, 0)
 
     # Phase 3: three mimir_calloc; extents read zero.
     var c0 = mimir_calloc(4, 16)
@@ -280,10 +309,11 @@ def main() raises:
     run += 1
     failed += verdict(okz, "phase3: calloc extents zeroed")
     run += 1
-    failed += expect("phase3-mimir-calloc-x3", 5, 3, 0, 0, 8, 0)
+    failed += expect("phase3-mimir-calloc-x3", 5, 3, 0, 0, 0, 0, 8, 0)
 
-    # Phase 4: realloc - grow x2 moves (publish + retire),
-    # shrink x1 and same-size x1 move no mapping counter.
+    # Phase 4: realloc - grow x2 moves (hand out + retire
+    # a span object each), shrink x1 and same-size x1 move
+    # no counter.
     for i in range(32):
         m0[unsafe_offset=i] = UInt8(i + 1)
     var g0 = mimir_realloc(m0, 96)
@@ -303,7 +333,7 @@ def main() raises:
     if Int(g1) != 0:
         m1 = g1
     run += 1
-    failed += expect("phase4a-realloc-grow-x2", 5, 3, 2, 0, 10, 2)
+    failed += expect("phase4a-realloc-grow-x2", 5, 3, 2, 0, 0, 0, 10, 2)
     var s4 = mimir_realloc(m4, 128)
     run += 1
     failed += verdict(Int(s4) == Int(m4), "phase4: shrink m4 512 -> 128 retains pointer")
@@ -311,11 +341,11 @@ def main() raises:
     run += 1
     failed += verdict(Int(s3) == Int(m3), "phase4: same-size m3 256 -> 256 retains pointer")
     run += 1
-    failed += expect("phase4b-realloc-shrink-same", 5, 3, 4, 0, 10, 2)
+    failed += expect("phase4b-realloc-shrink-same", 5, 3, 4, 0, 0, 0, 10, 2)
 
     # Phase 5: defined failures. The call counters move
-    # (the call reached MimirAlloc); the mapping counters
-    # do not (nothing was published).
+    # (the call reached MimirAlloc); the publication
+    # counters do not (nothing was published).
     var big = mimir_malloc(UInt64(18446744073709551615))
     run += 1
     failed += verdict(Int(big) == 0, "phase5: oversize mimir_malloc returns null")
@@ -323,10 +353,10 @@ def main() raises:
     run += 1
     failed += verdict(Int(ovf) == 0, "phase5: overflow mimir_calloc returns null")
     run += 1
-    failed += expect("phase5-defined-failures", 6, 4, 4, 0, 10, 2)
+    failed += expect("phase5-defined-failures", 6, 4, 4, 0, 0, 0, 10, 2)
 
     # Phase 6: free(NULL) counts as a call and retires
-    # nothing; four live frees retire four mappings. The
+    # nothing; four live frees retire four span objects. The
     # null address is derived at runtime (see file header):
     # a literal 0 is rejected at compile time by this
     # toolchain. The derived value is printed and checked.
@@ -336,25 +366,25 @@ def main() raises:
     failed += verdict(Int(np) == 0, "phase6: runtime-derived null address is 0")
     mimir_free(np)
     run += 1
-    failed += expect("phase6a-free-null", 6, 4, 4, 1, 10, 2)
+    failed += expect("phase6a-free-null", 6, 4, 4, 1, 0, 0, 10, 2)
     mimir_free(m2)
     mimir_free(m3)
     mimir_free(c0)
     mimir_free(c1)
     run += 1
-    failed += expect("phase6b-free-x4", 6, 4, 4, 5, 10, 6)
+    failed += expect("phase6b-free-x4", 6, 4, 4, 5, 0, 0, 10, 6)
 
     # Phase 7: free the remaining four live blocks; the
-    # books balance exactly: published == retired.
+    # books balance exactly in both registries.
     mimir_free(m0)
     mimir_free(m1)
     mimir_free(m4)
     mimir_free(c2)
     run += 1
-    failed += expect("phase7-free-rest", 6, 4, 4, 9, 10, 10)
+    failed += expect("phase7-free-rest", 6, 4, 4, 9, 0, 0, 10, 10)
     run += 1
     failed += verdict(
-        a_published() == a_retired(), "phase7: published == retired (live 0)"
+        a_published() == a_retired() and a_small_alloc() == a_small_free(), "phase7: published == retired and small_alloc == small_free (live 0)"
     )
 
     print("CHECKS:", run, "run,", failed, "failed")

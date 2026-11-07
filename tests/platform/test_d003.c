@@ -45,6 +45,8 @@
 
 /* Descriptor field offsets (B-006 S7.3), as used by the
  * banked tests/core/test_b007.c and test_c006.c readers. */
+#define DESC_OFF_MAGIC          0u
+#define DESC_OFF_MAPPING_BASE   8u
 #define DESC_OFF_MAPPING_LENGTH 16u
 #define DESC_OFF_USABLE_OFFSET  24u
 #define DESC_OFF_REQUESTED_SIZE 32u
@@ -90,6 +92,61 @@ static size_t rd_size(const unsigned char *d, size_t off)
 
     memcpy(&v, d + off, sizeof v);
     return v;
+}
+
+static uint64_t rd_u64(const unsigned char *d, size_t off)
+{
+    uint64_t v;
+
+    memcpy(&v, d + off, sizeof v);
+    return v;
+}
+
+static const void *rd_ptr(const unsigned char *d, size_t off)
+{
+    const void *v;
+
+    memcpy(&v, d + off, sizeof v);
+    return v;
+}
+
+/* G-004 shape awareness (INC-G004-02, in the spirit of
+ * G-003's INC-G003-01 amendments): from Phase 7,
+ * requests of 1..1024 bytes are served from size-class
+ * spans, whose header sits at the start of the span's
+ * one system page - NOT one page before the user
+ * pointer, and the pointer is 16-aligned, not
+ * page-aligned (G-002 S9 disowns the mapping form's
+ * page alignment as an accident). Part A3 therefore
+ * branches on the serving form: sizes above the 1024
+ * cutoff keep the original descriptor checks at full
+ * strength; span-served sizes (A3's 1 and 100) get the
+ * equivalent span-header verification (magic
+ * "MIMIRSPN", base == header address, mapping_length
+ * == one runtime page, usable_offset == 96, class-size
+ * field == the class serving the request, usable_size
+ * == page - 96, pointer at the class stride inside the
+ * object area) plus the 16-alignment the class path
+ * guarantees. Before this amendment A3 segfaulted on
+ * its first small size: the descriptor read at
+ * (p - page) lands in an unmapped page for a span
+ * object at span_base + 96. */
+#define SPAN_MAGIC UINT64_C(0x4D494D495253504E) /* "MIMIRSPN" */
+
+static size_t class_for_d003(size_t n)
+{
+    static const size_t cs[20] = {
+        16, 32, 48, 64, 80, 96, 112, 128, 160, 192,
+        224, 256, 320, 384, 448, 512, 640, 768, 896, 1024
+    };
+    size_t i;
+
+    for (i = 0; i < 20; i++) {
+        if (n <= cs[i]) {
+            return cs[i];
+        }
+    }
+    return 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -337,25 +394,56 @@ static void part_a(void)
         if (p == NULL) {
             continue;
         }
-        snprintf(label, sizeof label,
-                 "A3 malloc(%zu): user pointer is runtime-page "
-                 "aligned", n);
-        check((uintptr_t)p % page == 0, label);
-        {
-            const unsigned char *d = p - page;
-            size_t want_mlen = 0;
+        if (n <= 1024) {
+            /* Span form (G-004, INC-G004-02): 16-alignment
+             * plus the span header at the page base. */
+            const unsigned char *h =
+                (const unsigned char *)((uintptr_t)p &
+                                        ~(uintptr_t)(page - 1));
+            size_t cs = class_for_d003(n);
+            size_t off = (size_t)(p - h);
 
-            (void)oracle_round_up(page + n, page, &want_mlen);
             snprintf(label, sizeof label,
-                     "A3 malloc(%zu): descriptor usable_offset == "
-                     "runtime page, mapping_length == %zu, "
-                     "usable_size == mapping_length - page",
-                     n, want_mlen);
-            check(rd_size(d, DESC_OFF_USABLE_OFFSET) == page &&
-                  rd_size(d, DESC_OFF_MAPPING_LENGTH) == want_mlen &&
-                  rd_size(d, DESC_OFF_REQUESTED_SIZE) == n &&
-                  rd_size(d, DESC_OFF_USABLE_SIZE) == want_mlen - page,
+                     "A3 malloc(%zu): span pointer is "
+                     "16-aligned (class form)", n);
+            check((uintptr_t)p % 16 == 0, label);
+            snprintf(label, sizeof label,
+                     "A3 malloc(%zu): span header magic/base, "
+                     "mapping_length == runtime page, "
+                     "usable_offset == 96, class == %zu, "
+                     "usable_size == page - 96", n, cs);
+            check(rd_u64(h, DESC_OFF_MAGIC) == SPAN_MAGIC &&
+                  rd_ptr(h, DESC_OFF_MAPPING_BASE) ==
+                      (const void *)h &&
+                  rd_size(h, DESC_OFF_MAPPING_LENGTH) == page &&
+                  rd_size(h, DESC_OFF_USABLE_OFFSET) == 96 &&
+                  rd_size(h, DESC_OFF_REQUESTED_SIZE) == cs &&
+                  rd_size(h, DESC_OFF_USABLE_SIZE) == page - 96 &&
+                  off >= 96 && (off - 96) % cs == 0,
                   label);
+        } else {
+            /* Mapping form: the original A3 checks, at
+             * full strength, unchanged. */
+            snprintf(label, sizeof label,
+                     "A3 malloc(%zu): user pointer is runtime-page "
+                     "aligned", n);
+            check((uintptr_t)p % page == 0, label);
+            {
+                const unsigned char *d = p - page;
+                size_t want_mlen = 0;
+
+                (void)oracle_round_up(page + n, page, &want_mlen);
+                snprintf(label, sizeof label,
+                         "A3 malloc(%zu): descriptor usable_offset == "
+                         "runtime page, mapping_length == %zu, "
+                         "usable_size == mapping_length - page",
+                         n, want_mlen);
+                check(rd_size(d, DESC_OFF_USABLE_OFFSET) == page &&
+                      rd_size(d, DESC_OFF_MAPPING_LENGTH) == want_mlen &&
+                      rd_size(d, DESC_OFF_REQUESTED_SIZE) == n &&
+                      rd_size(d, DESC_OFF_USABLE_SIZE) == want_mlen - page,
+                      label);
+            }
         }
         fill_pattern(p, n, 99u);
         snprintf(label, sizeof label,

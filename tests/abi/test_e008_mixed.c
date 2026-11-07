@@ -26,13 +26,26 @@
  *   is no ownership transfer for MimirAlloc to accept.
  * - A MimirAlloc block allocated and freed through
  *   mimir_* moves the counters exactly (+1 call, +1
- *   published, +1 call-free, +1 retired) - ownership
- *   exists only inside the family that created it.
+ *   published-or-retired in the registry that serves
+ *   its size, +1 call-free) - ownership exists only
+ *   inside the family that created it. G-004 re-teach
+ *   (INC-G004-03): the original script's mimir block
+ *   was malloc(64), mapping-served only by the
+ *   pre-Phase-7 accident; from Phase 7 it is span-served
+ *   and moves the G-003 small counters (mirroring the
+ *   G-003 re-teach of the E-005 static leg). This leg
+ *   therefore exercises BOTH registries: the 64-byte
+ *   block in the span counters, and a 4096-byte block
+ *   in the mapping counters, each at full strength.
  * - Mapping separation (construction observation, NOT a
- *   contract claim): the MimirAlloc block is page-aligned
- *   because every MimirAlloc allocation is its own OS
- *   mapping (B-006 mapping-per-allocation baseline); no
- *   property of the libc block is asserted.
+ *   contract claim): the mapping-served MimirAlloc block
+ *   is page-aligned because it is its own OS mapping
+ *   (B-006 mapping-per-allocation baseline); the
+ *   span-served block is 16-aligned at its class stride
+ *   inside its span's page (G-002 S9: page alignment of
+ *   small pointers was a construction accident, already
+ *   disowned by the banked record); no property of the
+ *   libc block is asserted.
  *
  * This binary links the library OBJECTS (like
  * test_e005.c) precisely so it can read the internal
@@ -49,6 +62,7 @@
  */
 #include "mimir_alloc.h"
 #include "mimir_audit_e005.h"
+#include "../core/mimir_small_g003.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -87,11 +101,18 @@ static int counters_are(unsigned long cm, unsigned long cc,
            load(&mimir_audit_mapping_retired) == ret;
 }
 
+static int small_are(unsigned long sa, unsigned long sf)
+{
+    return load(&mimir_audit_small_alloc) == sa &&
+           load(&mimir_audit_small_free) == sf;
+}
+
 static void audit_line(const char *phase)
 {
     printf("AUDIT %s call_malloc=%lu call_calloc=%lu "
            "call_realloc=%lu call_free=%lu published=%lu "
-           "retired=%lu live=%lu\n",
+           "retired=%lu live=%lu small_alloc=%lu "
+           "small_free=%lu\n",
            phase,
            load(&mimir_audit_call_malloc),
            load(&mimir_audit_call_calloc),
@@ -100,7 +121,9 @@ static void audit_line(const char *phase)
            load(&mimir_audit_alloc_published),
            load(&mimir_audit_mapping_retired),
            load(&mimir_audit_alloc_published) -
-               load(&mimir_audit_mapping_retired));
+               load(&mimir_audit_mapping_retired),
+           load(&mimir_audit_small_alloc),
+           load(&mimir_audit_small_free));
 }
 
 int main(void)
@@ -123,6 +146,7 @@ int main(void)
 
     audit_line("start");
     CHECK(counters_are(0, 0, 0, 0, 0, 0));
+    CHECK(small_are(0, 0));
 
     /* libc cycle: full ownership life inside libc only. */
     x = (unsigned char *)malloc(64);
@@ -141,24 +165,54 @@ int main(void)
     free(z);
     audit_line("after-libc-cycle");
     CHECK(counters_are(0, 0, 0, 0, 0, 0));
+    CHECK(small_are(0, 0));
 
-    /* MimirAlloc cycle: ownership exists only here. */
+    /* MimirAlloc cycle, span registry: ownership exists
+     * only here. The 64-byte block is span-served from
+     * Phase 7 (G-004 re-teach): the call counters and the
+     * small counters move exactly; the mapping counters
+     * do not move at all. */
     m = (unsigned char *)mimir_malloc(64);
     CHECK(m != NULL);
     audit_line("after-mimir-malloc");
-    CHECK(counters_are(1, 0, 0, 0, 1, 0));
+    CHECK(counters_are(1, 0, 0, 0, 0, 0));
+    CHECK(small_are(1, 0));
     page = sysconf(_SC_PAGESIZE);
     CHECK(page > 0);
     if (m != NULL && page > 0) {
-        CHECK(((uintptr_t)m % (uintptr_t)page) == 0);
-        printf("OBSERVED: mimir block page-aligned (mapping-per-"
-               "allocation construction fact, not a contract claim); "
-               "no property of any libc block is asserted.\n");
+        CHECK(((uintptr_t)m % (uintptr_t)16) == 0);
+        printf("OBSERVED: span-served mimir block 16-aligned "
+               "(size-class construction fact, not a contract "
+               "claim); no property of any libc block is "
+               "asserted.\n");
         memset(m, 0x3C, 64);
     }
     mimir_free(m);
     audit_line("after-mimir-free");
-    CHECK(counters_are(1, 0, 0, 1, 1, 1));
+    CHECK(counters_are(1, 0, 0, 1, 0, 0));
+    CHECK(small_are(1, 1));
+
+    /* MimirAlloc cycle, mapping registry: the same
+     * exactness in the original registry - a 4096-byte
+     * block is mapping-served, page-aligned, and moves
+     * published/retired exactly, with the small counters
+     * untouched. */
+    m = (unsigned char *)mimir_malloc(4096);
+    CHECK(m != NULL);
+    audit_line("after-mimir-large-malloc");
+    CHECK(counters_are(2, 0, 0, 1, 1, 0));
+    CHECK(small_are(1, 1));
+    if (m != NULL && page > 0) {
+        CHECK(((uintptr_t)m % (uintptr_t)page) == 0);
+        printf("OBSERVED: mapping-served mimir block page-aligned "
+               "(mapping-per-allocation construction fact, not "
+               "a contract claim).\n");
+        memset(m, 0x3C, 4096);
+    }
+    mimir_free(m);
+    audit_line("after-mimir-large-free");
+    CHECK(counters_are(2, 0, 0, 2, 1, 1));
+    CHECK(small_are(1, 1));
 
     printf("CHECKS: %d run, %d failed\n", checks_run, checks_failed);
     printf("RESULT: %s\n", checks_failed == 0 ? "PASS" : "FAIL");

@@ -9,25 +9,43 @@
 # holding no allocator state of its own - the effects that
 # only MimirAlloc's implementation produces:
 #
-#   (1) descriptor validation (E-005 dynamic leg, unchanged
-#       in substance): every block MimirAlloc publishes
-#       carries its 96-byte descriptor (magic "MIMIRALL",
+#   (1) serving-header validation (E-005 dynamic leg,
+#       carried to the Phase 7 two-form headers by the
+#       G-004 re-teach, INC-G004-05): every block
+#       MimirAlloc publishes carries a 96-byte serving
+#       header. Above the 1024-byte cutoff it is the
+#       original mapping descriptor (magic "MIMIRALL",
 #       mapping_base == its own address, usable_offset ==
 #       one page, requested_size == the requested size,
 #       state == LIVE) in the reserve page before the user
-#       pointer. Applied ONLY to pointers returned by this
+#       pointer, validated unchanged. At or below the
+#       cutoff it is the span header at the base of the
+#       span's one system page (magic "MIMIRSPN", class
+#       fields for the serving class; f005_probe.c carries
+#       the full field list), validated at equivalent
+#       rigour. Applied ONLY to pointers returned by this
 #       program's own mimir_* calls; never to a foreign
-#       pointer.
-#   (2) mapped-bytes accounting (same source): each
-#       successful mimir_* allocation adds exactly
-#       page_round_up(page + size) bytes to the process's
-#       total mapped extent; each mimir_free removes it;
-#       small libc allocations add nothing. The free leg of
-#       this accounting is the stronger free evidence
+#       pointer. Before the re-teach the probe applied the
+#       mapping form to every pointer and segfaulted on
+#       the first span-served pointer.
+#   (2) mapped-bytes accounting (same source), span-aware
+#       since the G-004 re-teach: a mapping-served
+#       allocation adds exactly page_round_up(page + size)
+#       bytes and its free removes them; a span-served
+#       allocation adds exactly one system page when it
+#       publishes a NEW span of its class and nothing
+#       while a live span of the class has room, and its
+#       free removes nothing while the span is retained
+#       empty under the G-003 bound (2 per class). Small
+#       libc allocations add nothing. The free leg of this
+#       accounting is the stronger free evidence
 #       INC-F003-04 asks for on this route: mimir_free
-#       returns void, but its effect - the mapped total
-#       returning EXACTLY to the pre-allocation baseline -
-#       is measured, not assumed.
+#       returns void, but its measured effect - the mapped
+#       total standing at baseline + the retained empty
+#       span pages this script's classes hold (the
+#       class-64 warm-up span is already inside the
+#       baseline; the class-128 and class-96 spans add
+#       exactly two pages) - is measured, not assumed.
 #   (3) test-side call counting (INC-E001-07 shape (a)):
 #       this program counts its own mimir_* call sites and
 #       requires the descriptor-validated count to match
@@ -248,8 +266,8 @@ def main() raises:
     print("MAPPED after_mimir_malloc_x4=", after_mimir, " delta=", after_mimir - base)
     run += 1
     failed += verdict(
-        after_mimir - base == 4 * maplen(page, 64),
-        "mapped delta == 4 * page_round_up(page + 64)",
+        after_mimir - base == 0,
+        "mapped delta == 0 (4x malloc(64) served by the warm-up class-64 span)",
     )
 
     # NEGATIVE: small libc allocations in the same process
@@ -277,7 +295,8 @@ def main() raises:
     failed += verdict(f005_mapped_bytes() == after_mimir, "mapped unchanged after libc frees")
 
     # Two mimir_calloc(16, 8) = 128 bytes through the .so:
-    # descriptor records the 128-byte product; extent zero.
+    # span-served (class 128); the span header records the
+    # class serving the 128-byte product; extent zero.
     var c0 = mimir_calloc(16, 8)
     site_calloc += 1
     var c1 = mimir_calloc(16, 8)
@@ -303,14 +322,17 @@ def main() raises:
     print("MAPPED after_mimir_calloc_x2=", after_calloc, " delta=", after_calloc - after_mimir)
     run += 1
     failed += verdict(
-        after_calloc - after_mimir == 2 * maplen(page, 128),
-        "mapped delta == 2 * page_round_up(page + 128)",
+        after_calloc - after_mimir == page,
+        "mapped delta == one page (one new class-128 span)",
     )
 
-    # realloc grow through the .so: the new pointer's
-    # descriptor records the new size, contents preserved,
-    # mapped total unchanged (one mapping published, the
-    # old one retired, both the same length at these sizes).
+    # realloc grow through the .so: 64 -> 96 crosses a
+    # class boundary, so the block moves to a fresh
+    # class-96 span; the new pointer's span header records
+    # the new class, contents are preserved, and the
+    # mapped total grows by exactly the one new span page
+    # (the vacated object frees into its retained span;
+    # nothing unmaps).
     for i in range(64):
         p0[unsafe_offset=i] = UInt8(i + 3)
     var g = mimir_realloc(p0, 96)
@@ -320,7 +342,7 @@ def main() raises:
         run += 1
         failed += verdict(
             f005_descriptor_valid(g, 96) == 1,
-            "grown block descriptor records 96 bytes",
+            "grown block serving header records class 96",
         )
         var okg = True
         for i in range(64):
@@ -331,13 +353,17 @@ def main() raises:
         p0 = g
     run += 1
     failed += verdict(
-        f005_mapped_bytes() == after_calloc,
-        "mapped unchanged by realloc grow (publish + retire)",
+        f005_mapped_bytes() == after_calloc + page,
+        "mapped grows by one span page on realloc grow (new class-96 span)",
     )
 
-    # Free every MimirAlloc block: the mapped total returns
-    # exactly to the baseline. This is the measured effect
-    # of the void mimir_free calls (INC-F003-04).
+    # Free every MimirAlloc block: the mapped total stands
+    # at baseline + exactly two pages - the class-128 and
+    # class-96 spans this script published, retained empty
+    # under the G-003 bound (the class-64 span was already
+    # inside the baseline from the warm-up). This is the
+    # measured effect of the void mimir_free calls
+    # (INC-F003-04) under the span-aware model.
     mimir_free(p0)
     mimir_free(p1)
     mimir_free(p2)
@@ -347,7 +373,7 @@ def main() raises:
     var final_bytes = f005_mapped_bytes()
     print("MAPPED final=", final_bytes, " base=", base)
     run += 1
-    failed += verdict(final_bytes == base, "mapped returns exactly to baseline after all frees")
+    failed += verdict(final_bytes == base + 2 * page, "mapped == baseline + 2 retained span pages after all frees")
 
     print("CHECKS:", run, "run,", failed, "failed")
     if failed == 0:
