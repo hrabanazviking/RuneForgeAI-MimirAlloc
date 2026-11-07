@@ -594,3 +594,24 @@ test-f007:
 	bash tests/mojo/run_f007_upstream_probe.sh
 
 .PHONY: test-f007
+
+# G-001: Phase 3 baseline micro-probe - the probe under
+# tests/perf/ (probe_g001.c) measures allocation latency
+# distribution and retained memory (VmRSS) for the banked
+# mapping-per-allocation allocator (mimir leg) and for the
+# platform allocator in the identical shape (libc leg).
+# Standalone via make test-g001; NOT part of make test,
+# whose composition is unchanged. Recorded run:
+# tests/perf/recorded_run_g001.txt; slice record:
+# docs/PHASE_7_FOUNDATION_PLAN.md.
+$(BUILD)/probe_g001.o: tests/perf/probe_g001.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_g001.c -o $@
+
+$(BUILD)/probe_g001: $(LIBOBJS) $(BUILD)/probe_g001.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_g001.o -o $@
+
+test-g001: $(BUILD)/probe_g001
+	./$(BUILD)/probe_g001 mimir
+	./$(BUILD)/probe_g001 libc
+
+.PHONY: test-g001

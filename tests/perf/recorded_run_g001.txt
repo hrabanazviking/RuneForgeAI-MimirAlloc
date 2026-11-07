@@ -1,0 +1,101 @@
+MimirAlloc slice G-001 - recorded run of tests/perf/probe_g001.c
+Date: 2026-11-06T23:24:56-05:00
+Host: Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+getconf PAGESIZE: 16384
+cc: cc (Debian 12.2.0-14+deb12u1) 12.2.0
+free -g before runs:
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+Base: 0372d94 F-009: Phase 6 exit evidence packet - exit MET via X4 blocker-record alternative (Clause A UNMET: X1 BLOCKED per F-008 three-leg record plus compiler-boundary leg, both restated; X2 MET in B2+B1 scope at binding grade; X3 PARTIAL in F-007 exact words; X5 respected); tasks T1/T3/T4/T6/T7 MET, T2 MET with licence caveat carried, T5 PARTIAL (112/112 passed in 4 of 12 subset files, 8 skew-blocked, WITH leg one-sided); suite-ratification note carried per INC-F007-01; Phase 1 exit restated unmet, Phase 3 + Phase 4 exits still UNMET; fresh run at 35211e1: make clean + make test exit 0 (8/8 PASS, final 4590 checks), test-f003 4/4, test-f004-mojo PASS, test-f005 18/18 + 24/24, test-f006 5/5+5/5 both legs harness PASS with banked hashes reproduced, test-f007 probe COMPLETE, nm -D exactly 4; INC-F009-01..07; README/header byte-untouched; no Makefile change
+
+=== BUILD ===
+Command: make build/probe_g001
+mkdir -p build
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/api/mimir_alloc.c -o build/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/core/mimir_core.c -o build/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c src/platform/mimir_platform.c -o build/mimir_platform.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/perf/probe_g001.c -o build/probe_g001.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/probe_g001.o -o build/probe_g001
+build exit: 0
+
+=== RUN 1 of 3: ./build/probe_g001 mimir ===
+PROBE allocator=mimir timing=clock_gettime(CLOCK_MONOTONIC) per-op around alloc+touch-first-byte+free; rss=/proc/self/status VmRSS (process-level)
+LAT size=8 ops=2000 fails=0 min_ns=4889 p50_ns=5018 p90_ns=5111 p99_ns=5778 max_ns=13537 mean_ns=5034
+LAT size=16 ops=2000 fails=0 min_ns=4851 p50_ns=4981 p90_ns=5056 p99_ns=5648 max_ns=54703 mean_ns=5046
+LAT size=32 ops=2000 fails=0 min_ns=4833 p50_ns=4944 p90_ns=5037 p99_ns=5630 max_ns=471221 mean_ns=5203
+LAT size=64 ops=2000 fails=0 min_ns=4851 p50_ns=4926 p90_ns=5037 p99_ns=5482 max_ns=481277 mean_ns=5207
+LAT size=128 ops=2000 fails=0 min_ns=4833 p50_ns=4907 p90_ns=4982 p99_ns=5389 max_ns=196500 mean_ns=5017
+LAT size=256 ops=2000 fails=0 min_ns=4851 p50_ns=4889 p90_ns=5000 p99_ns=5463 max_ns=357962 mean_ns=5105
+LAT size=512 ops=2000 fails=0 min_ns=4833 p50_ns=4907 p90_ns=5000 p99_ns=5370 max_ns=600888 mean_ns=5277
+LAT size=1024 ops=2000 fails=0 min_ns=4851 p50_ns=4908 p90_ns=4982 p99_ns=5333 max_ns=260685 mean_ns=5175
+LAT size=4096 ops=2000 fails=0 min_ns=4851 p50_ns=4908 p90_ns=5000 p99_ns=5278 max_ns=202296 mean_ns=5029
+RET size=16 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=64 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=256 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=1024 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+CHURN size=64 blocks=256 cycles=10 rss_start_kb=1408 cycle0_rss_kb=1408 cycle1_rss_kb=1408 cycle2_rss_kb=1408 cycle3_rss_kb=1408 cycle4_rss_kb=1408 cycle5_rss_kb=1408 cycle6_rss_kb=1408 cycle7_rss_kb=1408 cycle8_rss_kb=1408 cycle9_rss_kb=1408
+PROBE DONE allocator=mimir
+run1 exit: 0
+
+=== RUN 2 of 3: ./build/probe_g001 mimir ===
+PROBE allocator=mimir timing=clock_gettime(CLOCK_MONOTONIC) per-op around alloc+touch-first-byte+free; rss=/proc/self/status VmRSS (process-level)
+LAT size=8 ops=2000 fails=0 min_ns=4851 p50_ns=4982 p90_ns=5296 p99_ns=5834 max_ns=16389 mean_ns=5041
+LAT size=16 ops=2000 fails=0 min_ns=4797 p50_ns=4981 p90_ns=5259 p99_ns=6019 max_ns=240481 mean_ns=5182
+LAT size=32 ops=2000 fails=0 min_ns=4796 p50_ns=4926 p90_ns=5111 p99_ns=5519 max_ns=17371 mean_ns=4966
+LAT size=64 ops=2000 fails=0 min_ns=4814 p50_ns=4981 p90_ns=5352 p99_ns=6167 max_ns=500851 mean_ns=5465
+LAT size=128 ops=2000 fails=0 min_ns=4833 p50_ns=5000 p90_ns=5334 p99_ns=6352 max_ns=858221 mean_ns=5514
+LAT size=256 ops=2000 fails=0 min_ns=4851 p50_ns=5000 p90_ns=5426 p99_ns=6296 max_ns=26186 mean_ns=5125
+LAT size=512 ops=2000 fails=0 min_ns=4833 p50_ns=5037 p90_ns=5407 p99_ns=6426 max_ns=444647 mean_ns=5387
+LAT size=1024 ops=2000 fails=0 min_ns=4740 p50_ns=4945 p90_ns=5315 p99_ns=5925 max_ns=785573 mean_ns=5746
+LAT size=4096 ops=2000 fails=0 min_ns=4833 p50_ns=5000 p90_ns=5277 p99_ns=5981 max_ns=441870 mean_ns=5382
+RET size=16 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=64 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=256 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=1024 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+CHURN size=64 blocks=256 cycles=10 rss_start_kb=1408 cycle0_rss_kb=1408 cycle1_rss_kb=1408 cycle2_rss_kb=1408 cycle3_rss_kb=1408 cycle4_rss_kb=1408 cycle5_rss_kb=1408 cycle6_rss_kb=1408 cycle7_rss_kb=1408 cycle8_rss_kb=1408 cycle9_rss_kb=1408
+PROBE DONE allocator=mimir
+run2 exit: 0
+
+=== RUN 3 of 3: ./build/probe_g001 mimir ===
+PROBE allocator=mimir timing=clock_gettime(CLOCK_MONOTONIC) per-op around alloc+touch-first-byte+free; rss=/proc/self/status VmRSS (process-level)
+LAT size=8 ops=2000 fails=0 min_ns=4815 p50_ns=5000 p90_ns=5463 p99_ns=27018 max_ns=273185 mean_ns=6103
+LAT size=16 ops=2000 fails=0 min_ns=4778 p50_ns=5074 p90_ns=5463 p99_ns=6148 max_ns=35741 mean_ns=5168
+LAT size=32 ops=2000 fails=0 min_ns=4852 p50_ns=5000 p90_ns=5204 p99_ns=5759 max_ns=521240 mean_ns=5307
+LAT size=64 ops=2000 fails=0 min_ns=4871 p50_ns=5055 p90_ns=5240 p99_ns=5704 max_ns=652462 mean_ns=5419
+LAT size=128 ops=2000 fails=0 min_ns=4889 p50_ns=5074 p90_ns=5278 p99_ns=5778 max_ns=612758 mean_ns=5549
+LAT size=256 ops=2000 fails=0 min_ns=4888 p50_ns=5074 p90_ns=5370 p99_ns=6055 max_ns=423277 mean_ns=5357
+LAT size=512 ops=2000 fails=0 min_ns=4852 p50_ns=5167 p90_ns=5703 p99_ns=6907 max_ns=454184 mean_ns=5696
+LAT size=1024 ops=2000 fails=0 min_ns=4851 p50_ns=5019 p90_ns=5370 p99_ns=6203 max_ns=612795 mean_ns=5424
+LAT size=4096 ops=2000 fails=0 min_ns=4870 p50_ns=5111 p90_ns=5500 p99_ns=6407 max_ns=495962 mean_ns=5460
+RET size=16 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=64 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=256 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+RET size=1024 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=9600 rss_after_free_kb=1408 live_delta_kb=8192 retained_after_free_kb=0
+CHURN size=64 blocks=256 cycles=10 rss_start_kb=1408 cycle0_rss_kb=1408 cycle1_rss_kb=1408 cycle2_rss_kb=1408 cycle3_rss_kb=1408 cycle4_rss_kb=1408 cycle5_rss_kb=1408 cycle6_rss_kb=1408 cycle7_rss_kb=1408 cycle8_rss_kb=1408 cycle9_rss_kb=1408
+PROBE DONE allocator=mimir
+run3 exit: 0
+
+=== COMPANION LEG RUN 1 of 1: ./build/probe_g001 libc ===
+PROBE allocator=libc timing=clock_gettime(CLOCK_MONOTONIC) per-op around alloc+touch-first-byte+free; rss=/proc/self/status VmRSS (process-level)
+LAT size=8 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=889 mean_ns=59
+LAT size=16 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=111 mean_ns=58
+LAT size=32 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=2482 mean_ns=59
+LAT size=64 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=93 mean_ns=58
+LAT size=128 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=111 mean_ns=58
+LAT size=256 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=93 mean_ns=59
+LAT size=512 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=93 mean_ns=58
+LAT size=1024 ops=2000 fails=0 min_ns=55 p50_ns=56 p90_ns=74 p99_ns=75 max_ns=315 mean_ns=58
+LAT size=4096 ops=2000 fails=0 min_ns=74 p50_ns=74 p90_ns=93 p99_ns=93 max_ns=129 mean_ns=80
+RET size=16 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=1408 rss_after_free_kb=1408 live_delta_kb=0 retained_after_free_kb=0
+RET size=64 blocks=256 fails=0 rss_before_kb=1408 rss_live_kb=1424 rss_after_free_kb=1424 live_delta_kb=16 retained_after_free_kb=16
+RET size=256 blocks=256 fails=0 rss_before_kb=1424 rss_live_kb=1488 rss_after_free_kb=1488 live_delta_kb=64 retained_after_free_kb=64
+RET size=1024 blocks=256 fails=0 rss_before_kb=1488 rss_live_kb=1648 rss_after_free_kb=1648 live_delta_kb=160 retained_after_free_kb=160
+CHURN size=64 blocks=256 cycles=10 rss_start_kb=1648 cycle0_rss_kb=1648 cycle1_rss_kb=1648 cycle2_rss_kb=1648 cycle3_rss_kb=1648 cycle4_rss_kb=1648 cycle5_rss_kb=1648 cycle6_rss_kb=1648 cycle7_rss_kb=1648 cycle8_rss_kb=1648 cycle9_rss_kb=1648
+PROBE DONE allocator=libc
+libc run exit: 0
+
+free -g after runs:
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
