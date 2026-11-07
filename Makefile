@@ -1526,3 +1526,31 @@ bench-k007: $(BUILD)/bench_k007_glibc $(BUILD)/bench_k007_mimir
 	./tests/perf/run_bench_k007.sh /tmp/k007_raw.txt 7
 	python3 tests/perf/summarize_k007.py /tmp/k007_raw.txt
 .PHONY: bench-k007
+
+# K-008: tail-latency + RSS/PSS + energy probe
+# (docs/PHASE_11_TAIL_RSS_ENERGY_K008.md). One source, two
+# binaries (bench_k002 pattern): -DLEG_GLIBC and the shipped
+# -O2 mimir leg. Standalone via `make bench-k008` (5 fresh-
+# process reps + PMIC energy phase); `make test-k008` is the
+# 1-rep smoke form. Neither is part of `make test`.
+$(BUILD)/bench_k008_glibc.o: tests/perf/probe_k008.c | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -DLEG_GLIBC -c tests/perf/probe_k008.c -o $@
+
+$(BUILD)/bench_k008_glibc: $(BUILD)/bench_k008_glibc.o
+	$(CC) $(CFLAGS) -O2 $(BUILD)/bench_k008_glibc.o -o $@
+
+$(BUILD)/bench_k008_mimir.o: tests/perf/probe_k008.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -c tests/perf/probe_k008.c -o $@
+
+$(BUILD)/bench_k008_mimir: $(LIBOBJS) $(BUILD)/bench_k008_mimir.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/bench_k008_mimir.o -o $@
+
+bench-k008: $(BUILD)/bench_k008_glibc $(BUILD)/bench_k008_mimir
+	./tests/perf/run_bench_k008.sh /tmp/k008_raw.txt 5
+	python3 tests/perf/summarize_k008.py /tmp/k008_raw.txt
+
+test-k008: $(BUILD)/bench_k008_glibc $(BUILD)/bench_k008_mimir
+	./tests/perf/run_bench_k008.sh /tmp/k008_smoke.txt 1
+	python3 tests/perf/summarize_k008.py /tmp/k008_smoke.txt
+
+.PHONY: bench-k008 test-k008

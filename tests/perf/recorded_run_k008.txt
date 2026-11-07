@@ -1,0 +1,176 @@
+K-008 recorded run - Phase 11 tail-latency + RSS/PSS + energy packet
+Sat Nov  7 12:41:01 PM EST 2026
+base: 848f85b1a5557586b534d6846ee56f674f8c3d52 branch: yrsa/mimiralloc-08
+aarch64
+4
+CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2
+CFLAGS += -DMIMIR_DEBUG=1
+--- free before ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          12          13
+Swap:             15           1          14
+samtal_before: 200
+--- energy source checks ---
+ls: cannot access '/sys/class/powercap/': No such file or directory
+ls: cannot access '/sys/bus/iio/devices/': No such file or directory
+temp=57.6'C
+throttled=0x0
+pmic_read_adc: readable (see ENERGY lines; whole-board PMIC sum)
+--- make bench-k008 (5 fresh-process reps + energy phase) ---
+./tests/perf/run_bench_k008.sh /tmp/k008_raw.txt 5
+raw lines: 110
+python3 tests/perf/summarize_k008.py /tmp/k008_raw.txt
+leg         pattern      kind   reps      n  med_p50  med_p95  med_p99   max_max  med_mean
+glibc       burst512     alloc     5  51200       37       92       93     65667        46
+glibc       burst512     free      5  51200       55       56       56    188870        47
+glibc       inter_small  alloc     5  50000       37       56       56     61334        40
+glibc       inter_small  free      5  50000       37       56       56     96463        45
+glibc       large_inter  alloc     5   6000       56       74       75     24537        62
+glibc       large_inter  free      5   6000       55       56       56       889        52
+glibc       timer_floor  pair      5   5000       37       37       38     43297        34
+mimiralloc  burst512     alloc     5  51200       74       92       93    446629        81
+mimiralloc  burst512     free      5  51200      630     1111     1167    206592       655
+mimiralloc  inter_small  alloc     5  50000       74       93       93   3263329        77
+mimiralloc  inter_small  free      5  50000       92       93       93     29055        88
+mimiralloc  large_inter  alloc     5   6000     2519     2944     3852   1163146      2787
+mimiralloc  large_inter  free      5   6000     2278     3093     3686   1326683      2400
+mimiralloc  timer_floor  pair      5   5000       37       37       38       203        33
+leg         set          reps  req_kB  med_dRSS  med_dPSS  med_retRSS  med_retPSS  med_HWM
+glibc       large_hold      5    5480      3920      3920       -1424       -1424     7824
+glibc       small_hold      5    1250      1232      1232        1232        1232     3904
+mimiralloc  large_hold      5    5480      5952      5952           0           0     8736
+mimiralloc  small_hold      5    1250      1360      1360         128         128     4016
+leg         passes  med_mean_W    min_W    max_W  med_energy_J
+glibc            2       3.926    2.415    5.851         23.77
+idle             2       3.037    1.941    4.738         18.35
+mimiralloc       2       4.066    2.386    5.955         24.63
+bench_k008_exit:0
+samtal_after_bench: 200
+--- raw lines (/tmp/k008_raw.txt verbatim) ---
+LAT,glibc,timer_floor,pair,5000,37,37,38,55,34,0
+LAT,glibc,inter_small,alloc,50000,37,56,56,19167,40,6371544
+LAT,glibc,inter_small,free,50000,37,56,56,96463,47,6371544
+LAT,glibc,burst512,alloc,51200,37,92,93,65667,46,6764160
+LAT,glibc,burst512,free,51200,55,56,56,3204,47,6764160
+LAT,glibc,large_inter,alloc,6000,56,74,75,3259,61,772808
+LAT,glibc,large_inter,free,6000,55,56,56,129,52,772808
+MEM,glibc,small_hold,20000,1250,2688,1504,3920,2736,1232,1232,1232,1232,3920,2552560
+MEM,glibc,large_hold,24,5480,3920,2736,7840,6656,3920,3920,-1424,-1424,7840,2552560
+DONE,glibc,13908512
+LAT,mimiralloc,timer_floor,pair,5000,37,37,38,56,33,0
+LAT,mimiralloc,inter_small,alloc,50000,74,93,93,352,76,6371544
+LAT,mimiralloc,inter_small,free,50000,92,93,93,5870,88,6371544
+LAT,mimiralloc,burst512,alloc,51200,74,92,93,6908,79,6764160
+LAT,mimiralloc,burst512,free,51200,630,1111,1166,79389,641,6764160
+LAT,mimiralloc,large_inter,alloc,6000,2519,2944,3852,89648,2617,772808
+LAT,mimiralloc,large_inter,free,6000,2278,2926,3223,1293980,2609,772808
+MEM,mimiralloc,small_hold,20000,1250,2672,1488,4032,2848,1360,1360,128,128,4032,2552560
+MEM,mimiralloc,large_hold,24,5480,2800,1616,8752,7568,5952,5952,0,0,8752,2552560
+DONE,mimiralloc,13908512
+LAT,glibc,timer_floor,pair,5000,37,37,38,38,34,0
+LAT,glibc,inter_small,alloc,50000,37,56,56,4204,39,6371544
+LAT,glibc,inter_small,free,50000,37,56,56,4797,45,6371544
+LAT,glibc,burst512,alloc,51200,37,92,93,740,45,6764160
+LAT,glibc,burst512,free,51200,55,56,56,871,47,6764160
+LAT,glibc,large_inter,alloc,6000,56,74,75,9963,63,772808
+LAT,glibc,large_inter,free,6000,55,56,56,277,52,772808
+MEM,glibc,small_hold,20000,1250,2672,1488,3904,2720,1232,1232,1232,1232,3904,2552560
+MEM,glibc,large_hold,24,5480,3904,2720,7824,6640,3920,3920,-1424,-1424,7824,2552560
+DONE,glibc,13908512
+LAT,mimiralloc,timer_floor,pair,5000,37,37,38,185,33,0
+LAT,mimiralloc,inter_small,alloc,50000,74,93,93,555,76,6371544
+LAT,mimiralloc,inter_small,free,50000,92,93,93,426,88,6371544
+LAT,mimiralloc,burst512,alloc,51200,74,92,93,435574,92,6764160
+LAT,mimiralloc,burst512,free,51200,630,1111,1167,196574,665,6764160
+LAT,mimiralloc,large_inter,alloc,6000,2555,2982,4130,973869,3068,772808
+LAT,mimiralloc,large_inter,free,6000,2333,3093,3686,57481,2400,772808
+MEM,mimiralloc,small_hold,20000,1250,2656,1472,4016,2832,1360,1360,128,128,4016,2552560
+MEM,mimiralloc,large_hold,24,5480,2784,1600,8736,7552,5952,5952,0,0,8736,2552560
+DONE,mimiralloc,13908512
+LAT,glibc,timer_floor,pair,5000,37,37,38,15740,37,0
+LAT,glibc,inter_small,alloc,50000,37,56,56,1019,40,6371544
+LAT,glibc,inter_small,free,50000,37,56,56,7963,45,6371544
+LAT,glibc,burst512,alloc,51200,37,92,93,797,46,6764160
+LAT,glibc,burst512,free,51200,55,56,56,1334,47,6764160
+LAT,glibc,large_inter,alloc,6000,56,74,75,7815,62,772808
+LAT,glibc,large_inter,free,6000,55,56,56,722,52,772808
+MEM,glibc,small_hold,20000,1250,2688,1504,3920,2736,1232,1232,1232,1232,3920,2552560
+MEM,glibc,large_hold,24,5480,3920,2736,7840,6656,3920,3920,-1424,-1424,7840,2552560
+DONE,glibc,13908512
+LAT,mimiralloc,timer_floor,pair,5000,37,37,38,203,34,0
+LAT,mimiralloc,inter_small,alloc,50000,74,93,93,3263329,143,6371544
+LAT,mimiralloc,inter_small,free,50000,92,93,93,23297,89,6371544
+LAT,mimiralloc,burst512,alloc,51200,74,93,111,446629,94,6764160
+LAT,mimiralloc,burst512,free,51200,648,1130,1278,182185,670,6764160
+LAT,mimiralloc,large_inter,alloc,6000,2593,3500,6463,1016091,3222,772808
+LAT,mimiralloc,large_inter,free,6000,2537,3796,7074,1326683,3147,772808
+MEM,mimiralloc,small_hold,20000,1250,2656,1472,4016,2832,1360,1360,128,128,4016,2552560
+MEM,mimiralloc,large_hold,24,5480,2784,1600,8736,7552,5952,5952,0,0,8736,2552560
+DONE,mimiralloc,13908512
+LAT,glibc,timer_floor,pair,5000,37,37,38,43297,43,0
+LAT,glibc,inter_small,alloc,50000,37,56,56,61334,42,6371544
+LAT,glibc,inter_small,free,50000,37,56,56,1389,46,6371544
+LAT,glibc,burst512,alloc,51200,37,93,203,52093,51,6764160
+LAT,glibc,burst512,free,51200,55,56,185,188870,56,6764160
+LAT,glibc,large_inter,alloc,6000,56,74,75,24537,66,772808
+LAT,glibc,large_inter,free,6000,55,56,56,889,52,772808
+MEM,glibc,small_hold,20000,1250,2656,1487,3888,2719,1232,1232,1232,1232,3888,2552560
+MEM,glibc,large_hold,24,5480,3888,2719,7808,6639,3920,3920,-1424,-1424,7808,2552560
+DONE,glibc,13908512
+LAT,mimiralloc,timer_floor,pair,5000,37,37,38,56,33,0
+LAT,mimiralloc,inter_small,alloc,50000,74,93,93,40426,77,6371544
+LAT,mimiralloc,inter_small,free,50000,92,93,93,29055,90,6371544
+LAT,mimiralloc,burst512,alloc,51200,74,92,93,23426,81,6764160
+LAT,mimiralloc,burst512,free,51200,630,1111,1167,206592,655,6764160
+LAT,mimiralloc,large_inter,alloc,6000,2519,2908,3278,733387,2764,772808
+LAT,mimiralloc,large_inter,free,6000,2277,2889,3351,374610,2339,772808
+MEM,mimiralloc,small_hold,20000,1250,2656,1472,4016,2832,1360,1360,128,128,4016,2552560
+MEM,mimiralloc,large_hold,24,5480,2784,1600,8736,7552,5952,5952,0,0,8736,2552560
+DONE,mimiralloc,13908512
+LAT,glibc,timer_floor,pair,5000,37,37,38,55,34,0
+LAT,glibc,inter_small,alloc,50000,37,56,56,22611,40,6371544
+LAT,glibc,inter_small,free,50000,37,56,56,3148,45,6371544
+LAT,glibc,burst512,alloc,51200,37,92,93,537,45,6764160
+LAT,glibc,burst512,free,51200,55,56,56,15982,47,6764160
+LAT,glibc,large_inter,alloc,6000,56,74,92,3148,62,772808
+LAT,glibc,large_inter,free,6000,55,56,56,148,52,772808
+MEM,glibc,small_hold,20000,1250,2656,1488,3888,2720,1232,1232,1232,1232,3888,2552560
+MEM,glibc,large_hold,24,5480,3888,2720,7808,6640,3920,3920,-1424,-1424,7808,2552560
+DONE,glibc,13908512
+LAT,mimiralloc,timer_floor,pair,5000,37,37,38,56,33,0
+LAT,mimiralloc,inter_small,alloc,50000,74,93,93,222,77,6371544
+LAT,mimiralloc,inter_small,free,50000,92,93,93,8018,88,6371544
+LAT,mimiralloc,burst512,alloc,51200,74,92,93,26074,79,6764160
+LAT,mimiralloc,burst512,free,51200,630,1111,1166,17370,638,6764160
+LAT,mimiralloc,large_inter,alloc,6000,2518,2908,3259,1163146,2787,772808
+LAT,mimiralloc,large_inter,free,6000,2223,3129,3889,80870,2386,772808
+MEM,mimiralloc,small_hold,20000,1250,2656,1488,4016,2848,1360,1360,128,128,4016,2552560
+MEM,mimiralloc,large_hold,24,5480,2784,1616,8736,7568,5952,5952,0,0,8736,2552560
+DONE,mimiralloc,13908512
+ENERGY,idle,47,3.045,1.941,4.738,6.04,18.39
+ENERGY,glibc,48,3.845,3.084,5.784,6.08,23.39
+ENERGYRUN,glibc,106325003,6000000070,13556437944
+ENERGY,mimiralloc,44,4.087,3.171,5.955,5.98,24.45
+ENERGYRUN,mimiralloc,48105859,6000000163,6133488979
+ENERGY,idle,47,3.030,2.316,4.732,6.04,18.31
+ENERGY,glibc,46,4.006,2.415,5.851,6.03,24.15
+ENERGYRUN,glibc,107237615,6000000107,13672794134
+ENERGY,mimiralloc,46,4.045,2.386,5.583,6.14,24.82
+ENERGYRUN,mimiralloc,48497258,6000000071,6183393909
+--- verification on this tree ---
+make clean && make test: exit 0
+CHECKS: 29 run, 0 failed
+CHECKS: 69 run, 0 failed
+CHECKS: 95 run, 0 failed
+CHECKS: 23 run, 0 failed
+CHECKS: 122 run, 0 failed
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+CHECKS: 4590 run, 0 failed
+make lib: exit 0
+nm -D --defined-only build/libmimiralloc.so (count 4):
+0000000000000b80 T mimir_calloc
+0000000000000b50 T mimir_free
+0000000000000b20 T mimir_malloc
+0000000000000bc0 T mimir_realloc
+git diff vs base 848f85b for README.md include/mimir_alloc.h src/: empty (byte-identical, no src change)
+samtal_final: 200
