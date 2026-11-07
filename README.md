@@ -16,6 +16,14 @@
 
 ---
 
+## 🚀 Production & Beyond master roadmap
+
+**[Read the comprehensive Production & Beyond Master Roadmap (Phases 14–30)](docs/PRODUCTION_AND_BEYOND_MASTER_ROADMAP_2026-11-07.md)**
+
+A substantial, evidence-grounded plan to take MimirAlloc from experimental **0.1.0** through correctness closure, production security, native Linux/Android qualification, performance optimization, release engineering, real Mojo/A.E.S.I.R. integration, and optional AI-aware, accelerator and distributed-memory research. Includes hundreds of uniquely identified work items, dependency gates, acceptance checklists and agent-ready execution orders. **This roadmap describes planned work; it does not claim those phases are implemented or that the current release is production-ready.**
+
+---
+
 ## 🧭 Current engineering status | 7 November 2026
 
 > **Research release 0.1.0 exists. Stable/production release: NOT APPROVED.**
