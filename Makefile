@@ -400,3 +400,67 @@ test-e007: $(BUILD)/test_e007 $(BUILD)/header_only_e007_cpp.o $(BUILD)/header_on
 	./$(BUILD)/test_e007
 
 .PHONY: test-e007
+
+# E-008: startup ordering + cross-module ownership -
+# the peer module under tests/abi/ (test_e008_peer.c) is
+# built as its OWN shared library, build/libe008peer.so,
+# linked against build/libmimiralloc.so, so the main
+# consumer (test_e008_main.c) and the peer are two
+# distinct ELF modules whose mimir_* references both
+# bind to the one libmimiralloc.so instance (DT_NEEDED
+# on both, LD_DEBUG evidence in
+# tests/abi/recorded_run_e008.txt). The peer's
+# constructor allocates through mimir_malloc before
+# main; its destructor verifies and frees that block
+# after main. Three companion programs complete the
+# slice: test_e008_first.c (allocation as the very
+# first MimirAlloc call of a program),
+# test_e008_threads.c (first calls raced from 8
+# threads, foundation plan T8's second startup case),
+# and test_e008_mixed.c (the mixed-allocator SAFE
+# probes: E-005 audit counters prove libc calls move
+# no MimirAlloc counter; NO foreign pointer is ever
+# passed to a mimir_* entry point - foreign free is
+# contract UB with no promised rejection, INC-E008-01).
+# Standalone via `make test-e008`; NOT part of
+# `make test`, whose composition is unchanged. See
+# docs/PHASE_5_STARTUP_OWNERSHIP_E008.md.
+PEERLIB = $(BUILD)/libe008peer.so
+
+$(PICDIR)/test_e008_peer_pic.o: tests/abi/test_e008_peer.c tests/abi/test_e008_peer.h include/mimir_alloc.h | $(PICDIR)
+	$(CC) $(CFLAGS) -fPIC -c tests/abi/test_e008_peer.c -o $@
+
+$(PEERLIB): $(BUILD)/libmimiralloc.so $(PICDIR)/test_e008_peer_pic.o
+	$(CC) -shared $(PICDIR)/test_e008_peer_pic.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/test_e008_main.o: tests/abi/test_e008_main.c tests/abi/test_e008_peer.h include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e008_main.c -o $@
+
+$(BUILD)/test_e008: $(PEERLIB) $(BUILD)/test_e008_main.o
+	$(CC) $(CFLAGS) $(BUILD)/test_e008_main.o -L$(BUILD) -le008peer -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/test_e008_first.o: tests/abi/test_e008_first.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e008_first.c -o $@
+
+$(BUILD)/test_e008_first: $(BUILD)/libmimiralloc.so $(BUILD)/test_e008_first.o
+	$(CC) $(CFLAGS) $(BUILD)/test_e008_first.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/test_e008_threads.o: tests/abi/test_e008_threads.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e008_threads.c -o $@
+
+$(BUILD)/test_e008_threads: $(BUILD)/libmimiralloc.so $(BUILD)/test_e008_threads.o
+	$(CC) $(CFLAGS) $(BUILD)/test_e008_threads.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/test_e008_mixed.o: tests/abi/test_e008_mixed.c tests/abi/mimir_audit_e005.h include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e008_mixed.c -o $@
+
+$(BUILD)/test_e008_mixed: $(LIBOBJS) $(BUILD)/test_e008_mixed.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_e008_mixed.o -o $@
+
+test-e008: $(BUILD)/test_e008_first $(BUILD)/test_e008_threads $(BUILD)/test_e008_mixed $(BUILD)/test_e008
+	./$(BUILD)/test_e008_first
+	./$(BUILD)/test_e008_threads
+	./$(BUILD)/test_e008_mixed
+	./$(BUILD)/test_e008
+
+.PHONY: test-e008
