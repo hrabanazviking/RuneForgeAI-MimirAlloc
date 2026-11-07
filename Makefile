@@ -689,3 +689,32 @@ test-g005: $(BUILD)/test_g005
 	./$(BUILD)/test_g005
 
 .PHONY: test-g005
+
+# G-006: Phase 7 thread exit handling - the evidence
+# test under tests/core/ (test_g006.c) verifies the
+# thread-exit posture scoped by INC-G005-04: the core
+# holds no per-thread state (no _Thread_local / __thread
+# / pthread-key state in src/), so thread exit drains
+# nothing and allocations outlive their allocating
+# thread in the global registries. It proves by
+# execution: exit-while-holding small + large blocks
+# freed afterwards from the main thread via the
+# two-registry free path, exits concurrent with other
+# threads allocating/freeing, many short-lived churning
+# threads, and pthread_exit vs return equivalence. It
+# reads the E-005 mapping counters and the G-003
+# span/object counters at quiescent (post-join) points
+# only. Standalone via `make test-g006`; NOT part of
+# `make test`, whose composition is unchanged. Recorded
+# run: tests/core/recorded_run_g006.txt; slice record:
+# docs/PHASE_7_THREAD_EXIT_G006.md.
+$(BUILD)/test_g006.o: tests/core/test_g006.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_g006.c -o $@
+
+$(BUILD)/test_g006: $(LIBOBJS) $(BUILD)/test_g006.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_g006.o -o $@
+
+test-g006: $(BUILD)/test_g006
+	./$(BUILD)/test_g006
+
+.PHONY: test-g006
