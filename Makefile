@@ -1047,3 +1047,25 @@ test-i006: $(BUILD)/test_i006
 	./$(BUILD)/test_i006
 
 .PHONY: test-i006
+
+# I-007: Phase 9 telemetry separation proof -
+# the test under tests/core/ (test_i007.c) proves the
+# I-002 separation of allocator-managed quantities
+# (Q-MAPPED / Q-RETAINED, locked snapshots via the I-003
+# test-only surface) from process-wide figures (VmSize /
+# VmRSS / smaps_rollup / maps) with measured legs in both
+# directions and a quiescent reconciliation. Standalone
+# via `make test-i007`; NOT part of `make test`, whose
+# composition is unchanged. Recorded run:
+# tests/core/recorded_run_i007.txt; slice record:
+# docs/PHASE_9_TELEMETRY_SEPARATION.md.
+$(BUILD)/test_i007.o: tests/core/test_i007.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/core/mimir_trim_i003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_i007.c -o $@
+
+$(BUILD)/test_i007: $(LIBOBJS) $(BUILD)/test_i007.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_i007.o -o $@
+
+test-i007: $(BUILD)/test_i007
+	./$(BUILD)/test_i007
+
+.PHONY: test-i007

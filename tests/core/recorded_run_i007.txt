@@ -1,0 +1,95 @@
+recorded_run_i007.txt - slice I-007 telemetry separation proof
+date: 2026-11-07T06:41:04-05:00
+host: purpleviking1 aarch64 page=16384
+base: d6a093d84e50fc070ed2068793d534f9ccabc65b branch: yrsa/mimiralloc-07
+command: make test-i007
+exit: 0 (see RESULT line; three prior consecutive runs also PASS 63/63)
+---
+./build/test_i007
+test_i007: telemetry separation proof (I-002 definitions, quiescent points)
+page=16384
+  [ok] host page size is 16384 (measured, Pi)
+  SNAP S0-baseline: Q-MAPPED=0 Q-RETAINED=0 ret_spans=0 VmSize=2916352 VmRSS=1441792 RollRss=1441792 RollAnon=180224 PssFile=50176 maps=16 maps_anon=933888 pub-ret=0 spanpub-spanret=0 salloc-sfree=0
+  [ok] S0: Q-MAPPED is 0 before any mimir allocation (got 0, want 0)
+  [ok] S0: Q-RETAINED is 0 (got 0, want 0)
+  [ok] sentinels allocated (large 4096, small 256)
+  SNAP S1-sentinels: Q-MAPPED=49152 Q-RETAINED=0 ret_spans=0 VmSize=2965504 VmRSS=1507328 RollRss=1507328 RollAnon=245760 PssFile=50176 maps=18 maps_anon=983040 pub-ret=1 spanpub-spanret=1 salloc-sfree=1
+  [ok] S1: Q-MAPPED = 32768 (large) + 16384 (span) = 49152 (got 49152, want 49152)
+  [ok] S1: VmSize delta equals Q-MAPPED delta exactly (got 49152, want 49152)
+  [ok] S1: anonymous VM delta equals Q-MAPPED delta exactly (got 49152, want 49152)
+  [ok] S1: mapping count delta = 2 (1 mapping + 1 span) (got 2, want 2)
+  [ok] A1: two large blocks allocated
+  SNAP A1-two-large: Q-MAPPED=114688 Q-RETAINED=0 ret_spans=0 VmSize=3031040 VmRSS=1572864 RollRss=1572864 RollAnon=311296 PssFile=50176 maps=18 maps_anon=1048576 pub-ret=3 spanpub-spanret=1 salloc-sfree=1
+  [ok] A1: Q-MAPPED delta = 2 x 32768 exactly (got 65536, want 65536)
+  [ok] A1: VmSize delta = Q delta exactly (got 65536, want 65536)
+  [ok] A1: anonymous VM delta = Q delta exactly (got 65536, want 65536)
+  A1 mapping count delta=0 (kernel VMA merging: adjacent anon mappings may merge; count is NOT an allocator quantity -- bytes are, see INC-I007-01)
+  [ok] A1: mapping count delta <= 2 (merging can only reduce it)
+  [ok] A1: live mappings (published-retired) delta = 2 (got 2, want 2)
+  A1 residency: VmRSS delta=65536 RollAnon delta=65536 (touched allocator pages become resident; mapped != resident by definition)
+  [ok] A1: rollup Anonymous rose by at least 32768 (residency is kernel-paced, reported not equated)
+  [ok] A1: sentinels byte-identical
+  [ok] A2: small 1024 block allocated
+  SNAP A2-small-span: Q-MAPPED=131072 Q-RETAINED=0 ret_spans=0 VmSize=3047424 VmRSS=1589248 RollRss=1589248 RollAnon=327680 PssFile=50176 maps=18 maps_anon=1064960 pub-ret=3 spanpub-spanret=2 salloc-sfree=2
+  [ok] A2: Q-MAPPED delta = 1 span page exactly (got 16384, want 16384)
+  [ok] A2: VmSize delta = 1 page exactly (got 16384, want 16384)
+  [ok] A2: mapping count delta <= 1 (VMA merging, INC-I007-01)
+  [ok] A2: sentinels byte-identical
+  SNAP A3a-large-freed: Q-MAPPED=65536 Q-RETAINED=0 ret_spans=0 VmSize=2981888 VmRSS=1523712 RollRss=1523712 RollAnon=262144 PssFile=50176 maps=19 maps_anon=999424 pub-ret=1 spanpub-spanret=2 salloc-sfree=2
+  [ok] A3a: Q-MAPPED drops exactly 65536 on large frees (got 65536, want 65536)
+  [ok] A3a: VmSize drops exactly 65536 on large frees (got 65536, want 65536)
+  SNAP A3b-small-freed-retained: Q-MAPPED=65536 Q-RETAINED=16384 ret_spans=1 VmSize=2981888 VmRSS=1523712 RollRss=1523712 RollAnon=262144 PssFile=50176 maps=19 maps_anon=999424 pub-ret=1 spanpub-spanret=2 salloc-sfree=1
+  [ok] A3b: Q-MAPPED does NOT move when small free retains the span (got 65536, want 65536)
+  [ok] A3b: VmSize does NOT move on retained free (got 2981888, want 2981888)
+  [ok] A3b: VmRSS does NOT move on retained free (page stays mapped+resident) (got 1523712, want 1523712)
+  [ok] A3b: Q-RETAINED rises by exactly 1 page -- the ONLY figure that moves (got 16384, want 16384)
+  [ok] A3b: retained span count = 1 (got 1, want 1)
+  [ok] A3: sentinels byte-identical
+  SNAP A4-trimmed: Q-MAPPED=49152 Q-RETAINED=0 ret_spans=0 VmSize=2965504 VmRSS=1507328 RollRss=1507328 RollAnon=245760 PssFile=50176 maps=18 maps_anon=983040 pub-ret=1 spanpub-spanret=1 salloc-sfree=1
+  [ok] A4: trim released exactly 1 span (got 1, want 1)
+  [ok] A4: Q-MAPPED drops exactly 1 page on trim (got 16384, want 16384)
+  [ok] A4: VmSize drops exactly 1 page on trim (got 16384, want 16384)
+  [ok] A4: Q-RETAINED returns to 0 (got 0, want 0)
+  [ok] A4: Q-MAPPED back to sentinel-only 49152 (got 49152, want 49152)
+  [ok] A4: sentinels byte-identical
+  [ok] B1: raw anonymous mmap of 65536 B succeeded
+  SNAP B1-raw-anon-mmap: Q-MAPPED=49152 Q-RETAINED=0 ret_spans=0 VmSize=3031040 VmRSS=1572864 RollRss=1572864 RollAnon=311296 PssFile=50176 maps=18 maps_anon=1048576 pub-ret=1 spanpub-spanret=1 salloc-sfree=1
+  [ok] B1: EVERY allocator quantity + counter exactly unchanged by raw mmap
+  [ok] B1: VmSize rises exactly 65536 (got 65536, want 65536)
+  [ok] B1: anonymous VM rises exactly 65536 (got 65536, want 65536)
+  [ok] B1: mapping count rises by at most 1 (VMA merging, INC-I007-01)
+  [ok] B1: rollup Anonymous rises exactly 65536 (all 4 pages touched) (got 65536, want 65536)
+  [ok] B1: VmRSS rises exactly 65536 (got 65536, want 65536)
+  SNAP B1b-munmap: Q-MAPPED=49152 Q-RETAINED=0 ret_spans=0 VmSize=2965504 VmRSS=1507328 RollRss=1507328 RollAnon=245760 PssFile=50176 maps=18 maps_anon=983040 pub-ret=1 spanpub-spanret=1 salloc-sfree=1
+  [ok] B1b: VmSize returns exactly after munmap (got 2965504, want 2965504)
+  [ok] B1b: mapping count returns exactly (got 18, want 18)
+  [ok] B1b: allocator accounts still exactly unchanged
+  [ok] B1: sentinels byte-identical
+  [ok] B2: temp file created
+  [ok] B2: temp file sized 65536
+  [ok] B2: file-backed mmap succeeded
+  B2 file bytes checksum (volatile read): 280
+  SNAP B2-file-backed: Q-MAPPED=49152 Q-RETAINED=0 ret_spans=0 VmSize=3031040 VmRSS=1572864 RollRss=1572864 RollAnon=245760 PssFile=115712 maps=19 maps_anon=983040 pub-ret=1 spanpub-spanret=1 salloc-sfree=1
+  [ok] B2: EVERY allocator quantity + counter exactly unchanged by file-backed mmap
+  [ok] B2: VmSize rises exactly 65536 (got 65536, want 65536)
+  [ok] B2: mapping count rises by 1 (got 1, want 1)
+  [ok] B2: anonymous VM does NOT move (file-backed is not anonymous) (got 983040, want 983040)
+  [ok] B2: rollup Anonymous does NOT move (got 245760, want 245760)
+  [ok] B2: VmRSS rises (file pages resident; exact delta reported in snapshot)
+  B2 residency: VmRSS delta=65536 PssFile delta=65536 RollRss delta=65536
+  [ok] B2: sentinels byte-identical
+  SNAP C-final: Q-MAPPED=0 Q-RETAINED=0 ret_spans=0 VmSize=2916352 VmRSS=1458176 RollRss=1458176 RollAnon=196608 PssFile=50176 maps=16 maps_anon=933888 pub-ret=0 spanpub-spanret=0 salloc-sfree=0
+  C: final trim released 1 retained span(s)
+  [ok] C: Q-MAPPED returns to exactly 0 (got 0, want 0)
+  [ok] C: Q-RETAINED returns to exactly 0 (got 0, want 0)
+  [ok] C: mapping counters reconcile published == retired
+  [ok] C: span counters reconcile published == retired
+  [ok] C: small counters reconcile alloc == free
+  [ok] C: VmSize returns EXACTLY to baseline -- allocator VM fully released (got 2916352, want 2916352)
+  RECONCILIATION (quiescent, baseline S0): process VmSize=2916352 = allocator Q-MAPPED 0 + non-allocator VM 2916352
+  RECONCILIATION: baseline anonymous VM=933888 = allocator 0 + non-allocator anonymous (libc heap/stack/loader) 933888
+  RECONCILIATION: baseline rollup Anonymous (resident anon)=180224, VmRSS=1441792, PssFile=50176 -- all non-allocator at baseline
+  RECONCILIATION RESIDUAL: final VmRSS - baseline VmRSS = 16384 B; final RollAnon - baseline = 16384 B (residency is kernel-managed; VM accounts reconcile exactly, resident accounts within this reported residual)
+  [ok] C: final VmRSS within 1 page of baseline (residual reported above)
+checks=63 failures=0
+RESULT: PASS
