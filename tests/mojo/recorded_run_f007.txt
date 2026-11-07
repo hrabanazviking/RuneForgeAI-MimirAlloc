@@ -1,0 +1,505 @@
+===================================================================
+F-007 RECORDED RUN - relevant upstream test execution record
+Slice F-007 (Wave 6, Phase 6, task T5), team-07.
+Worktree: /home/pi/mimiralloc-team-07 (purpleviking1, Raspberry Pi)
+===================================================================
+
+--- S0. Environment and base state ---
+$ date -Iseconds
+2026-11-06T22:44:48-05:00
+$ uname -a
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+$ git rev-parse HEAD
+38b27b06754730504f1033f1c8d6dcd4fa9fe204
+$ git branch --show-current
+yrsa/mimiralloc-07
+$ git status --porcelain
+?? hidden_files/
+?? tests/mojo/run_f007_upstream_probe.sh
+$ cc --version | head -n 1
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+$ cat /usr/local/bin/mojo
+#!/bin/bash
+exec /home/pi/.pixi/bin/pixi run --manifest-path /home/pi/mojo-dev/pixi.toml mojo "$@"
+$ mojo --version
+Mojo 1.1.0 (8189361e)
+exit:0
+$ getconf PAGESIZE
+16384
+$ free -g
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+$ curl Samtal http://127.0.0.1:8787/
+200
+$ sha256sum README.md include/mimir_alloc.h
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+$ git show HEAD:README.md | sha256sum
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+
+--- S1. Candidate suites, named BEFORE any run (ratification step) ---
+Roadmap S8 Phase 6 T5 says only: execute relevant upstream tests.
+It names no suite, revision, or location (INC-F001-08). The
+candidates below are every suite that could plausibly be meant,
+derived from F-001 S7 row T5 and the F-002 inventory, named here
+before any execution attempt, in relevance order:
+  C1  Mojo stdlib tests - modular/mojo Mojo/stdlib/test/**
+      (test_*.mojo units for the stdlib the allocator serves;
+      the most relevant upstream suite for an allocator slice)
+  C2  Mojo compiler / tool lit suites - modular/mojo Mojo/test/**
+      (lit/FileCheck suites for the compiler and tools)
+  C3  Mojo C++ unit tests - modular/mojo Mojo/unittests/**
+      (gtest-style units for compiler internals)
+  C4  MAX tests - modular/max test trees (MAX is the other
+      half of the failing tablet stack)
+  C5  Any test files shipped inside the installed published
+      package (the road of least resistance if present)
+Explicitly NOT upstream, recorded separately in S6: this
+projects own tests (tests/mojo/test_f003/f005 programs, the C
+suite behind make test). They are never relabelled upstream.
+
+--- S2. Presence inventory: installed package (C5, C4) ---
+$ ls /home/pi/mojo-dev/.pixi/envs/default/lib/mojo/
+std.mojoc
+$ find env lib/mojo -name test_*.mojo | wc -l
+0
+$ find env -name lit.cfg.py | wc -l
+0
+$ ls /home/pi/mojo-dev (pixi project root)
+pixi.lock
+pixi.toml
+$ command -v max modular
+neither max nor modular resolves on PATH
+C5 verdict: ABSENT - the installed package ships exactly one
+stdlib artifact, the compiled std.mojoc; zero test files.
+C4 verdict: ABSENT - MAX is not installed on this Pi at all
+(F-001 S3 / F-002: MAX absent, modular CLI absent), so no MAX
+test tree exists here to run.
+
+--- S3. Presence inventory: the one source checkout (C1, C2, C3) ---
+$ git -C /home/pi/mojo-build/mojo-src rev-parse HEAD
+24f4ceb2ff1701aaca81dc974b7b4794d7d2a0a5
+$ git -C ... log --oneline -1
+24f4ceb [Release] Pin lockfiles to Mojo 1.2.0.dev2026100406, MAX 26.7.0.dev2026100406
+$ git -C ... remote -v
+origin	https://github.com/modular/mojo.git (fetch)
+origin	https://github.com/modular/mojo.git (push)
+$ git -C ... status --porcelain
+ M bazel/common.MODULE.bazel
+?? bazel/public-patches/tcmalloc-39bit-va.patch
+$ du -sh /home/pi/mojo-build/mojo-src
+351M	/home/pi/mojo-build/mojo-src
+$ find Mojo/stdlib/test -name test_*.mojo | wc -l   (C1)
+300
+$ find Mojo/test -name *.mojo | wc -l   (C2 lit suites)
+1032
+$ find Mojo/test -name lit.cfg.py | wc -l
+1
+$ ls Mojo/unittests | head   (C3)
+BUILD.bazel
+CompilerRT
+kgen-dialect
+KGENKernelTest.cpp
+lit-lldb-init.in
+ManglingUtilsTest.cpp
+MojoConfigTest.cpp
+mojo-debug
+mojo-lldb
+mojo-lsp-server
+$ tail -n 6 /home/pi/mojo-build/build.log
+Aspect //bazel/pip:mypy.bzl%mypy_aspect of //Mojo/tools/mojo:mojo up-to-date (nothing to build)
+Use --verbose_failures to see the command lines of failed build steps.
+[9,395 / 9,499] checking cached actions
+INFO: Elapsed time: 13776.237s, Critical Path: 561.95s
+INFO: 9395 processes: 83 disk cache hit, 2452 internal, 6860 linux-sandbox.
+ERROR: Build did NOT complete successfully
+$ test -x bazel-bin/Mojo/tools/mojo/mojo
+ABSENT - no mojo binary was ever produced by the source build
+$ command -v bazel bazelisk lit
+none of bazel/bazelisk/lit resolves on PATH
+$ python3 -c import lit
+ModuleNotFoundError: No module named 'lit'
+Presence verdict: C1/C2/C3 test SOURCES exist on this Pi, but
+only inside an operator-local checkout pinned to
+1.2.0.dev2026100406 - a different revision from the installed
+1.1.0 toolchain - and dirty (bazel/common.MODULE.bazel
+modified; an untracked tcmalloc-39bit-va.patch, the tablet
+experiment, sits in its bazel/public-patches/). Its suites are
+Bazel targets against a just-built toolchain from the same
+source; that build FAILED (build.log: Target
+//Mojo/tools/mojo:mojo failed to build, 14 errors, elapsed
+13776.237s) and produced no mojo binary. No lit runner is
+installed. Section S4 tries the only remaining road: the
+installed 1.1.0 toolchain against the checkout files.
+
+--- S4. Execution attempts with the installed toolchain ---
+One representative small upstream stdlib test file is used for
+both attempts: Mojo/stdlib/test/bit/test_bit.mojo (22 test_
+units by grep -c test_ on the file = see below; imports the
+1.2-era std.* namespace: from std.bit import ...).
+$ grep -c test_ test_bit.mojo
+22
+$ sha256sum test_bit.mojo
+4503631cc518f16cd1b714457b56c59c519e3c1abaeb87c176c0f4c09f74d57d  /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/bit/test_bit.mojo
+
+Attempt A1 - the upstream runner (mojo test):
+$ timeout 60 mojo test /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/bit/test_bit.mojo
+exit:1
+output:
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: error: no such command 'test'
+
+Attempt A2 - the only other execution verb (mojo run):
+$ timeout 120 mojo run /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/bit/test_bit.mojo
+exit:0
+output (first 20 lines):
+
+Running 22 tests for /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/bit/test_bit.mojo 
+    PASS [ 0.001 ] test_count_leading_zeros
+    PASS [ 0.001 ] test_count_leading_zeros_simd
+    PASS [ 0.001 ] test_count_trailing_zeros
+    PASS [ 0.001 ] test_count_trailing_zeros_simd
+    PASS [ 0.001 ] test_bit_reverse
+    PASS [ 0.001 ] test_bit_reverse_simd
+    PASS [ 0.001 ] test_byte_swap
+    PASS [ 0.001 ] test_byte_swap_simd
+    PASS [ 0.001 ] test_pop_count
+    PASS [ 0.001 ] test_pop_count_simd
+    PASS [ 0.001 ] test_bit_not_simd
+    PASS [ 0.001 ] test_bit_width
+    PASS [ 0.001 ] test_bit_width_simd
+    PASS [ 0.001 ] test_next_power_of_two
+    PASS [ 0.001 ] test_next_power_of_two_simd
+    PASS [ 0.001 ] test_prev_power_of_two
+    PASS [ 0.001 ] test_prev_power_of_two_simd
+    PASS [ 0.001 ] test_rotate_bits_int
+
+Attempt A3 - lit road:
+$ timeout 30 python3 -m lit --version
+/usr/bin/python3: No module named lit
+exit:1
+
+--- S5. Relevant upstream subset: bounded executions via mojo run ---
+Subset named BEFORE running (allocator relevance: these files
+exercise the stdlib allocation paths a generated Mojo program
+actually allocates through - List/Dict/String storage, the
+memory modules allocation primitives, Arc - the same paths
+the F-004 baseline and F-005 WITH program use). Runner:
+timeout 120 mojo run FILE (the only execution verb Mojo 1.1.0
+provides; on a test file it discovers and runs the test_
+units, per S4). Excluded by design, with reasons: compile_fail/
+test_fail trees and the abort-expectation files (their expected
+outcome is a compile error or a process abort scored by the
+lit/FileCheck harness, which is absent - S3/A3); gpu/ (no Mojo
+GPU path on this Pi); python/ (interoperation, not allocator-
+relevant); benchmark/ (not correctness tests).
+IMPORTANT SCOPE: every run below executes the 1.2.0.dev test
+FILES from the checkout against the INSTALLED 1.1.0 compiled
+stdlib (std.mojoc) and the stock Mojo runtime allocator.
+No MimirAlloc boundary is applied - none can be (F-001 S6:
+the B2+B1 boundary reaches only a generated programs own
+explicit mimir_* calls, never stdlib-internal allocation).
+These are WITHOUT-replacement upstream results.
+
+$ timeout 120 mojo run $SRC/collections/test_list.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo:17:6: error: unable to locate module 'test_utils'
+from test_utils import (
+     ^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo:1111:33: error: expected a type or param_list operand
+    assert_true(conforms_to(List[MoveOnly[Int]], IterableOwned))
+                            ~~~~^~~~~~~~~~~~~~~
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo:1114:34: error: expected a type or param_list operand
+    assert_false(conforms_to(List[ExplicitDestroy], IterableOwned))
+
+$ timeout 120 mojo run $SRC/collections/test_dict.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_dict.mojo:25:6: error: unable to locate module 'test_utils'
+from test_utils import (
+     ^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_dict.mojo:527:5: error: use of unknown declaration 'orig'
+    orig["a"] = CopyCounter()
+    ^~~~
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_dict.mojo:530:16: error: use of unknown declaration 'orig'
+    var copy = orig.copy()
+
+$ timeout 120 mojo run $SRC/collections/test_array.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_array.mojo:24:6: error: unable to locate module 'test_utils'
+from test_utils import (
+     ^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_array.mojo:545:19: error: 'AnyTrait[Movable]' does not implement the '__bool__' method
+struct NonMovable(not Movable):
+                  ^   ~~~~~~~
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_array.mojo:297:9: error: use of unknown declaration 'arr'
+    _ = arr
+
+$ timeout 120 mojo run $SRC/collections/test_deque.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_deque.mojo:16:6: error: unable to locate module 'test_utils'
+from test_utils import ExplicitDestroy, MoveOnly, Observable, check_write_to
+     ^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_deque.mojo:1176:42: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+struct CopyableExplicitDestroy(Copyable, not Deinitable):
+                                         ^   ~~~~~~~~~~
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_deque.mojo:1221:35: error: expected a type or param_list operand
+    assert_false(conforms_to(Deque[ExplicitDestroy], Deinitable))
+
+$ timeout 120 mojo run $SRC/collections/test_linked_list.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_linked_list.mojo:17:6: error: unable to locate module 'test_utils'
+from test_utils import (
+     ^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_linked_list.mojo:753:40: error: expected a type or param_list operand
+    assert_false(conforms_to(LinkedList[MoveOnly[Int]], Copyable))
+                             ~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_linked_list.mojo:783:40: error: expected a type or param_list operand
+    assert_false(conforms_to(LinkedList[ExplicitDestroy], Deinitable))
+
+$ timeout 120 mojo run $SRC/collections/string/test_string.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_string.mojo:854:26: error: 'String' value has no attribute 'is_ascii_whitespace'
+    assert_false(String().is_ascii_whitespace())
+                 ~~~~~~~~^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_string.mojo:878:22: error: '_ArrayIter[String, Int(12), origin_of(univ_sep_var)].Element' value has no attribute 'is_ascii_whitespace'
+        assert_true(i.is_ascii_whitespace())
+                    ~^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_string.mojo:881:23: error: '_ArrayIterOwned[String, Int(6)].Element' value has no attribute 'is_ascii_whitespace'
+        assert_false(i.is_ascii_whitespace())
+
+$ timeout 120 mojo run $SRC/collections/string/test_mem_functions.mojo
+exit:0
+Running 22 tests for /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_mem_functions.mojo 
+Summary [ 0.082 ] 22 tests run: 22 passed , 0 failed , 0 skipped 
+
+$ timeout 120 mojo run $SRC/memory/test_alloc.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_alloc.mojo:25:6: error: unable to locate module 'test_utils'
+from test_utils import ObservableDel, check_write_to
+     ^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_alloc.mojo:38:43: error: 'def alignment(self: Layout[Int32]) thin -> Int' has no attributes
+    assert_equal(type_of(layout).alignment.bytes(), align_of[Int32]())
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_alloc.mojo:42:56: error: unexpected keyword parameter 'alignment'
+    var layout = Layout[Int32, alignment=.of_bytes[128]()](count=4)
+
+$ timeout 120 mojo run $SRC/memory/test_memory.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_memory.mojo:37:6: error: unable to locate module 'test_utils'
+from test_utils import (
+     ^
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+
+$ timeout 120 mojo run $SRC/memory/test_arc.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_arc.mojo:16:6: error: unable to locate module 'test_utils'
+from test_utils import ObservableDel, check_write_to
+     ^
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+
+$ timeout 120 mojo run $SRC/memory/test_maybe_uninit.mojo
+exit:1
+first output lines:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_maybe_uninit.mojo:24:6: error: unable to locate module 'test_utils'
+from test_utils import (
+     ^
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_maybe_uninit.mojo:135:30: error: expected a type or param_list operand
+    assert_false(conforms_to(LinearWrapper, Deinitable))
+                             ^~~~~~~~~~~~~
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_maybe_uninit.mojo:166:29: error: expected a type or param_list operand
+    assert_true(conforms_to(DelOnly, Deinitable))
+
+--- S5b. Diagnostic: is the test_utils blocker a package-path
+problem the documented -I flag lifts? (Bazel supplies
+@mojo//:test_utils as a dependency - BUILD.bazel lines 63/88 -
+which a bare mojo run does not.) ---
+
+$ timeout 120 mojo run -I /home/pi/mojo-build/mojo-src/Mojo/stdlib/test /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:45:24: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:865:19: error: 'AnyTrait[Movable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo:1114:34: error: expected a type or param_list operand
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo:1427:15: error: 'AnyTrait[Movable]' does not implement the '__bool__' method
+
+$ timeout 120 mojo run -I /home/pi/mojo-build/mojo-src/Mojo/stdlib/test /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_arc.mojo
+exit:0
+Running 26 tests for /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_arc.mojo 
+Summary [ 0.014 ] 26 tests run: 26 passed , 0 failed , 0 skipped 
+first errors:
+
+Reading: -I resolves test_utils (no unable-to-locate-module
+line above where it appears in S5), but the files STILL do
+not compile under 1.1.0 where they use 1.2-era language
+(conforms_to) or stdlib surface - the version skew is an
+independent, sufficient blocker for those files.
+
+--- S5c. Subset re-run WITH the documented -I package path ---
+S5b proved the bare-run failures mix two causes. Every file
+that failed to compile in S5 is re-run here exactly once with
+timeout 120 mojo run -I $SRC (stdlib/test root, the directory
+holding the test_utils package), so the record separates
+package-path blockage from true version skew. Files that
+already passed in S5/S4 are not re-run.
+
+$ timeout 120 mojo run -I $SRC collections/test_list.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:45:24: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:865:19: error: 'AnyTrait[Movable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo:1114:34: error: expected a type or param_list operand
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_list.mojo:1427:15: error: 'AnyTrait[Movable]' does not implement the '__bool__' method
+
+$ timeout 120 mojo run -I $SRC collections/test_dict.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:45:24: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:63:27: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_dict.mojo:1658:34: error: expected a type or param_list operand
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_dict.mojo:1882:5: error: failed to resolve signature for function 
+
+$ timeout 120 mojo run -I $SRC collections/test_array.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:45:24: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_array.mojo:545:19: error: 'AnyTrait[Movable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_array.mojo:554:25: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_array.mojo:564:43: error: 'AnyTrait[Movable]' does not implement the '__bool__' method
+
+$ timeout 120 mojo run -I $SRC collections/test_deque.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:45:24: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_deque.mojo:1176:42: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_deque.mojo:1221:35: error: expected a type or param_list operand
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_deque.mojo:1226:35: error: expected a type or param_list operand
+
+$ timeout 120 mojo run -I $SRC collections/test_linked_list.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:45:24: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_linked_list.mojo:783:40: error: expected a type or param_list operand
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/test_linked_list.mojo:786:40: error: expected a type or param_list operand
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+
+$ timeout 120 mojo run -I $SRC collections/string/test_string.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_string.mojo:854:26: error: 'String' value has no attribute 'is_ascii_whitespace'
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_string.mojo:878:22: error: '_ArrayIter[String, Int(12), origin_of(univ_sep_var)].Element' value has no attribute 'is_ascii_whitespace'
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_string.mojo:881:23: error: '_ArrayIterOwned[String, Int(6)].Element' value has no attribute 'is_ascii_whitespace'
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/collections/string/test_string.mojo:888:24: error: 'String' value has no attribute 'is_ascii_whitespace'
+
+$ timeout 120 mojo run -I $SRC memory/test_alloc.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_alloc.mojo:38:43: error: 'def alignment(self: Layout[Int32]) thin -> Int' has no attributes
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_alloc.mojo:42:56: error: unexpected keyword parameter 'alignment'
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_alloc.mojo:50:43: error: 'def alignment(self: Layout[Int64]) thin -> Int' has no attributes
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_alloc.mojo:54:55: error: unexpected keyword parameter 'alignment'
+
+$ timeout 120 mojo run -I $SRC memory/test_memory.mojo
+exit:0
+Running 42 tests for /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_memory.mojo 
+Summary [ 0.101 ] 42 tests run: 42 passed , 0 failed , 0 skipped 
+
+$ timeout 120 mojo run -I $SRC memory/test_maybe_uninit.mojo
+exit:1
+first errors:
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:546:24: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/test_utils/types.mojo:564:30: error: 'AnyTrait[Deinitable]' does not implement the '__bool__' method
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_maybe_uninit.mojo:135:30: error: expected a type or param_list operand
+/home/pi/mojo-build/mojo-src/Mojo/stdlib/test/memory/test_maybe_uninit.mojo:217:41: error: expected a type or param_list operand
+
+--- S6. This projects own Mojo-path tests (NOT upstream) ---
+Recorded so the T5 record is never read as this projects only
+test evidence, and so X3 has its honest basis. These are the
+banked F-003/F-005 programs, re-run once each at this base.
+
+$ make test-f003
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+mojo build -o build/test_f003 tests/mojo/test_f003.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -rpath -Xlinker '$ORIGIN'
+./build/test_f003
+STEP1 mimir_malloc(64) + pattern write/readback: PASS
+STEP2 mimir_calloc(16, 4) arrives zeroed (64 bytes): PASS
+STEP3 mimir_realloc grow 64 -> 256, contents preserved + tail writable: PASS
+STEP4 mimir_free(realloc block) + mimir_free(calloc block): PASS
+F-003 RESULT: PASS (4/4 steps)
+pipestatus:0
+
+$ make test-f005
+  [ok] phase5: oversize mimir_malloc returns null
+  [ok] phase5: overflow mimir_calloc returns null
+AUDIT phase5-defined-failures  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 0  published= 10  retired= 2  live= 8
+  [ok] phase6: runtime-derived null address is 0
+AUDIT phase6a-free-null  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 1  published= 10  retired= 2  live= 8
+AUDIT phase6b-free-x4  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 5  published= 10  retired= 6  live= 4
+AUDIT phase7-free-rest  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 9  published= 10  retired= 10  live= 0
+  [ok] phase7: published == retired (live 0)
+CHECKS: 24 run, 0 failed
+F-005 AUDIT LEG RESULT: PASS
+pipestatus:0
+
+--- S7. The F-007 probe (tests/mojo/run_f007_upstream_probe.sh)
+run standalone, exactly as the appended make test-f007 target
+will run it ---
+$ bash tests/mojo/run_f007_upstream_probe.sh
+F-007 UPSTREAM-TEST RUNNABILITY PROBE
+repo: /home/pi/mimiralloc-team-07
+date: 2026-11-06T22:49:25-05:00
+mojo_version: Mojo 1.1.0 (8189361e)
+env_shipped_test_mojo_files: 0
+VERDICT env_suite: ABSENT - the installed package ships no upstream test files (stdlib is the single compiled std.mojoc)
+VERDICT mojo_test_subcommand: ABSENT - Mojo 1.1.0 has no test subcommand; mojo run is the test-file execution road
+checkout: /home/pi/mojo-build/mojo-src
+checkout_head: 24f4ceb2ff1701aaca81dc974b7b4794d7d2a0a5
+checkout_dirty_entries: 2
+checkout_stdlib_test_files: 300
+VERDICT built_mojo_binary: ABSENT - bazel-bin holds intermediates only; the source build failed (build.log), so the lit/C++ suites have no same-source toolchain
+VERDICT lit_runner: ABSENT - no lit on PATH, python3 cannot import lit; the Mojo/test lit suites cannot run
+attempt_mojo_test: timeout 60 mojo test /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/bit/test_bit.mojo
+attempt_mojo_test_exit: 1
+VERDICT attempt_mojo_test: FAILED (no such command) as recorded at F-007
+attempt_mojo_run: timeout 120 mojo run -I /home/pi/mojo-build/mojo-src/Mojo/stdlib/test /home/pi/mojo-build/mojo-src/Mojo/stdlib/test/bit/test_bit.mojo
+attempt_mojo_run_exit: 0
+attempt_mojo_run_summary: Summary [ 0.226 ] 22 tests run: 22 passed , 0 failed , 0 skipped 
+VERDICT attempt_mojo_run: RUNS - the F-007 runnable subset road (mojo run + -I) is live
+F-007 PROBE RESULT: COMPLETE
+exit:0
+
+--- S8. Record summary (tallies recomputed from S4-S6 above) ---
+Relevant upstream subset (12 files named before running, S1/S5):
+  RAN AND PASSED: 4 files, 112 tests run, 112 passed, 0 failed
+    bit/test_bit.mojo                       22/22 (S4, bare run)
+    collections/string/test_mem_functions   22/22 (S5, bare run)
+    memory/test_arc.mojo                    26/26 (S5b, -I run)
+    memory/test_memory.mojo                 42/42 (S5c, -I run)
+  COMPILE-BLOCKED, 0 tests run: 8 files (S5/S5c)
+    collections/test_list, test_dict, test_array, test_deque,
+    test_linked_list, string/test_string, memory/test_alloc,
+    memory/test_maybe_uninit - every one fails only on 1.2-era
+    language/stdlib surface under the 1.1.0 toolchain once the
+    -I package path is supplied (conforms_to, AnyTrait __bool__,
+    String.is_ascii_whitespace, Layout alignment API).
+  NOT RUNNABLE AT ALL on this Pi: C2 lit suites (1032 .mojo
+  files; no lit, no same-source built tools), C3 C++ unittests
+  (same Bazel prerequisite), C4 MAX tests (MAX absent), C5
+  package-shipped tests (none shipped).
+  WITH-replacement leg: NOT RUNNABLE - no boundary reaches
+  stdlib-internal allocation (F-001 S6); all upstream results
+  above are WITHOUT-replacement, stock runtime allocator.
+Project-own Mojo-path evidence at this base (S6, NOT upstream):
+  make test-f003 exit 0 (4/4 steps PASS); make test-f005 exit 0
+  (audit leg 24/24 checks PASS in the recorded tail).
+T5 verdict: PARTIALLY EXECUTED - see the slice document,
+docs/PHASE_6_UPSTREAM_TESTS_F007.md, Sections 0 and 5.
+End of recorded run.

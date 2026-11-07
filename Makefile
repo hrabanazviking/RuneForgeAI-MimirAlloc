@@ -571,3 +571,26 @@ test-f006: $(BUILD)/libmimiralloc.so $(BUILD)/libf005probe.so
 	bash tests/mojo/run_f006_compare.sh
 
 .PHONY: test-f006
+
+# F-007: relevant upstream test execution record (Phase 6,
+# task T5) - the probe under tests/mojo/
+# (run_f007_upstream_probe.sh) re-verifies, read-only and in
+# seconds, what F-007 established by execution: the installed
+# package ships no upstream tests; Mojo 1.1.0 has no `mojo
+# test` subcommand but `mojo run` (with the documented -I
+# package path for test_utils) executes a relevant subset of
+# the 1.2.0.dev stdlib test files from the operator-local
+# checkout against the installed 1.1.0 stdlib (112 tests, all
+# passed at F-007); the rest of the subset is compile-blocked
+# by version skew, and the lit / C++ unit suites cannot run
+# (no lit, no same-source built toolchain). The probe prints
+# PRESENT/ABSENT-style verdicts per component and exits 0
+# when the probe itself completes (D-006 probe shape).
+# Standalone via `make test-f007`; NOT part of `make test`,
+# whose composition is unchanged. The full execution record
+# is tests/mojo/recorded_run_f007.txt; the slice record is
+# docs/PHASE_6_UPSTREAM_TESTS_F007.md.
+test-f007:
+	bash tests/mojo/run_f007_upstream_probe.sh
+
+.PHONY: test-f007
