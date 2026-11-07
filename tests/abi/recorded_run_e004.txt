@@ -1,0 +1,548 @@
+MimirAlloc slice E-004 - recorded run (independent test executable binding proof)
+Wave 5, Phase 5. Closes INC-E003-01 (R2 dynamic route).
+2026-11-06T19:28:32-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+GNU ld (GNU Binutils for Debian) 2.40
+HEAD:
+966214d28501ea003fa935fd36f1f38d75d21b12
+yrsa/mimiralloc-04
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+
+=== S1: build shared library (make lib, banked E-002 target) ===
+$ make clean
+rm -rf build
+exit=0
+$ make lib
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+exit=0
+$ file build/libmimiralloc.so
+build/libmimiralloc.so: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, BuildID[sha1]=a25ec2c467958479ea71f4d57473076a2fb9abf2, not stripped
+exit=0
+$ ls -l build/libmimiralloc.so
+-rwxr-xr-x 1 pi pi 71048 Nov  6 19:28 build/libmimiralloc.so
+exit=0
+$ nm -D --defined-only build/libmimiralloc.so
+0000000000000870 T mimir_calloc
+0000000000000850 T mimir_free
+0000000000000834 T mimir_malloc
+0000000000000894 T mimir_realloc
+exit=0
+defined dynamic export count:
+4
+exit=0
+$ readelf -d build/libmimiralloc.so
+
+Dynamic section at offset 0xfe00 contains 24 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000c (INIT)               0x688
+ 0x000000000000000d (FINI)               0x1390
+ 0x0000000000000019 (INIT_ARRAY)         0x1fdf0
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x1fdf8
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x1f0
+ 0x0000000000000005 (STRTAB)             0x3d8
+ 0x0000000000000006 (SYMTAB)             0x228
+ 0x000000000000000a (STRSZ)              231 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000003 (PLTGOT)             0x1ffe8
+ 0x0000000000000002 (PLTRELSZ)           216 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x5b0
+ 0x0000000000000007 (RELA)               0x508
+ 0x0000000000000008 (RELASZ)             168 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffe (VERNEED)            0x4e8
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x4c0
+ 0x000000006ffffff9 (RELACOUNT)          3
+ 0x0000000000000000 (NULL)               0x0
+exit=0
+
+=== S2: build and run independent executable (make test-e004) ===
+$ make test-e004
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/test_e004.c -o build/test_e004.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/test_e004.o -Lbuild -lmimiralloc -Wl,-rpath,'$ORIGIN' -o build/test_e004
+./build/test_e004
+E-004 independent binding-proof consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(96) returns non-NULL
+PASS second mimir_malloc(96) returns non-NULL
+PASS mimir_malloc(96) aligned to _Alignof(max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(12, 16) returns non-NULL
+PASS mimir_calloc(12, 16) storage reads zero at return
+PASS mimir_realloc(block, 640) grow returns non-NULL
+PASS mimir_realloc grow preserves first 192 bytes
+PASS mimir_realloc(block, 40) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 40 bytes
+PASS mimir_realloc(NULL, 56) returns non-NULL
+PASS mimir_realloc(NULL, 56) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-NULL
+PASS mimir_malloc(72) storage writable over full extent
+E004 19/19 checks passed
+RESULT: PASS
+exit=0
+MAKE_TEST_E004_EXIT=0
+$ file build/test_e004
+build/test_e004: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=65564072a17854c27f27673e47c37361853a805b, for GNU/Linux 3.7.0, not stripped
+exit=0
+$ ls -l build/test_e004 build/test_e004.o
+-rwxr-xr-x 1 pi pi 70840 Nov  6 19:28 build/test_e004
+-rw-r--r-- 1 pi pi  7064 Nov  6 19:28 build/test_e004.o
+exit=0
+
+=== S3: undefined references and DT_NEEDED on test_e004 ===
+$ nm build/test_e004.o
+0000000000000000 t check
+0000000000000004 b failed
+0000000000000084 T main
+                 U memset
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+0000000000000000 b passed
+                 U printf
+                 U puts
+exit=0
+-- undefined mimir_* in object (nm -u) --
+$ nm -u build/test_e004.o
+                 U memset
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+                 U printf
+                 U puts
+exit=0
+$ nm -D build/test_e004
+                 U abort@GLIBC_2.17
+                 w __cxa_finalize@GLIBC_2.17
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U __libc_start_main@GLIBC_2.34
+                 U memset@GLIBC_2.17
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+                 U printf@GLIBC_2.17
+                 U puts@GLIBC_2.17
+exit=0
+-- undefined mimir_* count in executable dynsym --
+4
+grep_exit=0
+$ readelf --dyn-syms -W build/test_e004
+
+Symbol table '.dynsym' contains 16 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 0000000000000740     0 SECTION LOCAL  DEFAULT   11 .init
+     2: 0000000000020058     0 SECTION LOCAL  DEFAULT   23 .data
+     3: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __libc_start_main@GLIBC_2.34 (2)
+     4: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND mimir_malloc
+     5: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterTMCloneTable
+     6: 0000000000000000     0 FUNC    WEAK   DEFAULT  UND __cxa_finalize@GLIBC_2.17 (3)
+     7: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memset@GLIBC_2.17 (3)
+     8: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__
+     9: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND abort@GLIBC_2.17 (3)
+    10: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND puts@GLIBC_2.17 (3)
+    11: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND mimir_free
+    12: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMCloneTable
+    13: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND mimir_realloc
+    14: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND printf@GLIBC_2.17 (3)
+    15: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND mimir_calloc
+exit=0
+$ readelf -d build/test_e004
+
+Dynamic section at offset 0xfdb8 contains 28 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN]
+ 0x000000000000000c (INIT)               0x740
+ 0x000000000000000d (FINI)               0x101c
+ 0x0000000000000019 (INIT_ARRAY)         0x1fda8
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x1fdb0
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x298
+ 0x0000000000000005 (STRTAB)             0x438
+ 0x0000000000000006 (SYMTAB)             0x2b8
+ 0x000000000000000a (STRSZ)              236 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000015 (DEBUG)              0x0
+ 0x0000000000000003 (PLTGOT)             0x1ffe8
+ 0x0000000000000002 (PLTRELSZ)           264 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x638
+ 0x0000000000000007 (RELA)               0x578
+ 0x0000000000000008 (RELASZ)             192 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x000000006ffffffe (VERNEED)            0x548
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x524
+ 0x000000006ffffff9 (RELACOUNT)          4
+ 0x0000000000000000 (NULL)               0x0
+exit=0
+
+=== S4: ldd resolution for test_e004 ===
+$ ldd build/test_e004
+	linux-vdso.so.1 (0x00007fff324a8000)
+	libmimiralloc.so => /home/pi/mimiralloc-team-04/build/libmimiralloc.so (0x00007fff32410000)
+	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff32230000)
+	/lib/ld-linux-aarch64.so.1 (0x00007fff32470000)
+exit=0
+
+=== S5: LD_DEBUG=bindings proof for test_e004 ===
+LD_DEBUG_RUN_EXIT=0
+E-004 independent binding-proof consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(96) returns non-NULL
+PASS second mimir_malloc(96) returns non-NULL
+PASS mimir_malloc(96) aligned to _Alignof(max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(12, 16) returns non-NULL
+PASS mimir_calloc(12, 16) storage reads zero at return
+PASS mimir_realloc(block, 640) grow returns non-NULL
+PASS mimir_realloc grow preserves first 192 bytes
+PASS mimir_realloc(block, 40) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 40 bytes
+PASS mimir_realloc(NULL, 56) returns non-NULL
+PASS mimir_realloc(NULL, 56) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-NULL
+PASS mimir_malloc(72) storage writable over full extent
+E004 19/19 checks passed
+RESULT: PASS
+exit=0 (stdout above)
+-- binding lines mentioning mimir --
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `__cxa_finalize' [GLIBC_2.17]
+    820814:	calling init: /home/pi/mimiralloc-team-04/build/libmimiralloc.so
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_malloc'
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `pthread_mutex_lock' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `sysconf' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `mmap' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `memset' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `pthread_mutex_unlock' [GLIBC_2.17]
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_calloc'
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_realloc'
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `memcpy' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `munmap' [GLIBC_2.17]
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_free'
+    820814:	calling fini: /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `__cxa_finalize' [GLIBC_2.17]
+grep_exit=0
+-- binding line counts per symbol (to libmimiralloc.so) --
+mimir_malloc: 1
+1
+mimir_free: 1
+1
+mimir_calloc: 1
+1
+mimir_realloc: 1
+1
+-- all binding lines to libmimiralloc.so --
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `__cxa_finalize' [GLIBC_2.17]
+    820814:	calling init: /home/pi/mimiralloc-team-04/build/libmimiralloc.so
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_malloc'
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `pthread_mutex_lock' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `sysconf' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `mmap' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `memset' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `pthread_mutex_unlock' [GLIBC_2.17]
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_calloc'
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_realloc'
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `memcpy' [GLIBC_2.17]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `munmap' [GLIBC_2.17]
+    820814:	binding file ./build/test_e004 [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_free'
+    820814:	calling fini: /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]
+    820814:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `__cxa_finalize' [GLIBC_2.17]
+grep_exit=0
+
+=== S6: INC-E003-01 closure - R2 commands from E-003 recorded_run S7, verbatim form ===
+ABSDIR=/home/pi/mimiralloc-team-04/build
+$ cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/test_e003.c -o build/test_e003.o
+exit=0
+$ cc -std=c11 -pthread build/test_e003.o -Lbuild -lmimiralloc -Wl,-rpath,/home/pi/mimiralloc-team-04/build -o build/test_e003_dynamic
+exit=0
+E-003 link-route consumer (4 public symbols only)
+PASS mimir_malloc(64) returns non-NULL
+PASS mimir_malloc(64) aligned to _Alignof(max_align_t)
+PASS mimir_malloc(64) pattern verifies over full extent
+PASS mimir_calloc(8, 16) returns non-NULL
+PASS mimir_calloc(8, 16) storage reads zero at return
+PASS mimir_realloc(block, 512) grow returns non-NULL
+PASS mimir_realloc grow preserves first 128 bytes
+PASS mimir_realloc(block, 32) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 32 bytes
+PASS mimir_realloc(NULL, 32) returns non-NULL
+PASS mimir_realloc(NULL, 32) storage writable
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free(malloc block) returns normally
+PASS mimir_malloc(48) after frees returns non-NULL
+PASS mimir_malloc(48) storage writable over full extent
+E003 16/16 checks passed
+RESULT: PASS
+DYNAMIC_RUN_EXIT=0
+$ nm -D --defined-only build/libmimiralloc.so
+0000000000000870 T mimir_calloc
+0000000000000850 T mimir_free
+0000000000000834 T mimir_malloc
+0000000000000894 T mimir_realloc
+exit=0
+$ readelf -d build/test_e003_dynamic
+
+Dynamic section at offset 0xfdb8 contains 28 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/home/pi/mimiralloc-team-04/build]
+ 0x000000000000000c (INIT)               0x758
+ 0x000000000000000d (FINI)               0xf54
+ 0x0000000000000019 (INIT_ARRAY)         0x1fda8
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x1fdb0
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x298
+ 0x0000000000000005 (STRTAB)             0x438
+ 0x0000000000000006 (SYMTAB)             0x2b8
+ 0x000000000000000a (STRSZ)              262 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000015 (DEBUG)              0x0
+ 0x0000000000000003 (PLTGOT)             0x1ffe8
+ 0x0000000000000002 (PLTRELSZ)           264 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x650
+ 0x0000000000000007 (RELA)               0x590
+ 0x0000000000000008 (RELASZ)             192 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x000000006ffffffe (VERNEED)            0x560
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x53e
+ 0x000000006ffffff9 (RELACOUNT)          4
+ 0x0000000000000000 (NULL)               0x0
+exit=0
+$ ldd build/test_e003_dynamic
+	linux-vdso.so.1 (0x00007fff970f8000)
+	libmimiralloc.so => /home/pi/mimiralloc-team-04/build/libmimiralloc.so (0x00007fff97060000)
+	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff96e80000)
+	/lib/ld-linux-aarch64.so.1 (0x00007fff970c0000)
+exit=0
+$ nm -D build/test_e003_dynamic
+                 U abort@GLIBC_2.17
+                 w __cxa_finalize@GLIBC_2.17
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U __libc_start_main@GLIBC_2.34
+                 U memset@GLIBC_2.17
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+                 U printf@GLIBC_2.17
+                 U puts@GLIBC_2.17
+exit=0
+-- LD_DEBUG=bindings for test_e003_dynamic (S7 last command) --
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `__cxa_finalize' [GLIBC_2.17]
+    820849:	calling init: /home/pi/mimiralloc-team-04/build/libmimiralloc.so
+    820849:	binding file ./build/test_e003_dynamic [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_malloc'
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `pthread_mutex_lock' [GLIBC_2.17]
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `sysconf' [GLIBC_2.17]
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `mmap' [GLIBC_2.17]
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `memset' [GLIBC_2.17]
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `pthread_mutex_unlock' [GLIBC_2.17]
+    820849:	binding file ./build/test_e003_dynamic [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_calloc'
+    820849:	binding file ./build/test_e003_dynamic [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_realloc'
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `memcpy' [GLIBC_2.17]
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `munmap' [GLIBC_2.17]
+    820849:	binding file ./build/test_e003_dynamic [0] to /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]: normal symbol `mimir_free'
+    820849:	calling fini: /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0]
+    820849:	binding file /home/pi/mimiralloc-team-04/build/libmimiralloc.so [0] to /lib/aarch64-linux-gnu/libc.so.6 [0]: normal symbol `__cxa_finalize' [GLIBC_2.17]
+PASS mimir_malloc(64) returns non-NULL
+PASS mimir_malloc(64) aligned to _Alignof(max_align_t)
+PASS mimir_malloc(64) pattern verifies over full extent
+PASS mimir_calloc(8, 16) returns non-NULL
+PASS mimir_calloc(8, 16) storage reads zero at return
+PASS mimir_realloc(block, 512) grow returns non-NULL
+PASS mimir_realloc grow preserves first 128 bytes
+PASS mimir_realloc(block, 32) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 32 bytes
+PASS mimir_realloc(NULL, 32) returns non-NULL
+PASS mimir_realloc(NULL, 32) storage writable
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free(malloc block) returns normally
+PASS mimir_malloc(48) after frees returns non-NULL
+PASS mimir_malloc(48) storage writable over full extent
+LD_DEBUG_E003_DYNAMIC_PIPE_EXIT=0 grep_exit=0
+
+=== S7: lifecycle re-run counts (both dynamic consumers) ===
+E-004 independent binding-proof consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(96) returns non-NULL
+PASS second mimir_malloc(96) returns non-NULL
+PASS mimir_malloc(96) aligned to _Alignof(max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(12, 16) returns non-NULL
+PASS mimir_calloc(12, 16) storage reads zero at return
+PASS mimir_realloc(block, 640) grow returns non-NULL
+PASS mimir_realloc grow preserves first 192 bytes
+PASS mimir_realloc(block, 40) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 40 bytes
+PASS mimir_realloc(NULL, 56) returns non-NULL
+PASS mimir_realloc(NULL, 56) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-NULL
+PASS mimir_malloc(72) storage writable over full extent
+E004 19/19 checks passed
+RESULT: PASS
+TEST_E004_EXIT=0
+E-003 link-route consumer (4 public symbols only)
+PASS mimir_malloc(64) returns non-NULL
+PASS mimir_malloc(64) aligned to _Alignof(max_align_t)
+PASS mimir_malloc(64) pattern verifies over full extent
+PASS mimir_calloc(8, 16) returns non-NULL
+PASS mimir_calloc(8, 16) storage reads zero at return
+PASS mimir_realloc(block, 512) grow returns non-NULL
+PASS mimir_realloc grow preserves first 128 bytes
+PASS mimir_realloc(block, 32) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 32 bytes
+PASS mimir_realloc(NULL, 32) returns non-NULL
+PASS mimir_realloc(NULL, 32) storage writable
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free(malloc block) returns normally
+PASS mimir_malloc(48) after frees returns non-NULL
+PASS mimir_malloc(48) storage writable over full extent
+E003 16/16 checks passed
+RESULT: PASS
+TEST_E003_DYNAMIC_EXIT=0
+
+=== S8: final regression - make test (composition unchanged) + make test-e004 ===
+FINAL_MAKE_TEST_EXIT=0
+  [ok] refusal: malloc(SIZE_MAX) returns null (total-size overflow)
+  [ok] after malloc(SIZE_MAX): sentinel intact, recovery succeeds
+  [ok] refusal: malloc(SIZE_MAX - page + 1) returns null (reserve-sum overflow, pre-admission)
+  [ok] after reserve-overflow refusal: sentinel intact, recovery succeeds
+  [ok] refusal: malloc(SIZE_MAX/2) returns null (representable, unsatisfiable)
+  [ok] after unsatisfiable malloc: sentinel intact, recovery succeeds
+  [ok] refusal: calloc(SIZE_MAX, 2) returns null (product overflow)
+  [ok] after calloc overflow: sentinel intact, recovery succeeds
+  [ok] refusal: calloc(2, SIZE_MAX) returns null (product overflow, swapped factors)
+  [ok] after swapped calloc overflow: sentinel intact, recovery succeeds
+  [ok] refusal: calloc(SIZE_MAX/2 + 1, 2) returns null (product overflow at the boundary)
+  [ok] after boundary calloc overflow: sentinel intact, recovery succeeds
+  [ok] realloc refusal: original block allocated
+  [ok] refusal: realloc(p, SIZE_MAX) returns null
+  [ok] after realloc(SIZE_MAX): original preserved byte-for-byte (B-008 S6.4)
+  [ok] refusal: realloc(p, SIZE_MAX/2) returns null (representable, unsatisfiable)
+  [ok] after unsatisfiable realloc: original preserved, recovery succeeds
+  [ok] original freed exactly as before the failed reallocs; allocator healthy
+  [ok] sentinel intact at end of S93-1
+S93-2 low process limit (RLIMIT_AS child)
+  [ok] rlimit child: allocations succeed until the OS refuses, the refusal is exactly null (child reached it alive, no crash or hang), and after freeing, a fresh allocation under the same limit succeeds
+  [ok] parent allocator healthy after the rlimit child
+S93-3 fragmented address space
+  [ok] fragmentation setup: 48 mixed-size blocks allocated
+  [ok] survivors byte-for-byte intact after every second block is freed (holes opened)
+  [ok] 24 new blocks allocated into the holed space
+  [ok] every live requested extent pairwise disjoint after fragmentation churn (no overlapping valid blocks)
+  [ok] every live block's contents intact after fragmentation churn
+  [ok] recovery succeeds after fragmentation case
+S93-4 kill / restart during work
+  [ok] kill case: parent sentinel allocated
+  [ok] worker child killed with SIGKILL while holding a live, verified block
+  [ok] fresh process after the kill allocates, verifies and frees normally (restart health; per-process state only)
+  [ok] parent sentinel intact and parent allocator healthy after the kill
+S93-5 failure storm (120 rounds)
+  [ok] 120 rounds: every induced failure is exactly null, every interleaved allocation succeeds, no hang (the suite completing is the no-hang evidence)
+  [ok] storm survivors pairwise disjoint (failures never return overlapping valid blocks)
+  [ok] storm survivors' contents intact
+  [ok] recovery succeeds after the failure storm
+SKIP S93-INJ-1 SKIPPED/NOT-YET: fail-the-Nth-mapping sweep needs the fault-injection shim on the L6 mapping boundary; none exists in the banked base (INC-C007-01, carried as INC-C008-01)
+SKIP S93-INJ-2 SKIPPED/NOT-YET: metadata-allocation failure injection needs the shim; none exists (INC-C007-01)
+SKIP S93-INJ-3 SKIPPED/NOT-YET: EMFILE / EAGAIN-class OS failure injection needs the shim; none exists (INC-C007-01)
+SKIP S93-ENV-1 SKIPPED/NOT-YET: Android track of roadmap S9.3 cannot run on this Linux Pi host; results are tracked separately per target and none is claimed (INC-C008-04)
+SKIP S93-ENV-2 SKIPPED/NOT-YET: proot track of roadmap S9.3 cannot run on this host (INC-C008-04)
+SKIP S93-FORK-1 SKIPPED: BLOCKED-by-U-17..U-21 -- fork-child lock state and first allocation in the child are open (B-008 S6.3 X-4a/X-4b); no behaviour is asserted
+SKIP S93-TEARDOWN-1 SKIPPED: BLOCKED -- calls after allocator teardown / from exit-path code have no contract row (B-008 S6.3 X-8, INC-B008-8); no claim is made or tested
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+./build/test_d004
+D-004 multithread allocate/fill/free test
+CONFIG: threads=4 iter_a=250 live_b=16 cross_c=50 iter_d=200 host_page_size=16384
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+PHASE B distinct live pointers: ok (64 recorded)
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+SMOKE 18/18 checks passed
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 70 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+$ make test-e004
+./build/test_e004
+E-004 independent binding-proof consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(96) returns non-NULL
+PASS second mimir_malloc(96) returns non-NULL
+PASS mimir_malloc(96) aligned to _Alignof(max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(12, 16) returns non-NULL
+PASS mimir_calloc(12, 16) storage reads zero at return
+PASS mimir_realloc(block, 640) grow returns non-NULL
+PASS mimir_realloc grow preserves first 192 bytes
+PASS mimir_realloc(block, 40) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 40 bytes
+PASS mimir_realloc(NULL, 56) returns non-NULL
+PASS mimir_realloc(NULL, 56) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-NULL
+PASS mimir_malloc(72) storage writable over full extent
+E004 19/19 checks passed
+RESULT: PASS
+exit=0
+E-004 recorded run complete.

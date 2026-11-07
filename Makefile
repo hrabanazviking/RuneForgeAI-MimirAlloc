@@ -272,3 +272,28 @@ test-e003: $(BUILD)/test_e003_static
 	./$(BUILD)/test_e003_static
 
 .PHONY: static-lib test-e003
+
+# E-004: independent test executable binding proof -
+# the consumer under tests/abi/ (test_e004.c) is a new,
+# independent program linked ONLY against the shared
+# library built by `make lib` (build/libmimiralloc.so).
+# It proves at run time that its undefined mimir_*
+# references bind to libmimiralloc.so (nm/readelf, ldd
+# and LD_DEBUG=bindings evidence in
+# tests/abi/recorded_run_e004.txt) and passes the full
+# allocation lifecycle through that dynamically bound
+# library. This slice also closes INC-E003-01 by running
+# the R2 proving commands E-003 recorded. Standalone via
+# `make test-e004`; NOT part of `make test`, whose
+# composition is unchanged. See
+# docs/PHASE_5_BINDING_PROOF_E004.md.
+$(BUILD)/test_e004.o: tests/abi/test_e004.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_e004.c -o $@
+
+$(BUILD)/test_e004: $(BUILD)/libmimiralloc.so $(BUILD)/test_e004.o
+	$(CC) $(CFLAGS) $(BUILD)/test_e004.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+test-e004: $(BUILD)/test_e004
+	./$(BUILD)/test_e004
+
+.PHONY: test-e004
