@@ -362,3 +362,41 @@ test-e006: $(BUILD)/test_e006
 	./$(BUILD)/test_e006
 
 .PHONY: test-e006
+
+# E-007: C++ consumption variants - the consumer under
+# tests/abi/ (test_e007.cpp) is a C++ translation unit
+# that includes include/mimir_alloc.h under its existing
+# extern "C" guards and exercises the full allocation
+# lifecycle through the four public symbols only, linked
+# ONLY against the shared library built by `make lib`
+# (build/libmimiralloc.so), in the R2 dynamic route named
+# by E-004. Its undefined mimir_* references leave the
+# C++ object UNMANGLED and bind to the C library (binding
+# evidence in tests/abi/recorded_run_e007.txt). The two
+# header-only TUs (header_only_e007.cpp / .c) are compiled
+# to objects by the same target as the standing header
+# C++-clean / C11-clean proof. No C++ native surface is
+# added: no operator new/delete, no C++-name entry point;
+# the dynamic exports stay exactly the four C symbols.
+# Standalone via `make test-e007`; NOT part of `make test`,
+# whose composition is unchanged. See
+# docs/PHASE_5_CPP_CONSUMPTION_E007.md.
+CXX      = c++
+CXXFLAGS = -std=c++17 -Wall -Wextra -Werror -pthread -Iinclude
+
+$(BUILD)/test_e007.o: tests/abi/test_e007.cpp include/mimir_alloc.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c tests/abi/test_e007.cpp -o $@
+
+$(BUILD)/test_e007: $(BUILD)/libmimiralloc.so $(BUILD)/test_e007.o
+	$(CXX) $(CXXFLAGS) $(BUILD)/test_e007.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/header_only_e007_cpp.o: tests/abi/header_only_e007.cpp include/mimir_alloc.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c tests/abi/header_only_e007.cpp -o $@
+
+$(BUILD)/header_only_e007_c.o: tests/abi/header_only_e007.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/header_only_e007.c -o $@
+
+test-e007: $(BUILD)/test_e007 $(BUILD)/header_only_e007_cpp.o $(BUILD)/header_only_e007_c.o
+	./$(BUILD)/test_e007
+
+.PHONY: test-e007

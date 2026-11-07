@@ -1,0 +1,242 @@
+MimirAlloc slice E-007 - recorded run (C/C++ variants: C++ consumption of the C contract)
+Wave 5, Phase 5. Proves E-001 task T2 / W6 in the A-009 shape: C++ consumes the C ABI; no C++ native surface added.
+
+=== S0 environment ===
+2026-11-06T20:16:56-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+PAGESIZE=16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+exit=0
+c++ (Debian 12.2.0-14+deb12u1) 12.2.0
+exit=0
+g++ (Debian 12.2.0-14+deb12u1) 12.2.0
+exit=0
+Debian clang version 14.0.6
+exit=0
+GNU ld (GNU Binutils for Debian) 2.40
+exit=0
+8520a4e29d0c4e7c3e9bfeeaaccec21bbc61fb16
+yrsa/mimiralloc-07
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+Samtal HTTP: 200
+libc: ldd (Debian GLIBC 2.36-9+rpt2+deb12u14) 2.36
+
+=== S1 baseline: make clean; make test (composition unchanged) ===
+rm -rf build
+clean exit: 0
+make test exit: 0
+RESULT PASS lines: 7
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+
+=== S2 shared library exports (nm -D) ===
+make lib exit: 0
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+0000000000000988 T mimir_calloc
+0000000000000954 T mimir_free
+0000000000000924 T mimir_malloc
+00000000000009c0 T mimir_realloc
+nm exit: 0
+defined dynamic symbol count: 4
+-- .so DT_NEEDED (the C library itself needs no C++ runtime):
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+readelf exit: 0
+
+=== S3 header C++-clean and C11-clean proofs ===
+-- S3.1 header standalone as C++ (syntax-only, strict + pedantic):
+exit: 0
+-- S3.2 header standalone as C11 (syntax-only, strict + pedantic):
+exit: 0
+-- S3.3 header standalone as C++ under clang++ (second compiler, syntax-only observation):
+exit: 0
+-- S3.4 header-only TU compiled as C++ (tests/abi/header_only_e007.cpp):
+exit: 0
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+0000000000000018 d _ZN23mimir_e007_header_probeL10realloc_fnE
+0000000000000008 d _ZN23mimir_e007_header_probeL7free_fnE
+0000000000000010 d _ZN23mimir_e007_header_probeL9calloc_fnE
+0000000000000000 d _ZN23mimir_e007_header_probeL9malloc_fnE
+nm exit: 0
+undefined mimir_ in C++ header TU (all unmangled): 4
+-- S3.5 header-only TU compiled as C11 (tests/abi/header_only_e007.c):
+exit: 0
+                 U mimir_calloc
+0000000000000010 D mimir_e007_probe_calloc
+0000000000000008 D mimir_e007_probe_free
+0000000000000000 D mimir_e007_probe_malloc
+0000000000000018 D mimir_e007_probe_realloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+nm exit: 0
+
+=== S4 C++ consumer: make test-e007 ===
+c++ -std=c++17 -Wall -Wextra -Werror -pthread -Iinclude -c tests/abi/test_e007.cpp -o build/test_e007.o
+c++ -std=c++17 -Wall -Wextra -Werror -pthread -Iinclude build/test_e007.o -Lbuild -lmimiralloc -Wl,-rpath,'$ORIGIN' -o build/test_e007
+c++ -std=c++17 -Wall -Wextra -Werror -pthread -Iinclude -c tests/abi/header_only_e007.cpp -o build/header_only_e007_cpp.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/header_only_e007.c -o build/header_only_e007_c.o
+./build/test_e007
+E-007 C++ consumption consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(128) returns non-null
+PASS second mimir_malloc(128) returns non-null
+PASS mimir_malloc(128) aligned to alignof(std::max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(16, 16) returns non-null
+PASS mimir_calloc(16, 16) storage reads zero at return
+PASS mimir_realloc(block, 768) grow returns non-null
+PASS mimir_realloc grow preserves first 256 bytes
+PASS mimir_realloc(block, 48) shrink returns non-null
+PASS mimir_realloc shrink preserves first 48 bytes
+PASS mimir_realloc(nullptr, 64) returns non-null
+PASS mimir_realloc(nullptr, 64) storage writable over full extent
+PASS MimirBuffer(96) holds non-null storage
+PASS MimirBuffer(96) reports size 96
+PASS MimirBuffer storage writable and read back over 96 bytes
+PASS mimir_malloc(80) after MimirBuffer destruction returns non-null
+PASS mimir_malloc(80) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns null (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns null (overflow refusal)
+PASS mimir_free(nullptr) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-null
+PASS mimir_malloc(72) storage writable over full extent
+E007 24/24 checks passed
+RESULT: PASS
+make test-e007 exit: 0
+-- consumer object size record:
+-rw-r--r-- 1 pi pi  1608 Nov  6 20:16 build/header_only_e007_c.o
+-rw-r--r-- 1 pi pi  1672 Nov  6 20:16 build/header_only_e007_cpp.o
+-rwxr-xr-x 1 pi pi 71640 Nov  6 20:16 build/test_e007
+-rw-r--r-- 1 pi pi  9832 Nov  6 20:16 build/test_e007.o
+build/test_e007: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=31febbb368e1af06cbd497588d59a8bf00276847, for GNU/Linux 3.7.0, not stripped
+
+=== S5 binding evidence: unmangled references bind to the C library ===
+-- S5.1 undefined mimir_ references in the C++ object:
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+-- S5.2 mangling control: mimir_ lines carrying a mangled (_Z) name:
+0
+(0 = no mimir_ reference is mangled)
+-- S5.3 contrast: this TU's OWN C++ symbols ARE mangled (same nm output):
+00000000000000e4 t _ZN12_GLOBAL__N_111MimirBuffer4dataEv
+0000000000000084 t _ZN12_GLOBAL__N_111MimirBufferC1Em
+0000000000000084 t _ZN12_GLOBAL__N_111MimirBufferC2Em
+_ZN12_GLOBAL__N_111MimirBuffer4dataEv demangles to:
+(anonymous namespace)::MimirBuffer::data()
+-- S5.4 undefined mimir_ in the executable dynamic symbol table:
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+count: 4
+-- S5.5 DT_NEEDED / RUNPATH of the C++ executable:
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN]
+-- S5.6 ldd resolution:
+	linux-vdso.so.1 (0x00007fff30878000)
+	libmimiralloc.so => /home/pi/mimiralloc-team-07/build/libmimiralloc.so (0x00007fff307e0000)
+	libstdc++.so.6 => /lib/aarch64-linux-gnu/libstdc++.so.6 (0x00007fff305a0000)
+	libgcc_s.so.1 => /lib/aarch64-linux-gnu/libgcc_s.so.1 (0x00007fff30560000)
+	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007fff303a0000)
+	libm.so.6 => /lib/aarch64-linux-gnu/libm.so.6 (0x00007fff302f0000)
+	/lib/ld-linux-aarch64.so.1 (0x00007fff30840000)
+-- S5.7 LD_DEBUG=bindings run:
+run exit: 0
+    871727:	binding file ./build/test_e007 [0] to /home/pi/mimiralloc-team-07/build/libmimiralloc.so [0]: normal symbol `mimir_malloc'
+    871727:	binding file ./build/test_e007 [0] to /home/pi/mimiralloc-team-07/build/libmimiralloc.so [0]: normal symbol `mimir_calloc'
+    871727:	binding file ./build/test_e007 [0] to /home/pi/mimiralloc-team-07/build/libmimiralloc.so [0]: normal symbol `mimir_realloc'
+    871727:	binding file ./build/test_e007 [0] to /home/pi/mimiralloc-team-07/build/libmimiralloc.so [0]: normal symbol `mimir_free'
+mimir binding lines: 4
+E007 24/24 checks passed
+RESULT: PASS
+
+=== S6 absence proofs: no C++ native surface ===
+-- S6.1 defined dynamic exports still exactly 4 after the C++ build:
+4
+-- S6.2 any C++ operator symbol defined in the .so dynamic table:
+grep exit: 1 (1 = none, as designed)
+-- S6.3 any operator new/delete DEFINED in the C++ consumer executable:
+grep exit: 1 (1 = none, as designed)
+-- S6.4 operator mentions in src/ and include/ (declarations/definitions):
+grep exit: 1 (1 = none, as designed)
+-- S6.5 consumer undefined references, complete mimir_ set:
+4
+
+=== S7 clean re-run (reproducibility) ===
+rm -rf build
+clean exit: 0
+make test exit: 0
+RESULT PASS lines: 7
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+c++ -std=c++17 -Wall -Wextra -Werror -pthread -Iinclude -c tests/abi/test_e007.cpp -o build/test_e007.o
+c++ -std=c++17 -Wall -Wextra -Werror -pthread -Iinclude build/test_e007.o -Lbuild -lmimiralloc -Wl,-rpath,'$ORIGIN' -o build/test_e007
+c++ -std=c++17 -Wall -Wextra -Werror -pthread -Iinclude -c tests/abi/header_only_e007.cpp -o build/header_only_e007_cpp.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/abi/header_only_e007.c -o build/header_only_e007_c.o
+./build/test_e007
+E-007 C++ consumption consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(128) returns non-null
+PASS second mimir_malloc(128) returns non-null
+PASS mimir_malloc(128) aligned to alignof(std::max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(16, 16) returns non-null
+PASS mimir_calloc(16, 16) storage reads zero at return
+PASS mimir_realloc(block, 768) grow returns non-null
+PASS mimir_realloc grow preserves first 256 bytes
+PASS mimir_realloc(block, 48) shrink returns non-null
+PASS mimir_realloc shrink preserves first 48 bytes
+PASS mimir_realloc(nullptr, 64) returns non-null
+PASS mimir_realloc(nullptr, 64) storage writable over full extent
+PASS MimirBuffer(96) holds non-null storage
+PASS MimirBuffer(96) reports size 96
+PASS MimirBuffer storage writable and read back over 96 bytes
+PASS mimir_malloc(80) after MimirBuffer destruction returns non-null
+PASS mimir_malloc(80) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns null (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns null (overflow refusal)
+PASS mimir_free(nullptr) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-null
+PASS mimir_malloc(72) storage writable over full extent
+E007 24/24 checks passed
+RESULT: PASS
+make test-e007 exit: 0
+defined dynamic symbol count: 4
+
+=== S8 README and diff scope; host after runs ===
+ Makefile | 38 ++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 38 insertions(+)
+README diff lines vs base: 0
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/abi/header_only_e007.c
+?? tests/abi/header_only_e007.cpp
+?? tests/abi/recorded_run_e007.txt
+?? tests/abi/test_e007.cpp
+Samtal HTTP: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+=== END recorded run E-007 ===
