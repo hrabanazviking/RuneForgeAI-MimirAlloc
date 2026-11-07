@@ -937,3 +937,29 @@ test-h008: $(BUILD)/probe_h008
 	./$(BUILD)/probe_h008
 
 .PHONY: test-h008
+
+# I-003: Phase 9 trim / cache-release evidence test -
+# the test under tests/core/ (test_i003.c) verifies the
+# on-demand trim of docs/PHASE_9_TRIM_IMPLEMENTATION.md
+# (semantics per I-002 Section 5) against the I-003
+# test-only surface (tests/core/mimir_trim_i003.h):
+# retained bytes before trim, exact released counts
+# reconciled at quiescent points against Q-RETAINED /
+# Q-MAPPED, the G-003/E-005 counters and the OS-side
+# anonymous figure, live blocks byte-identical after
+# trim, class-fair partial trims, trim-again no-op, and
+# the H-001 drain unregressed on the shared walk.
+# Standalone via `make test-i003`; NOT part of
+# `make test`, whose composition is unchanged. Recorded
+# run: tests/core/recorded_run_i003.txt; slice record:
+# docs/PHASE_9_TRIM_IMPLEMENTATION.md.
+$(BUILD)/test_i003.o: tests/core/test_i003.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h tests/core/mimir_drain_h001.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_i003.c -o $@
+
+$(BUILD)/test_i003: $(LIBOBJS) $(BUILD)/test_i003.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_i003.o -o $@
+
+test-i003: $(BUILD)/test_i003
+	./$(BUILD)/test_i003
+
+.PHONY: test-i003

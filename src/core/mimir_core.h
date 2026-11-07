@@ -66,4 +66,29 @@ void *mimir_core_realloc(void *ptr, size_t new_size);
  * tests/core/mimir_drain_h001.h (INC-E001-07 shape (b)). */
 size_t mimir_core_drain_retained(void);
 
+/* On-demand trim (I-003, docs/PHASE_9_TRIM_IMPLEMENTATION.md;
+ * semantics fixed by I-002 Section 5): the drain's release
+ * operation invoked on demand instead of at unload, through
+ * the same locked class-fair walk (one release path, I-002
+ * S5.1). mimir_core_trim_retained releases every retained
+ * EMPTY span; mimir_core_trim_retained_some releases at
+ * most max_spans of them (the budget step-3 stop-at-need
+ * mechanism, I-002 S5.2.3). Both return the number of spans
+ * actually released (bytes = spans x page size; every span
+ * is exactly one page), touch no live span or mapping, are
+ * non-terminal and idempotent, and return 0 when nothing is
+ * released or the lock cannot be taken. The two queries
+ * read Q-RETAINED and Q-MAPPED (I-002 S3.2) as single
+ * locked snapshots at quiescent points, returning
+ * (size_t)-1 only if the lock cannot be taken (G-007 getter
+ * posture). Internal only, exactly like the drain:
+ * declared here and re-declared for tests only in
+ * tests/core/mimir_trim_i003.h, bound local in the shared
+ * library (nm -D stays exactly 4). */
+size_t mimir_core_trim_retained(void);
+size_t mimir_core_trim_retained_some(size_t max_spans);
+size_t mimir_core_retained_spans(void);
+size_t mimir_core_retained_bytes(void);
+size_t mimir_core_mapped_bytes(void);
+
 #endif /* MIMIR_CORE_H */

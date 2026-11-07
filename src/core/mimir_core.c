@@ -1011,6 +1011,93 @@ size_t mimir_tune_get_retention_bound(void)
 }
 
 /*
+ * I-003 trim core (docs/PHASE_9_TRIM_IMPLEMENTATION.md;
+ * semantics fixed by I-002 Section 5). With the lock held,
+ * release EMPTY retained spans whole through
+ * span_release_locked, at most max_spans of them, in
+ * class-fair round-robin order: each pass visits classes
+ * 0..19 in index order and releases at most one span per
+ * class, so a partial trim never strips one class while
+ * another class cache survives untouched (I-002 S5.2.2).
+ * Within a class the span released is the deepest EMPTY
+ * span of that class in the registry: the registry inserts
+ * at the head, so the deepest is the earliest ACQUIRED
+ * still-registered empty span of the class. I-002 asked
+ * for the earliest-EMPTIED span first; no became-empty
+ * order is recorded anywhere (the 96-byte span header is
+ * fully assigned, G-002 S7), so earliest-acquired is the
+ * deterministic proxy implemented here and INC-I003-01
+ * records the deviation. A span with live_count > 0 is
+ * never selected (I-002 S5.2.1). On an L6 release failure
+ * span_release_locked has already rolled the span back to
+ * retained LIVE; the walk does not count it and continues
+ * with the next class (I-002 S5.2.4). Returns the number
+ * of spans actually released.
+ */
+static size_t trim_some_locked(size_t max_spans)
+{
+    size_t released = 0;
+
+    while (released < max_spans) {
+        int progress = 0;
+        size_t class_index;
+
+        for (class_index = 0;
+             class_index < MIMIR_SMALL_CLASS_COUNT &&
+             released < max_spans;
+             class_index++) {
+            struct mimir_span_header *span = mimir_span_head;
+            struct mimir_span_header *victim = NULL;
+
+            while (span != NULL) {
+                if (span->class_index == class_index &&
+                    span->live_count == 0) {
+                    victim = span;
+                }
+                span = span->list_next;
+            }
+            if (victim != NULL &&
+                span_release_locked(victim)) {
+                released += 1;
+                progress = 1;
+            }
+        }
+        if (!progress) {
+            break;
+        }
+    }
+    return released;
+}
+
+/* Counted registry walk (lock held): the EMPTY spans and
+ * their total mapping bytes -- Q-RETAINED of I-002 S3.2,
+ * computed exactly from the registry under the lock,
+ * never estimated. Every span is one page, so the byte
+ * total is spans x that span mapping_length summed
+ * exactly as recorded per span. */
+static void retained_snapshot_locked(size_t *out_spans,
+                                     size_t *out_bytes)
+{
+    struct mimir_span_header *span = mimir_span_head;
+    size_t spans = 0;
+    size_t bytes = 0;
+
+    while (span != NULL) {
+        if (span->live_count == 0) {
+            spans += 1;
+            bytes += span->mapping_length;
+        }
+        span = span->list_next;
+    }
+    if (out_spans != NULL) {
+        *out_spans = spans;
+    }
+    if (out_bytes != NULL) {
+        *out_bytes = bytes;
+    }
+}
+
+/*
  * H-001 unload drain (docs/PHASE_7_UNLOAD_DRAIN_H001.md;
  * commissioned fix for INC-G008-02). The G-003 span path
  * retains up to mimir_retention_bound EMPTY spans per class
@@ -1066,23 +1153,118 @@ size_t mimir_tune_get_retention_bound(void)
  */
 size_t mimir_core_drain_retained(void)
 {
-    size_t released = 0;
-    struct mimir_span_header *span = mimir_span_head;
+    size_t released;
 
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return 0;
     }
-    while (span != NULL) {
-        struct mimir_span_header *next = span->list_next;
-
-        if (span->live_count == 0 &&
-            span_release_locked(span)) {
-            released += 1;
-        }
-        span = next;
-    }
+    /* I-003: the drain now shares the one trim walk
+     * (trim_some_locked with no span limit), so drain and
+     * on-demand trim are the same release operation with
+     * different triggers, as I-002 S5.1 requires (one
+     * release path, not a budget-flavoured variant). The
+     * set of spans released is unchanged: every retained
+     * EMPTY span, live spans and mappings never touched;
+     * only the walk order changed (class-fair instead of
+     * registry order), which cannot change how many bytes
+     * a full release returns (I-002 S5.2 preamble). */
+    released = trim_some_locked(SIZE_MAX);
     (void)mimir_platform_global_unlock();
     return released;
+}
+
+/*
+ * I-003 on-demand trim (docs/PHASE_9_TRIM_IMPLEMENTATION.md;
+ * semantics fixed by I-002 Section 5). These entry points
+ * are the H-001 drain operation invoked on demand: under
+ * the one global lock they release retained EMPTY spans
+ * whole through the shared trim walk and return how many
+ * spans were actually released; bytes released are spans x
+ * page size exactly, because every span is one page, and a
+ * test reconciles them at a quiescent point against
+ * mimir_core_retained_bytes before/after and the G-003
+ * span_retired counter delta (I-002 S5.3). Live spans,
+ * live small objects and live large mappings are never
+ * touched (I-002 S5.2.1). Both forms are non-terminal and
+ * idempotent exactly as the drain is: a call with nothing
+ * retained returns 0, a lock failure releases nothing and
+ * returns 0, and the allocator stays fully usable. The
+ * _some form is the stop-at-need mechanism of I-002
+ * S5.2.3: it releases at most max_spans spans in
+ * class-fair order and then stops, without acquiring or
+ * refusing anything -- budget enforcement itself remains
+ * unimplemented (INC-I001-14 stands; see the slice doc).
+ * The queries below read Q-RETAINED and Q-MAPPED (I-002
+ * S3.2) as single locked snapshots; on lock failure they
+ * return (size_t)-1 (the G-007 getter posture) rather than
+ * a torn or invented figure. All five entry points are
+ * INC-E001-07 shape (b) internal state, exactly like the
+ * drain and the G-007 pair: declared in
+ * src/core/mimir_core.h and re-declared for tests only in
+ * tests/core/mimir_trim_i003.h; bound local in the shared
+ * library, nm -D stays exactly 4, and NO public symbol is
+ * added (the public-surface decision is recorded in the
+ * slice doc: internal-only; a public trim API is owed to
+ * a later ABI/contract slice).
+ */
+size_t mimir_core_trim_retained(void)
+{
+    size_t released;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return 0;
+    }
+    released = trim_some_locked(SIZE_MAX);
+    (void)mimir_platform_global_unlock();
+    return released;
+}
+
+size_t mimir_core_trim_retained_some(size_t max_spans)
+{
+    size_t released;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return 0;
+    }
+    released = trim_some_locked(max_spans);
+    (void)mimir_platform_global_unlock();
+    return released;
+}
+
+size_t mimir_core_retained_spans(void)
+{
+    size_t spans;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    retained_snapshot_locked(&spans, NULL);
+    (void)mimir_platform_global_unlock();
+    return spans;
+}
+
+size_t mimir_core_retained_bytes(void)
+{
+    size_t bytes;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    retained_snapshot_locked(NULL, &bytes);
+    (void)mimir_platform_global_unlock();
+    return bytes;
+}
+
+size_t mimir_core_mapped_bytes(void)
+{
+    size_t mapped;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    mapped = mimir_live_bytes + mimir_live_span_bytes;
+    (void)mimir_platform_global_unlock();
+    return mapped;
 }
 
 /*
