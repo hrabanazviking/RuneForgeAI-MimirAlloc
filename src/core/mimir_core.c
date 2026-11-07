@@ -518,8 +518,8 @@ static void *alloc_locked(size_t size, int zero_user,
  * a freed span object goes onto its span's free list and
  * is the first object its class hands out again; a span
  * whose live_count returns to 0 is an EMPTY span, and at
- * most MIMIR_MAX_EMPTY_SPANS_PER_CLASS (2) empty spans per
- * class are retained -- the empty span that would exceed
+ * most mimir_retention_bound empty spans per class are
+ * retained -- the empty span that would exceed
  * the bound is released whole via L6 with its exact
  * acquired pair in the same locked section (INC-G003-05).
  * Live spans are bounded by live demand, never by cache:
@@ -541,7 +541,24 @@ static void *alloc_locked(size_t size, int zero_user,
 #define MIMIR_SMALL_CUTOFF ((size_t)1024)
 #define MIMIR_SMALL_CLASS_COUNT 20
 #define MIMIR_SPAN_HEADER_SIZE ((size_t)96)
-#define MIMIR_MAX_EMPTY_SPANS_PER_CLASS ((size_t)2)
+/* G-007 tuning state (docs/PHASE_7_TUNING_PARAMETERS_G007.md):
+ * the per-class empty-span retention bound of RP-2, formerly
+ * the compile-time constant 2, is now a single size_t stored
+ * under the same global-lock discipline as the span registry
+ * it governs. Its DEFAULT is exactly the banked value 2, so
+ * an unconfigured process behaves byte-for-byte as G-003 /
+ * G-005 banked. The valid range is 0..16: 0 disables
+ * retention (every empty span is released at free time);
+ * 16 caps retained-after-free memory at 20 classes x 16
+ * spans x one system page (INC-G007-02). The setter/getter
+ * pair below (mimir_tune_set_retention_bound /
+ * mimir_tune_get_retention_bound) is INC-E001-07 shape (b)
+ * internal state: declared only in the test-only header
+ * tests/core/mimir_tune_g007.h, bound local in the shared
+ * library, never part of the public ABI. */
+#define MIMIR_RETENTION_DEFAULT ((size_t)2)
+#define MIMIR_RETENTION_MAX ((size_t)16)
+static size_t mimir_retention_bound = MIMIR_RETENTION_DEFAULT;
 
 /* Span magic: the bytes spell "MIMIRSPN" in ASCII. A sanity
  * check only, exactly as the descriptor magic is (S7.3). */
@@ -936,9 +953,48 @@ static void small_free_locked(void *ptr)
 
     if (span->live_count == 0 &&
         empty_spans_of_class_locked(span->class_index) >
-            MIMIR_MAX_EMPTY_SPANS_PER_CLASS) {
+            mimir_retention_bound) {
         (void)span_release_locked(span);
     }
+}
+
+/*
+ * G-007 tuning surface (docs/PHASE_7_TUNING_PARAMETERS_G007.md).
+ * Validation happens BEFORE any state is touched: an
+ * out-of-range value is refused with -1 and the previous
+ * effective value is kept exactly -- no partial application
+ * is possible, as the whole surface is this one scalar,
+ * stored once under the global lock. A lock failure is -2,
+ * likewise with nothing changed. The getter reads the same
+ * scalar under the same lock, so what a test reads back is
+ * exactly what free-time decisions will use. The bound
+ * applies at free time (RP-3): changing it never eagerly
+ * releases already-retained spans; each class converges at
+ * its next emptying free.
+ */
+int mimir_tune_set_retention_bound(size_t value)
+{
+    if (value > MIMIR_RETENTION_MAX) {
+        return -1;
+    }
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return -2;
+    }
+    mimir_retention_bound = value;
+    (void)mimir_platform_global_unlock();
+    return 0;
+}
+
+size_t mimir_tune_get_retention_bound(void)
+{
+    size_t value;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    value = mimir_retention_bound;
+    (void)mimir_platform_global_unlock();
+    return value;
 }
 
 /*

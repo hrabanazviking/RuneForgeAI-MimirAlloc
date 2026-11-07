@@ -718,3 +718,28 @@ test-g006: $(BUILD)/test_g006
 	./$(BUILD)/test_g006
 
 .PHONY: test-g006
+
+# G-007: Phase 7 tuning parameters evidence test - the
+# test under tests/core/ (test_g007.c) verifies the
+# tuning surface of docs/PHASE_7_TUNING_PARAMETERS_G007.md:
+# the G-005 RP-2 per-class empty-span retention bound is
+# configurable through the test-only setter/getter pair of
+# tests/core/mimir_tune_g007.h (INC-E001-07 shape (b)),
+# with invalid values refused and the previous value kept,
+# the effective value readable back exactly, and the
+# unconfigured default (2) reproducing the G-005 P1 shape
+# exactly, all counted via the G-003 span counters
+# (tests/core/mimir_small_g003.h). Standalone via
+# `make test-g007`; NOT part of `make test`, whose
+# composition is unchanged. Recorded run:
+# tests/core/recorded_run_g007.txt.
+$(BUILD)/test_g007.o: tests/core/test_g007.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/core/mimir_tune_g007.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_g007.c -o $@
+
+$(BUILD)/test_g007: $(LIBOBJS) $(BUILD)/test_g007.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_g007.o -o $@
+
+test-g007: $(BUILD)/test_g007
+	./$(BUILD)/test_g007
+
+.PHONY: test-g007
