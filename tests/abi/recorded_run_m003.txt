@@ -1,0 +1,344 @@
+M-003 RECORDED RUN - Phase 13 compiler-warning gates sweep
+Campaign: MimirAlloc Wave 13, slice M-003 (TEAM-03, solo lead)
+Date: 2026-11-07 (Pi local, EST)
+Base: 62298e289411396a5c00304045a893b96e7764e3 (M-001 bank)
+Host: Raspberry Pi Mimir (purpleviking1), aarch64, user pi
+Compiler: cc (Debian 12.2.0-14+deb12u1) 12.2.0 / gcc (Debian 12.2.0-14+deb12u1) 12.2.0
+Pi state at start: free -g available 13G; Samtal http://127.0.0.1:8787/ = 200 (also 200 at end)
+Doc: docs/PHASE_13_WARNING_GATES_M003.md
+
+METHOD: per flavour, TWO clean builds. (1) ENUMERATION pass:
+extended warning set WITHOUT -Werror, make -k, so every warning
+in every translation unit is emitted and captured. (2) GATE pass
+(after the in-slice fix): extended set WITH -Werror, clean build;
+exit 0 + zero 'warning:' lines = gate passes. Extended set added
+on top of each flavour's own flags:
+  -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes
+  -Wundef -Wdouble-promotion
+(the base -Wall -Wextra -Werror of CFLAGS is retained in the gate
+passes; in enumeration passes -Werror is dropped only so the sweep
+can see past the first warning). No candidate flag was excluded:
+all six are supported by gcc 12.2 and none produced a
+false-positive flood (totals below). Sections below keep every
+compile command line (cc ...), every warning verbatim with its
+source-excerpt lines, and every CHECKS/RESULT summary line;
+routine per-check [ok] test output is elided from this record
+(full raw logs were captured on the Pi during the run).
+
+FLAVOUR INVENTORY (from Makefile at base, cited in the doc S2):
+- production: CFLAGS = -std=c11 -Wall -Wextra -Werror -pthread
+  -Iinclude -Isrc -O2 ; targets all/test/lib/static-lib, build/
+- debug: DEBUG=1 adds -DMIMIR_DEBUG=1 (BUILD=build-debug);
+  DCFLAGS = $(CFLAGS) -DMIMIR_DEBUG=1 for lib-debug, build-debug/
+- hardened: HCFLAGS = $(CFLAGS) -O2 -D_FORTIFY_SOURCE=3
+  -fstack-protector-strong -fstack-clash-protection -Wformat
+  -Wformat-security -Werror=format-security ; HARDLINK relro/now/
+  noexecstack ; targets lib-hardened/test-j008, build-hardened/
+Extended flags were injected by overriding CFLAGS on the make
+command line with the flavour's full base set + extended set;
+HCFLAGS/DCFLAGS derive from CFLAGS in the Makefile, so the
+hardened and debug library builds inherit the extended set
+(visible in the compile lines of Sections C, E, F).
+
+
+SECTION A - PRODUCTION enumeration pass (extended flags, NO -Werror; make -k test lib)
+--------------------------------------------------------------------------------------
+mkdir -p build
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c src/api/mimir_alloc.c -o build/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c src/core/mimir_core.c -o build/mimir_core.o
+src/core/mimir_core.c:1976:5: warning: no previous prototype for ‘mimir_tune_set_retention_bound’ [-Wmissing-prototypes]
+ 1976 | int mimir_tune_set_retention_bound(size_t value)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/core/mimir_core.c:1989:8: warning: no previous prototype for ‘mimir_tune_get_retention_bound’ [-Wmissing-prototypes]
+ 1989 | size_t mimir_tune_get_retention_bound(void)
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c src/platform/mimir_platform.c -o build/mimir_platform.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_smoke.c -o build/test_smoke.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_smoke.o -o build/test_smoke
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_core.c -o build/test_core.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_core.o -o build/test_core
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_b007.c -o build/test_b007.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_b007.o -o build/test_b007
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c005.c -o build/test_c005.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c005.o -o build/test_c005
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c006.c -o build/test_c006.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c006.o -o build/test_c006
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_c007.c -o build/test_c007.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c007.o -o build/test_c007
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c008.c -o build/test_c008.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c008.o -o build/test_c008
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/concurrency/test_d004.c -o build/test_d004.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_d004.o -o build/test_d004
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+src/core/mimir_core.c:1976:5: warning: no previous prototype for ‘mimir_tune_set_retention_bound’ [-Wmissing-prototypes]
+ 1976 | int mimir_tune_set_retention_bound(size_t value)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/core/mimir_core.c:1989:8: warning: no previous prototype for ‘mimir_tune_get_retention_bound’ [-Wmissing-prototypes]
+ 1989 | size_t mimir_tune_get_retention_bound(void)
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+
+SECTION B - DEBUG enumeration pass (extended flags, NO -Werror; make -k DEBUG=1 test lib-debug)
+-----------------------------------------------------------------------------------------------
+Makefile:1253: warning: overriding recipe for target 'build-debug'
+Makefile:74: warning: ignoring old recipe for target 'build-debug'
+Makefile:1256: warning: overriding recipe for target 'build-debug/mimir_alloc.o'
+Makefile:77: warning: ignoring old recipe for target 'build-debug/mimir_alloc.o'
+Makefile:1259: warning: overriding recipe for target 'build-debug/mimir_core.o'
+Makefile:80: warning: ignoring old recipe for target 'build-debug/mimir_core.o'
+Makefile:1262: warning: overriding recipe for target 'build-debug/mimir_platform.o'
+Makefile:83: warning: ignoring old recipe for target 'build-debug/mimir_platform.o'
+Makefile:1278: warning: overriding recipe for target 'build-debug/pic'
+Makefile:244: warning: ignoring old recipe for target 'build-debug/pic'
+Makefile:1281: warning: overriding recipe for target 'build-debug/pic/mimir_alloc_pic.o'
+Makefile:247: warning: ignoring old recipe for target 'build-debug/pic/mimir_alloc_pic.o'
+Makefile:1284: warning: overriding recipe for target 'build-debug/pic/mimir_core_pic.o'
+Makefile:250: warning: ignoring old recipe for target 'build-debug/pic/mimir_core_pic.o'
+Makefile:1287: warning: overriding recipe for target 'build-debug/pic/mimir_platform_pic.o'
+Makefile:253: warning: ignoring old recipe for target 'build-debug/pic/mimir_platform_pic.o'
+Makefile:1290: warning: overriding recipe for target 'build-debug/libmimiralloc.so'
+Makefile:256: warning: ignoring old recipe for target 'build-debug/libmimiralloc.so'
+mkdir -p build-debug
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -c src/api/mimir_alloc.c -o build-debug/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -c src/core/mimir_core.c -o build-debug/mimir_core.o
+src/core/mimir_core.c:1976:5: warning: no previous prototype for ‘mimir_tune_set_retention_bound’ [-Wmissing-prototypes]
+ 1976 | int mimir_tune_set_retention_bound(size_t value)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/core/mimir_core.c:1989:8: warning: no previous prototype for ‘mimir_tune_get_retention_bound’ [-Wmissing-prototypes]
+ 1989 | size_t mimir_tune_get_retention_bound(void)
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -c src/platform/mimir_platform.c -o build-debug/mimir_platform.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_smoke.c -o build-debug/test_smoke.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_smoke.o -o build-debug/test_smoke
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_core.c -o build-debug/test_core.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_core.o -o build-debug/test_core
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_b007.c -o build-debug/test_b007.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_b007.o -o build-debug/test_b007
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c005.c -o build-debug/test_c005.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c005.o -o build-debug/test_c005
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c006.c -o build-debug/test_c006.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c006.o -o build-debug/test_c006
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_c007.c -o build-debug/test_c007.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c007.o -o build-debug/test_c007
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c008.c -o build-debug/test_c008.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c008.o -o build-debug/test_c008
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/concurrency/test_d004.c -o build-debug/test_d004.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_d004.o -o build-debug/test_d004
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 1 failed
+RESULT: FAIL
+make: *** [Makefile:136: test] Error 1
+mkdir -p build-debug/pic
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build-debug/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build-debug/pic/mimir_core_pic.o
+src/core/mimir_core.c:1976:5: warning: no previous prototype for ‘mimir_tune_set_retention_bound’ [-Wmissing-prototypes]
+ 1976 | int mimir_tune_set_retention_bound(size_t value)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/core/mimir_core.c:1989:8: warning: no previous prototype for ‘mimir_tune_get_retention_bound’ [-Wmissing-prototypes]
+ 1989 | size_t mimir_tune_get_retention_bound(void)
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build-debug/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build-debug/libmimiralloc.so build-debug/pic/mimir_alloc_pic.o build-debug/pic/mimir_core_pic.o build-debug/pic/mimir_platform_pic.o -pthread
+
+SECTION C - HARDENED enumeration pass (extended flags, NO -Werror; make -k lib-hardened test-j008; HCFLAGS adds fortify/stack/format flags on top)
+--------------------------------------------------------------------------------------------------------------------------------------------------
+mkdir -p build-hardened
+mkdir -p build-hardened/pic
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build-hardened/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build-hardened/pic/mimir_core_pic.o
+src/core/mimir_core.c:1976:5: warning: no previous prototype for ‘mimir_tune_set_retention_bound’ [-Wmissing-prototypes]
+ 1976 | int mimir_tune_set_retention_bound(size_t value)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/core/mimir_core.c:1989:8: warning: no previous prototype for ‘mimir_tune_get_retention_bound’ [-Wmissing-prototypes]
+ 1989 | size_t mimir_tune_get_retention_bound(void)
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build-hardened/pic/mimir_platform_pic.o
+cc -shared -Wl,-z,relro,-z,now,-z,noexecstack -Wl,--version-script=src/api/mimir_alloc.map -o build-hardened/libmimiralloc.so build-hardened/pic/mimir_alloc_pic.o build-hardened/pic/mimir_core_pic.o build-hardened/pic/mimir_platform_pic.o -pthread
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -c src/api/mimir_alloc.c -o build-hardened/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -c src/core/mimir_core.c -o build-hardened/mimir_core.o
+src/core/mimir_core.c:1976:5: warning: no previous prototype for ‘mimir_tune_set_retention_bound’ [-Wmissing-prototypes]
+ 1976 | int mimir_tune_set_retention_bound(size_t value)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/core/mimir_core.c:1989:8: warning: no previous prototype for ‘mimir_tune_get_retention_bound’ [-Wmissing-prototypes]
+ 1989 | size_t mimir_tune_get_retention_bound(void)
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -c src/platform/mimir_platform.c -o build-hardened/mimir_platform.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIE -c tests/core/test_j008.c -o build-hardened/test_j008.o
+cc -std=c11 -Wall -Wextra -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIE -pie -Wl,-z,relro,-z,now,-z,noexecstack build-hardened/mimir_alloc.o build-hardened/mimir_core.o build-hardened/mimir_platform.o build-hardened/test_j008.o -o build-hardened/test_j008
+RESULT: PASS (25 checks, 0 failures)
+
+SECTION D - PRODUCTION gate pass AFTER FIX (extended flags WITH -Werror; clean make test lib)
+---------------------------------------------------------------------------------------------
+mkdir -p build
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c src/api/mimir_alloc.c -o build/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c src/core/mimir_core.c -o build/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c src/platform/mimir_platform.c -o build/mimir_platform.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_smoke.c -o build/test_smoke.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_smoke.o -o build/test_smoke
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_core.c -o build/test_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_core.o -o build/test_core
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_b007.c -o build/test_b007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_b007.o -o build/test_b007
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c005.c -o build/test_c005.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c005.o -o build/test_c005
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c006.c -o build/test_c006.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c006.o -o build/test_c006
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_c007.c -o build/test_c007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c007.o -o build/test_c007
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c008.c -o build/test_c008.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_c008.o -o build/test_c008
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/concurrency/test_d004.c -o build/test_d004.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/test_d004.o -o build/test_d004
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+
+SECTION E - DEBUG gate build AFTER FIX (extended flags WITH -Werror; make -k DEBUG=1 all lib-debug)
+---------------------------------------------------------------------------------------------------
+Makefile:1253: warning: overriding recipe for target 'build-debug'
+Makefile:74: warning: ignoring old recipe for target 'build-debug'
+Makefile:1256: warning: overriding recipe for target 'build-debug/mimir_alloc.o'
+Makefile:77: warning: ignoring old recipe for target 'build-debug/mimir_alloc.o'
+Makefile:1259: warning: overriding recipe for target 'build-debug/mimir_core.o'
+Makefile:80: warning: ignoring old recipe for target 'build-debug/mimir_core.o'
+Makefile:1262: warning: overriding recipe for target 'build-debug/mimir_platform.o'
+Makefile:83: warning: ignoring old recipe for target 'build-debug/mimir_platform.o'
+Makefile:1278: warning: overriding recipe for target 'build-debug/pic'
+Makefile:244: warning: ignoring old recipe for target 'build-debug/pic'
+Makefile:1281: warning: overriding recipe for target 'build-debug/pic/mimir_alloc_pic.o'
+Makefile:247: warning: ignoring old recipe for target 'build-debug/pic/mimir_alloc_pic.o'
+Makefile:1284: warning: overriding recipe for target 'build-debug/pic/mimir_core_pic.o'
+Makefile:250: warning: ignoring old recipe for target 'build-debug/pic/mimir_core_pic.o'
+Makefile:1287: warning: overriding recipe for target 'build-debug/pic/mimir_platform_pic.o'
+Makefile:253: warning: ignoring old recipe for target 'build-debug/pic/mimir_platform_pic.o'
+Makefile:1290: warning: overriding recipe for target 'build-debug/libmimiralloc.so'
+Makefile:256: warning: ignoring old recipe for target 'build-debug/libmimiralloc.so'
+mkdir -p build-debug
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -c src/api/mimir_alloc.c -o build-debug/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -c src/core/mimir_core.c -o build-debug/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -c src/platform/mimir_platform.c -o build-debug/mimir_platform.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_smoke.c -o build-debug/test_smoke.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_smoke.o -o build-debug/test_smoke
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_core.c -o build-debug/test_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_core.o -o build-debug/test_core
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_b007.c -o build-debug/test_b007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_b007.o -o build-debug/test_b007
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c005.c -o build-debug/test_c005.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c005.o -o build-debug/test_c005
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c006.c -o build-debug/test_c006.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c006.o -o build-debug/test_c006
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/contract/test_c007.c -o build-debug/test_c007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c007.o -o build-debug/test_c007
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/core/test_c008.c -o build-debug/test_c008.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_c008.o -o build-debug/test_c008
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -c tests/concurrency/test_d004.c -o build-debug/test_d004.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion build-debug/mimir_alloc.o build-debug/mimir_core.o build-debug/mimir_platform.o build-debug/test_d004.o -o build-debug/test_d004
+mkdir -p build-debug/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build-debug/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build-debug/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -DMIMIR_DEBUG=1 -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build-debug/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build-debug/libmimiralloc.so build-debug/pic/mimir_alloc_pic.o build-debug/pic/mimir_core_pic.o build-debug/pic/mimir_platform_pic.o -pthread
+
+SECTION F - HARDENED gate pass AFTER FIX (extended flags WITH -Werror; clean make lib-hardened test-j008)
+---------------------------------------------------------------------------------------------------------
+mkdir -p build-hardened
+mkdir -p build-hardened/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build-hardened/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build-hardened/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build-hardened/pic/mimir_platform_pic.o
+cc -shared -Wl,-z,relro,-z,now,-z,noexecstack -Wl,--version-script=src/api/mimir_alloc.map -o build-hardened/libmimiralloc.so build-hardened/pic/mimir_alloc_pic.o build-hardened/pic/mimir_core_pic.o build-hardened/pic/mimir_platform_pic.o -pthread
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -c src/api/mimir_alloc.c -o build-hardened/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -c src/core/mimir_core.c -o build-hardened/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -c src/platform/mimir_platform.c -o build-hardened/mimir_platform.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIE -c tests/core/test_j008.c -o build-hardened/test_j008.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security -fPIE -pie -Wl,-z,relro,-z,now,-z,noexecstack build-hardened/mimir_alloc.o build-hardened/mimir_core.o build-hardened/mimir_platform.o build-hardened/test_j008.o -o build-hardened/test_j008
+RESULT: PASS (25 checks, 0 failures)
+
+SECTION G - RESULTS SUMMARY (all read back from the logs above)
+- Enumeration totals (compiler 'warning:' lines / unique):
+  production 4 / 2 ; debug 4 compiler + 18 GNU-make recipe
+  warnings / 2 unique compiler ; hardened 4 / 2.
+  The 2 unique warnings in EVERY flavour are the same pair:
+  src/core/mimir_core.c:1976 mimir_tune_set_retention_bound and
+  src/core/mimir_core.c:1989 mimir_tune_get_retention_bound,
+  -Wmissing-prototypes. Each appears once per compilation of
+  mimir_core.c in the flavour (normal + PIC objects).
+  -Wconversion, -Wshadow, -Wstrict-prototypes, -Wundef and
+  -Wdouble-promotion produced ZERO warnings in every flavour
+  across all library and test translation units compiled.
+- GNU-make warnings (DEBUG=1 only): 18 'overriding recipe' /
+  'ignoring old recipe' lines for build-debug targets. Proven
+  TOOL NOISE: a stock-flags dry run (make DEBUG=1 -n lib-debug,
+  no extended flags, no fix involved) prints the same 18 lines;
+  they come from the Makefile's J-005 section defining
+  build-debug targets that the generic section also defines
+  when BUILD=build-debug. Not compiler warnings; not caused
+  by this sweep; pre-existing at base.
+- Debug enumeration runtime note: 'make DEBUG=1 test' stops at
+  test_b007 CHECKS: 69 run, 1 failed - the failing check is
+  C1.4 span form, named divergence INC-J004-02 (banked: three
+  checks encode production layout arithmetic and diverge under
+  debug BY DESIGN). Debug grading is by test-debug (below),
+  per the Makefile's own J-004 comment.
+- FIX (slice headline, REAL DEFECT): prototypes for the tune
+  pair added to src/core/mimir_core.h (+21 lines, comment
+  included). See doc S5. No other file changed by the fix.
+- GATE passes AFTER FIX, all with -Werror + full extended set:
+  production: exit 0, 0 warnings, make test CHECKS: 4590 run,
+  0 failed; nm -D --defined-only build/libmimiralloc.so =
+  exactly 4 (mimir_calloc, mimir_free, mimir_malloc,
+  mimir_realloc).
+  debug: build exit 0, 0 compiler warnings (18 make recipe
+  lines as above); make DEBUG=1 test-debug exits: smoke 0,
+  core 0, b007 1, c005 0, c006 1, c007 0, c008 0, d004 0,
+  j004 0 - b007/c006 are the INC-J004-02 by-design divergences,
+  no aborts; nm -D on build-debug/libmimiralloc.so = 4.
+  hardened: exit 0, 0 warnings; test_j008 RESULT: PASS
+  (25 checks, 0 failures); nm -D on
+  build-hardened/libmimiralloc.so = 4.
+- Stock-flags regression AFTER FIX: clean make test with the
+  Makefile's own CFLAGS: exit 0, CHECKS: 4590 run, 0 failed.
+- Samtal after all runs: http://127.0.0.1:8787/ = 200.
+

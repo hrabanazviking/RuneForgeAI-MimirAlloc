@@ -92,6 +92,27 @@ size_t mimir_core_retained_spans(void);
 size_t mimir_core_retained_bytes(void);
 size_t mimir_core_mapped_bytes(void);
 
+/* G-007 tuning pair (docs/PHASE_7_TUNING_PARAMETERS_G007.md):
+ * the per-class empty-span retention bound setter/getter,
+ * defined in mimir_core.c over the one locked scalar.
+ * Internal only, INC-E001-07 shape (b) exactly like the
+ * drain and trim above: NOT part of the public surface in
+ * include/mimir_alloc.h, bound local in the shared library
+ * (nm -D stays exactly 4); the test-only redeclaration is
+ * tests/core/mimir_tune_g007.h. Declared HERE as well since
+ * M-003 (Phase 13 warning-gates sweep,
+ * docs/PHASE_13_WARNING_GATES_M003.md): until M-003 the
+ * defining translation unit saw no prototype for either
+ * function (-Wmissing-prototypes, gcc 12.2), so a signature
+ * drift between mimir_core.c and the test-only header would
+ * have compiled and linked silently - C binds by name only.
+ * Valid range 0..16 (MIMIR_RETENTION_MAX in mimir_core.c);
+ * setter returns 0 ok, -1 out of range (nothing changed),
+ * -2 lock failure (nothing changed); getter returns
+ * (size_t)-1 only if the lock cannot be taken. */
+int mimir_tune_set_retention_bound(size_t value);
+size_t mimir_tune_get_retention_bound(void);
+
 /* J-002 statistics snapshot (docs/PHASE_10_STATISTICS.md;
  * roadmap Phase 10; quantities in the I-002 vocabulary of
  * docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3.2/S4.1).
