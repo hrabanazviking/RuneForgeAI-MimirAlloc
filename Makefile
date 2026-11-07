@@ -1421,3 +1421,29 @@ bench-j008: $(BUILD)/bench_j008 $(HARD)/bench_j008
 	@echo hardened+stats; ./$(HARD)/bench_j008 stats
 
 .PHONY: lib-hardened test-j008 bench-j008
+
+# K-002: Phase 11 baseline benchmark suite - one harness
+# source (tests/perf/bench_k002.c) built twice: glibc leg
+# (-DLEG_GLIBC, stdlib malloc/free) and MimirAlloc leg
+# (banked LIBOBJS). Standalone via `make bench-k002`:
+# it is NOT part of `make test`. The driver object is
+# compiled -O2 (bench_j008 precedent); the allocator
+# objects stay exactly the production build. The runner
+# executes >= 5 repetitions per leg as separate processes.
+$(BUILD)/bench_k002_glibc.o: tests/perf/bench_k002.c | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -DLEG_GLIBC -c tests/perf/bench_k002.c -o $@
+
+$(BUILD)/bench_k002_glibc: $(BUILD)/bench_k002_glibc.o
+	$(CC) $(CFLAGS) -O2 $(BUILD)/bench_k002_glibc.o -o $@
+
+$(BUILD)/bench_k002_mimir.o: tests/perf/bench_k002.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -c tests/perf/bench_k002.c -o $@
+
+$(BUILD)/bench_k002_mimir: $(LIBOBJS) $(BUILD)/bench_k002_mimir.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/bench_k002_mimir.o -o $@
+
+bench-k002: $(BUILD)/bench_k002_glibc $(BUILD)/bench_k002_mimir
+	./tests/perf/run_bench_k002.sh /tmp/k002_raw.txt 7
+	python3 tests/perf/summarize_k002.py /tmp/k002_raw.txt
+
+.PHONY: bench-k002

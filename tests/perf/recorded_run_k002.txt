@@ -1,0 +1,82 @@
+2026-11-07T10:38:55-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+governor=ondemand
+thermal_millidegC=57850
+16384
+ldd (Debian GLIBC 2.36-9+rpt2+deb12u14) 2.36
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+ 10:38:55 up 19 days,  3:52,  4 users,  load average: 1.36, 1.27, 1.21
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+RAW_TABLE_BEGIN
+glibc,small_churn,100000,2134960,46839285.0,21.35,12756656
+glibc,mixed_batch,256000,11161928,22935105.8,43.60,34727552
+glibc,large_batch,9600,15006775,639711.1,1563.21,1106008
+glibc,mixed_lifecycle,307200,16181902,18984171.3,52.68,40359936
+mimiralloc,small_churn,100000,38335537,2608545.7,383.36,12756656
+mimiralloc,mixed_batch,256000,166902908,1533825.9,651.96,34727552
+mimiralloc,large_batch,9600,72646951,132145.9,7567.39,1106008
+mimiralloc,mixed_lifecycle,307200,1117532431,274891.4,3637.80,40359936
+glibc,small_churn,100000,2090535,47834645.2,20.91,12756656
+glibc,mixed_batch,256000,11803353,21688752.3,46.11,34727552
+glibc,large_batch,9600,16848976,569767.6,1755.10,1106008
+glibc,mixed_lifecycle,307200,17723122,17333289.2,57.69,40359936
+mimiralloc,small_churn,100000,40605460,2462723.0,406.05,12756656
+mimiralloc,mixed_batch,256000,171542364,1492342.7,670.09,34727552
+mimiralloc,large_batch,9600,74854911,128248.1,7797.39,1106008
+mimiralloc,mixed_lifecycle,307200,974025137,315392.3,3170.65,40359936
+glibc,small_churn,100000,2258163,44283782.9,22.58,12756656
+glibc,mixed_batch,256000,11347836,22559367.3,44.33,34727552
+glibc,large_batch,9600,13874461,691918.8,1445.26,1106008
+glibc,mixed_lifecycle,307200,17668142,17387227.2,57.51,40359936
+mimiralloc,small_churn,100000,38426889,2602344.4,384.27,12756656
+mimiralloc,mixed_batch,256000,165607096,1545827.5,646.90,34727552
+mimiralloc,large_batch,9600,70617751,135943.2,7356.02,1106008
+mimiralloc,mixed_lifecycle,307200,1002342318,306482.1,3262.83,40359936
+glibc,small_churn,100000,2108423,47428812.9,21.08,12756656
+glibc,mixed_batch,256000,11170021,22918488.7,43.63,34727552
+glibc,large_batch,9600,13379018,717541.5,1393.65,1106008
+glibc,mixed_lifecycle,307200,15926737,19288320.0,51.84,40359936
+mimiralloc,small_churn,100000,38438537,2601555.8,384.39,12756656
+mimiralloc,mixed_batch,256000,164502208,1556210.1,642.59,34727552
+mimiralloc,large_batch,9600,72529747,132359.5,7555.18,1106008
+mimiralloc,mixed_lifecycle,307200,959053362,320315.9,3121.92,40359936
+glibc,small_churn,100000,2108108,47435899.9,21.08,12756656
+glibc,mixed_batch,256000,11133244,22994196.5,43.49,34727552
+glibc,large_batch,9600,13241536,724991.4,1379.33,1106008
+glibc,mixed_lifecycle,307200,16067310,19119566.4,52.30,40359936
+mimiralloc,small_churn,100000,38291445,2611549.4,382.91,12756656
+mimiralloc,mixed_batch,256000,166751409,1535219.4,651.37,34727552
+mimiralloc,large_batch,9600,86771338,110635.6,9038.68,1106008
+mimiralloc,mixed_lifecycle,307200,1260095170,243791.1,4101.87,40359936
+glibc,small_churn,100000,2472959,40437387.0,24.73,12756656
+glibc,mixed_batch,256000,11615613,22039301.8,45.37,34727552
+glibc,large_batch,9600,13820851,694602.7,1439.67,1106008
+glibc,mixed_lifecycle,307200,17282938,17774755.7,56.26,40359936
+mimiralloc,small_churn,100000,38474000,2599157.9,384.74,12756656
+mimiralloc,mixed_batch,256000,164475819,1556459.8,642.48,34727552
+mimiralloc,large_batch,9600,86127376,111462.8,8971.60,1106008
+mimiralloc,mixed_lifecycle,307200,1058298219,290277.3,3444.98,40359936
+glibc,small_churn,100000,2111534,47358934.3,21.12,12756656
+glibc,mixed_batch,256000,11145206,22969517.1,43.54,34727552
+glibc,large_batch,9600,13255648,724219.6,1380.80,1106008
+glibc,mixed_lifecycle,307200,15929125,19285428.4,51.85,40359936
+mimiralloc,small_churn,100000,38279445,2612368.1,382.79,12756656
+mimiralloc,mixed_batch,256000,165135281,1550244.1,645.06,34727552
+mimiralloc,large_batch,9600,80385106,119425.1,8373.45,1106008
+mimiralloc,mixed_lifecycle,307200,1055335353,291092.3,3435.34,40359936
+RAW_TABLE_END
+SUMMARY_BEGIN
+leg         workload         reps      med_ops_s      min_ops_s      max_ops_s  med_ns_op  min_ns_op  max_ns_op
+glibc       large_batch         7       694602.7       569767.6       724991.4    1439.67    1379.33    1755.10
+glibc       mixed_batch         7     22918488.7     21688752.3     22994196.5      43.63      43.49      46.11
+glibc       mixed_lifecycle     7     18984171.3     17333289.2     19288320.0      52.68      51.84      57.69
+glibc       small_churn         7     47358934.3     40437387.0     47834645.2      21.12      20.91      24.73
+mimiralloc  large_batch         7       128248.1       110635.6       135943.2    7797.39    7356.02    9038.68
+mimiralloc  mixed_batch         7      1545827.5      1492342.7      1556459.8     646.90     642.48     670.09
+mimiralloc  mixed_lifecycle     7       291092.3       243791.1       320315.9    3435.34    3121.92    4101.87
+mimiralloc  small_churn         7      2602344.4      2462723.0      2612368.1     384.27     382.79     406.05
+SUMMARY_END
+ 10:39:05 up 19 days,  3:53,  4 users,  load average: 1.69, 1.34, 1.23
+samtal_http=200
