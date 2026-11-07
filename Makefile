@@ -1479,3 +1479,31 @@ bench-k005: $(BUILD)/bench_k005
 	./tests/perf/run_bench_k005.sh /tmp/k005_raw.txt 7
 	python3 tests/perf/summarize_k005.py /tmp/k005_raw.txt
 .PHONY: bench-k005
+
+# K-006: false-sharing + concurrency-scaling probe
+# (docs/PHASE_11_FALSE_SHARING_SCALING.md). One source, two
+# binaries (bench_k002 pattern): -DLEG_GLIBC and the shipped
+# -O2 mimir leg. Standalone via `make bench-k006` (7 fresh-
+# process reps); `make test-k006` is the 1-rep smoke form.
+# Neither is part of `make test`.
+$(BUILD)/bench_k006_glibc.o: tests/perf/probe_k006.c | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -DLEG_GLIBC -c tests/perf/probe_k006.c -o $@
+
+$(BUILD)/bench_k006_glibc: $(BUILD)/bench_k006_glibc.o
+	$(CC) $(CFLAGS) -O2 $(BUILD)/bench_k006_glibc.o -o $@
+
+$(BUILD)/bench_k006_mimir.o: tests/perf/probe_k006.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -c tests/perf/probe_k006.c -o $@
+
+$(BUILD)/bench_k006_mimir: $(LIBOBJS) $(BUILD)/bench_k006_mimir.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/bench_k006_mimir.o -o $@
+
+bench-k006: $(BUILD)/bench_k006_glibc $(BUILD)/bench_k006_mimir
+	./tests/perf/run_bench_k006.sh /tmp/k006_raw.txt 7
+	python3 tests/perf/summarize_k006.py /tmp/k006_raw.txt
+
+test-k006: $(BUILD)/bench_k006_glibc $(BUILD)/bench_k006_mimir
+	./tests/perf/run_bench_k006.sh /tmp/k006_smoke.txt 1
+	python3 tests/perf/summarize_k006.py /tmp/k006_smoke.txt
+
+.PHONY: bench-k006 test-k006
