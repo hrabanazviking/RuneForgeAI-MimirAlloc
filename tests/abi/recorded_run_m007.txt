@@ -1,0 +1,298 @@
+RECORDED RUN - slice M-007 (Wave 13, Phase 13): versioning, SONAME/install,
+checksum-verified artifacts, reproducible build.
+Device: Raspberry Pi Mimir (purpleviking1), user pi. All commands ran in
+the worktree /home/pi/mimiralloc-team-07 on branch yrsa/mimiralloc-07.
+Worktree HEAD during artifact cutting: 6b312e3197cdb2e491ab0ffa24a4ba8ab95a1b17
+(the base; slice files uncommitted in the worktree, listed in section 1).
+Artifacts were cut from this exact worktree state; the committed-file
+hashes in section 9 tie the staging artifacts to the slice commit.
+Staging custody (ephemeral /tmp on the Pi, left in place):
+  build 1: /tmp/m007-release-0.1.0   build 2: /tmp/m007-release2-0.1.0
+  staged install: /tmp/m007-stage-install   extraction: /tmp/m007-verify
+No binary, archive or tarball is committed; durability is re-cutting from
+the committed tree by docs/REPRODUCIBLE_BUILD.md (assignment Section 6).
+
+======================================================================
+SECTION 1 - BASELINE AND OWED-STATE EVIDENCE (assignment method step 3)
+======================================================================
+date: 2026-11-07T16:17:25-05:00
+HEAD: 6b312e3197cdb2e491ab0ffa24a4ba8ab95a1b17
+branch: yrsa/mimiralloc-07
+ M Makefile
+?? VERSION
+?? build/
+?? docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md
+?? docs/REPRODUCIBLE_BUILD.md
+?? hidden_files/
+--- free -g (start)
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+--- Samtal HTTP (start)
+200
+--- compiler
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+aarch64
+--- base Makefile owed-state grep
+0
+no ^install rule at base
+--- version script (base, unchanged by this slice)
+{
+  global:
+    mimir_malloc;
+    mimir_free;
+    mimir_calloc;
+    mimir_realloc;
+  local:
+    *;
+};
+--- tree release-artifact listing at base state
+LICENSE
+VERSION
+ls: cannot access 'SECURITY.md': No such file or directory
+ls: cannot access 'SBOM': No such file or directory
+ls: cannot access 'release': No such file or directory
+
+======================================================================
+SECTION 2 - REGRESSION GATE: make clean && make test (final tree)
+Full log retained on the Pi at /tmp/m007/final/02_make_test.log during
+the run; decisive lines:
+======================================================================
+CHECKS: 4590 run, 0 failed
+test_exit=0
+
+======================================================================
+SECTION 3 - BUILD 1: make lib lib-versioned static-lib; symbols; SONAME
+Build log tail (full log: /tmp/m007/final/03_build1.log during the run):
+======================================================================
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -Wl,-soname,libmimiralloc.so.0 -o build/libmimiralloc.so.0.1.0 build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+ln -sf libmimiralloc.so.0.1.0 build/libmimiralloc.so.0
+ar rcs build/libmimiralloc.a build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o
+--- nm -D --defined-only build/libmimiralloc.so.0.1.0
+0000000000000b90 T mimir_calloc
+0000000000000b60 T mimir_free
+0000000000000b30 T mimir_malloc
+0000000000000bd0 T mimir_realloc
+count: 4
+--- readelf -d SONAME (versioned)
+ 0x000000000000000e (SONAME)             Library soname: [libmimiralloc.so.0]
+--- readelf -d SONAME (banked unversioned, for contrast)
+0
+--- build dir lib listing
+-rw-r--r--  1 pi pi 27196 Nov  7 16:17 libmimiralloc.a
+-rwxr-xr-x  1 pi pi 74528 Nov  7 16:17 libmimiralloc.so
+lrwxrwxrwx  1 pi pi    22 Nov  7 16:17 libmimiralloc.so.0 -> libmimiralloc.so.0.1.0
+-rwxr-xr-x  1 pi pi 74528 Nov  7 16:17 libmimiralloc.so.0.1.0
+
+======================================================================
+SECTION 4 - CONSUMER GATE (i): STAGED INSTALL + CONSUMER PROOF
+======================================================================
+install -d /tmp/m007-stage-install/usr/local/lib /tmp/m007-stage-install/usr/local/include
+install -m 0755 build/libmimiralloc.so.0.1.0 /tmp/m007-stage-install/usr/local/lib/libmimiralloc.so.0.1.0
+ln -sf libmimiralloc.so.0.1.0 /tmp/m007-stage-install/usr/local/lib/libmimiralloc.so.0
+ln -sf libmimiralloc.so.0 /tmp/m007-stage-install/usr/local/lib/libmimiralloc.so
+install -m 0644 include/mimir_alloc.h /tmp/m007-stage-install/usr/local/include/mimir_alloc.h
+install_exit=0
+--- staged install tree
+/tmp/m007-stage-install
+/tmp/m007-stage-install/usr
+/tmp/m007-stage-install/usr/local
+/tmp/m007-stage-install/usr/local/include
+/tmp/m007-stage-install/usr/local/include/mimir_alloc.h
+/tmp/m007-stage-install/usr/local/lib
+/tmp/m007-stage-install/usr/local/lib/libmimiralloc.so
+/tmp/m007-stage-install/usr/local/lib/libmimiralloc.so.0
+/tmp/m007-stage-install/usr/local/lib/libmimiralloc.so.0.1.0
+total 40
+drwxr-xr-x 2 pi pi  4096 Nov  7 16:17 .
+drwxr-xr-x 4 pi pi  4096 Nov  7 16:17 ..
+lrwxrwxrwx 1 pi pi    18 Nov  7 16:17 libmimiralloc.so -> libmimiralloc.so.0
+lrwxrwxrwx 1 pi pi    22 Nov  7 16:17 libmimiralloc.so.0 -> libmimiralloc.so.0.1.0
+-rwxr-xr-x 1 pi pi 74528 Nov  7 16:17 libmimiralloc.so.0.1.0
+--- consumer compile vs staged install
+compile_exit=0
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so.0]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+E-004 independent binding-proof consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(96) returns non-NULL
+PASS second mimir_malloc(96) returns non-NULL
+PASS mimir_malloc(96) aligned to _Alignof(max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(12, 16) returns non-NULL
+PASS mimir_calloc(12, 16) storage reads zero at return
+PASS mimir_realloc(block, 640) grow returns non-NULL
+PASS mimir_realloc grow preserves first 192 bytes
+PASS mimir_realloc(block, 40) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 40 bytes
+PASS mimir_realloc(NULL, 56) returns non-NULL
+PASS mimir_realloc(NULL, 56) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-NULL
+PASS mimir_malloc(72) storage writable over full extent
+E004 19/19 checks passed
+RESULT: PASS
+consumer_staged_exit=0
+
+======================================================================
+SECTION 5 - BUILD 1 ARTIFACTS (staging /tmp/m007-release-0.1.0)
+Tarball file-list command as executed (docs/REPRODUCIBLE_BUILD.md step 4):
+  git ls-files | grep -v -e ^release/SHA256SUMS$ -e
+    ^tests/abi/recorded_run_m007.txt$ > /tmp/m007-filelist.txt
+  printf (one per line) VERSION,
+    docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md,
+    docs/REPRODUCIBLE_BUILD.md >> /tmp/m007-filelist.txt
+  LC_ALL=C sort -u -o /tmp/m007-filelist.txt /tmp/m007-filelist.txt
+  LC_ALL=C TZ=UTC tar --sort=name --owner=0 --group=0 --numeric-owner
+    --mtime=@1794084216 -cf - -T /tmp/m007-filelist.txt | gzip -n
+======================================================================
+filelist lines: 435
+--- build 1 staging listing
+total 33504
+drwxr-xr-x   2 pi   pi       4096 Nov  7 16:18 .
+drwxrwxrwt 557 root root   356352 Nov  7 16:17 ..
+-rw-r--r--   1 pi   pi      27196 Nov  7 16:17 libmimiralloc-0.1.0.a
+-rwxr-xr-x   1 pi   pi      74528 Nov  7 16:17 libmimiralloc.so.0.1.0
+-rw-r--r--   1 pi   pi   33868811 Nov  7 16:18 mimiralloc-0.1.0.tar.gz
+-rw-r--r--   1 pi   pi       7951 Nov  7 16:17 mimir_alloc.h
+-rw-r--r--   1 pi   pi        347 Nov  7 16:18 SHA256SUMS
+--- build 1 SHA256SUMS
+411450c32a03e7a91735e1edc2f659f5a3d570d09e3b83dc5a7c7597f916311a  libmimiralloc.so.0.1.0
+09fd7009bbd57c18f0eda06d05d8b27e0aa369f401d4aa24b5ac3b9ebfd82f00  libmimiralloc-0.1.0.a
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  mimir_alloc.h
+48bf1f4b235224231d5a8dde5dd130a981d71ea71d40b01265526d53356e67e6  mimiralloc-0.1.0.tar.gz
+
+======================================================================
+SECTION 6 - VERIFY FROM CLEAN EXTRACTION + CONSUMER GATE (ii)
+Directory /tmp/m007-verify; sha256sum -c, then the E-004 consumer
+linked by path against the extracted libmimiralloc.so.0.1.0 and run
+with the extraction directory providing the libmimiralloc.so.0 name.
+======================================================================
+libmimiralloc.so.0.1.0: OK
+libmimiralloc-0.1.0.a: OK
+mimir_alloc.h: OK
+mimiralloc-0.1.0.tar.gz: OK
+sha256sum_c_exit=0
+compile_exit=0
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so.0]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+E-004 independent binding-proof consumer (dynamic, libmimiralloc.so)
+PASS mimir_malloc(96) returns non-NULL
+PASS second mimir_malloc(96) returns non-NULL
+PASS mimir_malloc(96) aligned to _Alignof(max_align_t)
+PASS two live malloc blocks are distinct
+PASS live malloc blocks hold distinct patterns undisturbed
+PASS mimir_calloc(12, 16) returns non-NULL
+PASS mimir_calloc(12, 16) storage reads zero at return
+PASS mimir_realloc(block, 640) grow returns non-NULL
+PASS mimir_realloc grow preserves first 192 bytes
+PASS mimir_realloc(block, 40) shrink returns non-NULL
+PASS mimir_realloc shrink preserves first 40 bytes
+PASS mimir_realloc(NULL, 56) returns non-NULL
+PASS mimir_realloc(NULL, 56) storage writable over full extent
+PASS mimir_malloc(SIZE_MAX) returns NULL (oversize refusal)
+PASS mimir_calloc(SIZE_MAX, 2) returns NULL (overflow refusal)
+PASS mimir_free(NULL) returns normally (defined no-op)
+PASS mimir_free of live malloc blocks returns normally
+PASS mimir_malloc(72) after frees returns non-NULL
+PASS mimir_malloc(72) storage writable over full extent
+E004 19/19 checks passed
+RESULT: PASS
+consumer_extracted_exit=0
+
+======================================================================
+SECTION 7 - BUILD 2 (SECOND FULL CLEAN BUILD) AND COMPARISON TABLE
+Build 2 log tail (full log: /tmp/m007/final/07_build2.log during run):
+======================================================================
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -c src/api/mimir_alloc.c -o build/mimir_alloc.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -c src/core/mimir_core.c -o build/mimir_core.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -c src/platform/mimir_platform.c -o build/mimir_platform.o
+ar rcs build/libmimiralloc.a build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o
+--- build 2 SHA256SUMS
+411450c32a03e7a91735e1edc2f659f5a3d570d09e3b83dc5a7c7597f916311a  libmimiralloc.so.0.1.0
+09fd7009bbd57c18f0eda06d05d8b27e0aa369f401d4aa24b5ac3b9ebfd82f00  libmimiralloc-0.1.0.a
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  mimir_alloc.h
+48bf1f4b235224231d5a8dde5dd130a981d71ea71d40b01265526d53356e67e6  mimiralloc-0.1.0.tar.gz
+--- comparison build1 vs build2 (diff of SHA256SUMS)
+RESULT: all 4 artifacts byte-identical
+--- per-artifact table
+libmimiralloc.so.0.1.0 IDENTICAL 411450c32a03e7a91735e1edc2f659f5a3d570d09e3b83dc5a7c7597f916311a
+libmimiralloc-0.1.0.a IDENTICAL 09fd7009bbd57c18f0eda06d05d8b27e0aa369f401d4aa24b5ac3b9ebfd82f00
+mimir_alloc.h IDENTICAL 55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772
+mimiralloc-0.1.0.tar.gz IDENTICAL 48bf1f4b235224231d5a8dde5dd130a981d71ea71d40b01265526d53356e67e6
+
+======================================================================
+SECTION 8 - INC-M007-01 NOTE (draft-procedure runs, discarded)
+======================================================================
+Before the final procedure above, a first pair of clean builds was
+run under the first draft of docs/REPRODUCIBLE_BUILD.md (plain
+git ls-files list generation). Those two builds were byte-identical
+to each other (shared library 411450c3..., archive 09fd7009...,
+header 55107f05..., tarball 7b7215c6...), but the draft instructions
+would have produced a different tarball when re-run from the
+committed tree, so the draft was fixed (INC-M007-01 in the decision
+record), the draft staging directories were deleted, and the full
+procedure was re-run as recorded in sections 2-7. The binary and
+header hashes are unchanged between draft and final procedures;
+only the tarball differs (documentation content changed).
+
+======================================================================
+SECTION 9 - IN-TREE CHECKSUM FILE AND COMMITTED-FILE HASHES
+======================================================================
+staging SHA256SUMS sha256: 7345290dc40eb6d5b63c1a72b2e72b5fc1ac4cd4ead485d55d22988a6fadc61c
+in-tree release/SHA256SUMS sha256: 7345290dc40eb6d5b63c1a72b2e72b5fc1ac4cd4ead485d55d22988a6fadc61c
+BYTE-IDENTICAL
+--- committed-file hashes (worktree, pre-commit)
+e9dd8507f4bf0c6f42458e41aea833ad0bd3f6127272335eee9bf4d58541ed67  VERSION
+b64215f10b842346df86a745dc435c62b08780d13772b7cb7141f75076d5f7f5  docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md
+060f6e252b12a34f123cd1031fd1efa5fd109ac6ecdd873d3b3f9522dd336d46  docs/REPRODUCIBLE_BUILD.md
+c6add2f5db45b67340140915274bd760dd228c95b5c4a9f7c9c48b545521b63a  Makefile
+7345290dc40eb6d5b63c1a72b2e72b5fc1ac4cd4ead485d55d22988a6fadc61c  release/SHA256SUMS
+--- committed-file sizes/lines
+    1     6 VERSION
+  318 17336 docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md
+  119  5484 docs/REPRODUCIBLE_BUILD.md
+ 1611 74122 Makefile
+    4   347 release/SHA256SUMS
+ 2053 97295 total
+--- purity: README diff vs base (lines)
+0
+--- purity: .c files in diff
+0
+0
+ M Makefile
+?? VERSION
+?? build/
+?? docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md
+?? docs/REPRODUCIBLE_BUILD.md
+?? hidden_files/
+?? release/
+
+The sha256 of this recorded run itself is not listed above (a file
+cannot carry its own hash); it is stated in the slice completion
+report. src/api/mimir_alloc.map is NOT modified by this slice
+(D2 retains the anonymous node), so it is not a committed file.
+
+======================================================================
+SECTION 10 - HEALTH CLOSE-OUT
+======================================================================
+date: 2026-11-07T16:19:42-05:00
+--- Samtal HTTP (end)
+200
+--- free -g (end)
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+--- leftover build processes
+none
+--- staging custody left in place
+/tmp/m007-release-0.1.0
+/tmp/m007-release2-0.1.0
+/tmp/m007-stage-install
+/tmp/m007-verify

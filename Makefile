@@ -1570,3 +1570,42 @@ test-fuzz-m004: $(BUILD)/fuzz_m004
 	./tests/fuzz/run_fuzz_m004.sh ./$(BUILD)/fuzz_m004
 
 .PHONY: test-fuzz-m004
+
+# M-007 (Phase 13): versioning, SONAME and install - see
+# docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md (decisions
+# D1-D5) and docs/REPRODUCIBLE_BUILD.md. Purely additive:
+# the banked lib/static-lib/test targets above are untouched;
+# the versioned library is built from the same PIC objects
+# alongside build/libmimiralloc.so. ABI_EPOCH is the D2 ABI
+# version (the SONAME integer); MIMIR_VERSION comes from the
+# VERSION file at the repository root (D1).
+MIMIR_VERSION := $(shell cat VERSION)
+ABI_EPOCH     := 0
+VLIB          = $(BUILD)/libmimiralloc.so.$(MIMIR_VERSION)
+VSONAME       = libmimiralloc.so.$(ABI_EPOCH)
+PREFIX        ?= /usr/local
+LIBDIR        = $(PREFIX)/lib
+INCLUDEDIR    = $(PREFIX)/include
+
+$(VLIB): $(PICOBJS) $(MAPFILE) VERSION | $(BUILD)
+	$(CC) -shared -Wl,--version-script=$(MAPFILE) -Wl,-soname,$(VSONAME) -o $@ $(PICOBJS) -pthread
+
+$(BUILD)/$(VSONAME): $(VLIB)
+	ln -sf libmimiralloc.so.$(MIMIR_VERSION) $@
+
+lib-versioned: $(VLIB) $(BUILD)/$(VSONAME)
+
+print-version:
+	@echo $(MIMIR_VERSION)
+
+install: $(VLIB) include/mimir_alloc.h
+	install -d $(DESTDIR)$(LIBDIR) $(DESTDIR)$(INCLUDEDIR)
+	install -m 0755 $(VLIB) $(DESTDIR)$(LIBDIR)/libmimiralloc.so.$(MIMIR_VERSION)
+	ln -sf libmimiralloc.so.$(MIMIR_VERSION) $(DESTDIR)$(LIBDIR)/$(VSONAME)
+	ln -sf $(VSONAME) $(DESTDIR)$(LIBDIR)/libmimiralloc.so
+	install -m 0644 include/mimir_alloc.h $(DESTDIR)$(INCLUDEDIR)/mimir_alloc.h
+ifeq ($(DESTDIR),)
+	ldconfig $(LIBDIR) 2>/dev/null || true
+endif
+
+.PHONY: lib-versioned print-version install
