@@ -1,0 +1,76 @@
+=== M-005 recorded run ===
+2026-11-07T15:42:29-05:00
+aarch64
+721e518eea707ed6f790e2ea98704628fb037e8c
+--- free -g (start) ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+--- build libmimiralloc.so ---
+make lib exit=0
+0000000000000b80 T mimir_calloc
+0000000000000b50 T mimir_free
+0000000000000b20 T mimir_malloc
+0000000000000bc0 T mimir_realloc
+nm -D defined count=4
+--- build probe_m005 ---
+build exit=0
+1dd1dc46effaf0153a54ddc149f9c4990289f01735bca2c78b0471008e155fbd  tests/perf/probe_m005.c
+1b80564b75cf2c5d38e1ff5bd88d22be8294c00811631ded39ee202a9892c18f  tests/perf/run_m005.sh
+8d449974d0f21dd67fd34518a00d4a276a4ca5079344f817d76f172ec2c80d91  /tmp/probe_m005
+ad37290e65e81233c3a16577d01453b04e8c6b1b380530ee7b8f3ebd23552772  build/libmimiralloc.so
+--- main leg (timeout 900) ---
+probe_m005 main leg: cycles=10 ops_per_cycle=20000 slots=256 pace_s=10 bound: wall<=1200s design, runner timeout 900s
+observables: mimir_core_stats_snapshot{bytes_cached,bytes_mapped,live_small_objects,live_mappings,live_spans,peak_mapped,alloc_failures} via tests/core/mimir_stats_j002.h; mimir_core_retained_spans/bytes + mimir_core_trim_retained via tests/core/mimir_trim_i003.h; VmRSS via /proc/self/status
+CYCLE 1 ops=15952 checks=19783 live_high_water=2877248 pre_trim_retained_spans=21 pre_trim_retained_bytes=344064 trim_released=21 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6356992 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 1 band_verdict=baseline
+PACE sleep 10s before cycle 2
+CYCLE 2 ops=16018 checks=19740 live_high_water=2752608 pre_trim_retained_spans=21 pre_trim_retained_bytes=344064 trim_released=21 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6356992 alloc_failures=0 rss_kb=1392 result=ok
+BAND derived from cycles 1-2: post_mapped<=16384 (base 0 + 1 page 16384), post_rss_kb<=1904 (base 1392 + 512), post_retained_bytes==0; band fixed, never widened
+CYCLE 2 band_verdict=baseline
+PACE sleep 10s before cycle 3
+CYCLE 3 ops=15892 checks=19899 live_high_water=2948736 pre_trim_retained_spans=19 pre_trim_retained_bytes=311296 trim_released=19 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6897664 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 3 band_verdict=within_band
+PACE sleep 10s before cycle 4
+CYCLE 4 ops=15974 checks=19750 live_high_water=3158352 pre_trim_retained_spans=22 pre_trim_retained_bytes=360448 trim_released=22 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6963200 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 4 band_verdict=within_band
+PACE sleep 10s before cycle 5
+CYCLE 5 ops=15878 checks=19672 live_high_water=2713424 pre_trim_retained_spans=21 pre_trim_retained_bytes=344064 trim_released=21 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6963200 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 5 band_verdict=within_band
+PACE sleep 10s before cycle 6
+CYCLE 6 ops=15928 checks=19756 live_high_water=2968432 pre_trim_retained_spans=21 pre_trim_retained_bytes=344064 trim_released=21 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6963200 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 6 band_verdict=within_band
+PACE sleep 10s before cycle 7
+CYCLE 7 ops=16002 checks=19651 live_high_water=2931328 pre_trim_retained_spans=21 pre_trim_retained_bytes=344064 trim_released=21 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6963200 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 7 band_verdict=within_band
+PACE sleep 10s before cycle 8
+CYCLE 8 ops=15998 checks=19749 live_high_water=2606544 pre_trim_retained_spans=21 pre_trim_retained_bytes=344064 trim_released=21 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6963200 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 8 band_verdict=within_band
+PACE sleep 10s before cycle 9
+CYCLE 9 ops=15902 checks=19636 live_high_water=3308560 pre_trim_retained_spans=21 pre_trim_retained_bytes=344064 trim_released=21 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6963200 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 9 band_verdict=within_band
+PACE sleep 10s before cycle 10
+CYCLE 10 ops=15932 checks=19583 live_high_water=2767280 pre_trim_retained_spans=22 pre_trim_retained_bytes=360448 trim_released=22 post_retained_spans=0 post_retained_bytes=0 post_cached=0 post_mapped=0 live_small=0 live_mappings=0 live_spans=0 peak_mapped=6963200 alloc_failures=0 rss_kb=1392 result=ok
+CYCLE 10 band_verdict=within_band
+MAIN ACCOUNTING total_ops=159476 total_checks=197219 total_bytes_checked=1589149744 failures=0 final_live_small=0 final_live_mappings=0 final_retained_bytes=0 alloc_failures=0
+M005 MAIN RESULT: PASS (stopped_early=0 final_state_clean=1)
+main leg exit=0
+--- dl leg (timeout 300) ---
+probe_m005 dl leg: cycles=6 so=build/libmimiralloc.so (H-001 shape: post-close anon growth must be 0 B/cycle, image lines 0)
+DL CYCLE 1 ops_cycle=83 img_lines_after_close=0 anon_rw_bytes_after_close=49152 anon_growth_vs_cycle0=0 rss_kb=1408 result=ok
+DL CYCLE 2 ops_cycle=83 img_lines_after_close=0 anon_rw_bytes_after_close=49152 anon_growth_vs_cycle0=0 rss_kb=1408 result=ok
+DL CYCLE 3 ops_cycle=83 img_lines_after_close=0 anon_rw_bytes_after_close=49152 anon_growth_vs_cycle0=0 rss_kb=1408 result=ok
+DL CYCLE 4 ops_cycle=83 img_lines_after_close=0 anon_rw_bytes_after_close=49152 anon_growth_vs_cycle0=0 rss_kb=1408 result=ok
+DL CYCLE 5 ops_cycle=83 img_lines_after_close=0 anon_rw_bytes_after_close=49152 anon_growth_vs_cycle0=0 rss_kb=1408 result=ok
+DL CYCLE 6 ops_cycle=83 img_lines_after_close=0 anon_rw_bytes_after_close=49152 anon_growth_vs_cycle0=0 rss_kb=1408 result=ok
+DL ACCOUNTING total_ops=498 total_checks=246 failures=0 library_unloaded_after_each_cycle=1
+M005 DL RESULT: PASS
+dl leg exit=0
+soak_wall_s=94
+samtal samples=47 non200=0
+--- samtal non-200 samples (verbatim) ---
+--- free -g (end) ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+--- run_m005 done rc1=0 rc2=0 ---
