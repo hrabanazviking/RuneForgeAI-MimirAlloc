@@ -663,3 +663,29 @@ test-g004: $(BUILD)/test_g004
 	./$(BUILD)/test_g004
 
 .PHONY: test-g004
+
+# G-005: Phase 7 reclaim policy + idle-thread retained-
+# memory measurement - the evidence test under tests/core/
+# (test_g005.c) verifies the reclaim policy defined in
+# docs/PHASE_7_RECLAIM_POLICY_G005.md (RP-1..RP-5) as
+# implemented by G-003 in src/core/mimir_core.c: per-class
+# empty-span retention bound (2), synchronous release of
+# the span that exceeds the bound at free time, churn
+# stability, and the idle-thread case (no thread-local
+# cache exists, so idle threads retain nothing beyond the
+# global per-class bound). It reads the G-003 span/object
+# counters via tests/core/mimir_small_g003.h and VmRSS as
+# a process-level cross-check only. Standalone via
+# `make test-g005`; NOT part of `make test`, whose
+# composition is unchanged. Recorded run:
+# tests/core/recorded_run_g005.txt.
+$(BUILD)/test_g005.o: tests/core/test_g005.c include/mimir_alloc.h tests/core/mimir_small_g003.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_g005.c -o $@
+
+$(BUILD)/test_g005: $(LIBOBJS) $(BUILD)/test_g005.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_g005.o -o $@
+
+test-g005: $(BUILD)/test_g005
+	./$(BUILD)/test_g005
+
+.PHONY: test-g005
