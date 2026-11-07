@@ -40,7 +40,15 @@
 #        run is tests/concurrency/recorded_run_d004.txt.
 
 CC      = cc
-CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
+CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2
+# K-004 (Phase 11): -O2 added to the shipped CFLAGS on measured
+# evidence only (docs/PHASE_11_PERFORMANCE_K004.md; bench
+# tests/core/bench_k004.c, recorded run tests/core/
+# recorded_run_k004.txt): small64 median 168->86 ns/op,
+# burst256 1488->661 ns/op, large4096 flat (mmap-bound).
+# This discharges the INC-K002-02 comparison leg by making
+# the optimised flavour the shipped flavour. No source,
+# ABI or flag other than -O2 changes.
 # J-004 debug flavour (docs/PHASE_10_FOUNDATION_PLAN.md S5.1;
 # docs/PHASE_10_DEBUG_REDZONES.md): `make DEBUG=1` adds
 # -DMIMIR_DEBUG=1 and directs ALL objects to build-debug/,
@@ -1447,3 +1455,15 @@ bench-k002: $(BUILD)/bench_k002_glibc $(BUILD)/bench_k002_mimir
 	python3 tests/perf/summarize_k002.py /tmp/k002_raw.txt
 
 .PHONY: bench-k002
+
+# K-004: build-flavour bench (docs/PHASE_11_PERFORMANCE_
+# K004.md). Standalone via `make bench-k004`; NOT part of
+# `make test`. Bench TU compiled -O2 (bench_j008 precedent);
+# allocator objects carry the shipped CFLAGS.
+$(BUILD)/bench_k004.o: tests/core/bench_k004.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -c tests/core/bench_k004.c -o $@
+$(BUILD)/bench_k004: $(LIBOBJS) $(BUILD)/bench_k004.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/bench_k004.o -o $@
+bench-k004: $(BUILD)/bench_k004
+	./$(BUILD)/bench_k004
+.PHONY: bench-k004
