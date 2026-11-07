@@ -1,0 +1,160 @@
+L-007 recorded run - Phase 12 Qwen3-1.7B Q4_K_M comparison protocol + owed record
+Sat Nov  7 02:34:27 PM EST 2026
+05f37148980f296c692292dbfd8e0a6e25662e59
+yrsa/mimiralloc-07
+aarch64
+4
+--- free/samtal/thermal before ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_before: 200
+temp=58.7'C
+throttled=0x0
+--- MODEL SEARCH (this slice) ---
+CMD find / -iname *qwen* : qwen3 hits only hailo manifest dir, pull log, source files (see doc S2)
+CMD find /home/pi /mnt /opt /srv -iname *.gguf : count=
+1040
+checkout stubs:
+-rw-r--r-- 1 pi pi 24 Oct 10 04:46 /home/pi/c2/aesir_engine/model.gguf
+-rw-r--r-- 1 pi pi 24 Oct 10 10:32 /home/pi/c7f1/aesir_engine/model.gguf
+-rw-r--r-- 1 pi pi 24 Oct 10 15:44 /home/pi/c9base/aesir_engine/model.gguf
+-rw-r--r-- 1 pi pi 24 Oct 10 15:21 /home/pi/c9work/aesir_engine/model.gguf
+a4e5e156ddec27e286f75328784d7106b60a4eb1d246e950a001a3f944fbda99  /home/pi/c2/aesir_engine/model.gguf
+00000000: 4747 5546 0300 0000 0000 0000 0000 0000  GGUF............
+00000010: 0000 0000 0000 0000                      ........
+gguf over 10M:
+-rw-r--r-- 1 pi pi  16M Oct  5 01:54 /home/pi/mojo-build/mojo-src/max/tests/integration/architectures/llama3/testdata/tiny_llama_bf16.gguf
+-rw-r--r-- 1 pi pi  24M Oct  5 01:54 /home/pi/mojo-build/mojo-src/max/tests/integration/architectures/llama3/testdata/tiny_llama.gguf
+-rw-r--r-- 1 pi pi 609M Oct 10 05:45 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+-rw-r--r-- 1 pi pi 747M Oct 10 19:39 /mnt/yggdrasil/models/victory/tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf
+-rw-r--r-- 1 pi pi 863M Oct 10 19:44 /mnt/yggdrasil/models/victory/tinyllama-1.1b-chat-v1.0.Q6_K.gguf
+-rw-r--r-- 1 pi pi 1.1G Oct 10 19:35 /mnt/yggdrasil/models/victory/tinyllama-1.1b-chat-v1.0.Q8_0.gguf
+model store hashes:
+da3087fb14aede55fde6eb81a0e55e886810e43509ec82ecdc7aa5d62a03b556  /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+aa54a5fb99ace5b964859cf072346631b2da6109715a805d07161d157c66ce7f  /mnt/yggdrasil/models/victory/tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf
+9fb2be7c8bbc0ca358ae88cef6d9e6844b81929eaffa5016a543e6f56b22cb6d  /mnt/yggdrasil/models/victory/tinyllama-1.1b-chat-v1.0.Q6_K.gguf
+a4c9bb1dbaa372f6381a035fa5c02ef087aaa1ff1f843a56a22328114f03fc59  /mnt/yggdrasil/models/victory/tinyllama-1.1b-chat-v1.0.Q8_0.gguf
+hailo qwen3 manifest:
+{
+    "hef_h10h": "cc9b9d1c92e35249b5a9b7bc31fbd652f03bba1232e99b9a8271845ad6f17821",
+    "license": null,
+    "details": {
+        "parent_model": "",
+        "format": "hef",
+        "family": "qwen3",
+        "families": [
+            "qwen3"
+        ],
+        "parameter_size": "1.7B",
+        "quantization_level": "Q4_0"
+    }
+}
+hef blob cc9b9d1c: NOT PRESENT
+SEARCH VERDICT: Qwen3-1.7B Q4_K_M ABSENT - run OWED (INC-L007-01)
+--- make test (gate) ---
+make_test_exit=0
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+--- run_l007.sh ---
+--- build probe_l007 ---
+build exit=0
+3c81e97347b08a413c7eaed4841f455de7c9df27ead07750848c753d18e40b42  tests/perf/probe_l007.c
+5a8dd83b7e0322945f025e2fa19f3c9593baa16f8da660186177e64a4b53f94e  /tmp/probe_l007
+--- case PASS (expect exit 0) ---
+probe_l007 - L-007 comparison protocol gate validator
+LIVE temp_capture: 60.0 C (thermal_zone0)
+GATE live_temp_capture_works: ok
+GATE baseline_header_parses: ok
+GATE comparison_header_parses: ok
+GATE all_six_controls_present_both_arms: ok
+GATE same_model_hash: ok
+GATE same_prompt: ok
+GATE same_context: ok
+GATE same_thread_count: ok
+GATE same_backend: ok
+GATE thermal_start_within_2C: ok
+GATE neither_arm_throttled_at_start: ok
+GATE outputs_byte_identical: ok
+L007 PROBE RESULT: PASS (failures=0)
+case PASS exit=0
+--- case THREADS-DIFF (expect exit 1) ---
+probe_l007 - L-007 comparison protocol gate validator
+LIVE temp_capture: 60.0 C (thermal_zone0)
+GATE live_temp_capture_works: ok
+GATE baseline_header_parses: ok
+GATE comparison_header_parses: ok
+GATE all_six_controls_present_both_arms: ok
+GATE same_model_hash: ok
+GATE same_prompt: ok
+GATE same_context: ok
+GATE same_thread_count: FAIL
+GATE same_backend: ok
+GATE thermal_start_within_2C: ok
+GATE neither_arm_throttled_at_start: ok
+GATE outputs_byte_identical: ok
+L007 PROBE RESULT: FAIL (failures=1)
+case THREADS-DIFF exit=1
+--- case THERMAL-DIFF (expect exit 1) ---
+probe_l007 - L-007 comparison protocol gate validator
+LIVE temp_capture: 59.5 C (thermal_zone0)
+GATE live_temp_capture_works: ok
+GATE baseline_header_parses: ok
+GATE comparison_header_parses: ok
+GATE all_six_controls_present_both_arms: ok
+GATE same_model_hash: ok
+GATE same_prompt: ok
+GATE same_context: ok
+GATE same_thread_count: ok
+GATE same_backend: ok
+GATE thermal_start_within_2C: FAIL
+GATE neither_arm_throttled_at_start: ok
+GATE outputs_byte_identical: ok
+L007 PROBE RESULT: FAIL (failures=1)
+case THERMAL-DIFF exit=1
+--- case OUTPUT-DIFF (expect exit 1) ---
+probe_l007 - L-007 comparison protocol gate validator
+LIVE temp_capture: 59.5 C (thermal_zone0)
+GATE live_temp_capture_works: ok
+GATE baseline_header_parses: ok
+GATE comparison_header_parses: ok
+GATE all_six_controls_present_both_arms: ok
+GATE same_model_hash: ok
+GATE same_prompt: ok
+GATE same_context: ok
+GATE same_thread_count: ok
+GATE same_backend: ok
+GATE thermal_start_within_2C: ok
+GATE neither_arm_throttled_at_start: ok
+GATE outputs_byte_identical: FAIL
+L007 PROBE RESULT: FAIL (failures=1)
+case OUTPUT-DIFF exit=1
+run_l007 RESULT: PASS
+run_l007_exit=0
+--- verification ---
+lib: 
+nm: 'a.out': No such file
+nm: 'a.out': No such file
+nm_count=0
+readme_header_diff_lines_above (empty=identical)
+samtal_after: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+temp=56.5'C
+throttled=0x0
+--- verification correction: make lib + nm ---
+(the find above missed: make test does not build the .so)
+make_lib_exit=0
+0000000000000b80 T mimir_calloc
+0000000000000b50 T mimir_free
+0000000000000b20 T mimir_malloc
+0000000000000bc0 T mimir_realloc
+nm_count=4
+?? build/
+?? docs/PHASE_12_QWEN3_COMPARISON_PROTOCOL.md
+?? hidden_files/
+?? tests/perf/probe_l007.c
+?? tests/perf/recorded_run_l007.txt
+?? tests/perf/run_l007.sh
