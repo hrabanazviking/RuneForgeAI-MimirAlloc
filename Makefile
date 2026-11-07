@@ -464,3 +464,25 @@ test-e008: $(BUILD)/test_e008_first $(BUILD)/test_e008_threads $(BUILD)/test_e00
 	./$(BUILD)/test_e008
 
 .PHONY: test-e008
+
+# F-003: Mojo boundary wiring (B2+B1) - the generated Mojo
+# program under tests/mojo/ (test_f003.mojo) calls the four
+# namespaced mimir_* symbols explicitly from Mojo via
+# std.ffi external_call, with build/libmimiralloc.so placed
+# on its link line through mojo build's documented -Xlinker
+# flags (F-001 boundary B2). Standalone via
+# `make test-f003`; NOT part of `make test`, whose
+# composition is unchanged, and `make test` does not depend
+# on Mojo being present - this target is the only one that
+# invokes mojo, using the `mojo` found on PATH (on the Pi,
+# the pixi wrapper). See docs/PHASE_6_BOUNDARY_WIRING_F003.md
+# and tests/mojo/recorded_run_f003.txt.
+MOJO ?= mojo
+
+$(BUILD)/test_f003: tests/mojo/test_f003.mojo $(BUILD)/libmimiralloc.so | $(BUILD)
+	$(MOJO) build -o $@ tests/mojo/test_f003.mojo -Xlinker -L$(BUILD) -Xlinker -lmimiralloc -Xlinker -rpath -Xlinker '$$ORIGIN'
+
+test-f003: $(BUILD)/test_f003
+	./$(BUILD)/test_f003
+
+.PHONY: test-f003
