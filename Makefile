@@ -905,3 +905,16 @@ test-h006: $(BUILD)/test_h006
 	./$(BUILD)/test_h006 $(BUILD)/libmimiralloc.so
 
 .PHONY: test-h006
+# H-007: Phase 8 stress probe - tests/perf/probe_h007.c
+# Standalone via make test-h007; NOT part of make test.
+# Recorded run: tests/perf/recorded_run_h007.txt.
+$(BUILD)/probe_h007.o: tests/perf/probe_h007.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_h007.c -o $@
+
+$(BUILD)/probe_h007: $(LIBOBJS) $(BUILD)/probe_h007.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_h007.o -o $@
+
+test-h007: $(BUILD)/probe_h007
+	./$(BUILD)/probe_h007
+
+.PHONY: test-h007

@@ -1,0 +1,72 @@
+H-007 recorded run - Phase 8 stress (small counts + oversubscription)
+Sat Nov 07 03:58:22 AM EST 2026
+base: 46110f154230f33747ff396d8d5e8c103c8e671c branch: yrsa/mimiralloc-07
+aarch64
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_before:200
+--- make clean && make test ---
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+PHASE B distinct live pointers: ok (64 recorded)
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+make_test_exit:0
+--- make test-h007 ---
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/perf/probe_h007.c -o build/probe_h007.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/probe_h007.o -o build/probe_h007
+./build/probe_h007
+SCENARIO threads=1 rep=0 cross_ops=256 churn_ops=256 calloc_realloc_ops=128 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=3717291 OK
+SCENARIO threads=1 rep=1 cross_ops=256 churn_ops=256 calloc_realloc_ops=128 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=3642643 OK
+SCENARIO threads=1 rep=2 cross_ops=256 churn_ops=256 calloc_realloc_ops=128 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=3552680 OK
+SUMMARY threads=1 reps=3 failed_reps=0 OK
+SCENARIO threads=2 rep=0 cross_ops=512 churn_ops=512 calloc_realloc_ops=256 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=7585657 OK
+SCENARIO threads=2 rep=1 cross_ops=512 churn_ops=512 calloc_realloc_ops=256 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=7633508 OK
+SCENARIO threads=2 rep=2 cross_ops=512 churn_ops=512 calloc_realloc_ops=256 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=8560970 OK
+SUMMARY threads=2 reps=3 failed_reps=0 OK
+SCENARIO threads=4 rep=0 cross_ops=1024 churn_ops=1024 calloc_realloc_ops=512 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=24814225 OK
+SCENARIO threads=4 rep=1 cross_ops=1024 churn_ops=1024 calloc_realloc_ops=512 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=28032110 OK
+SCENARIO threads=4 rep=2 cross_ops=1024 churn_ops=1024 calloc_realloc_ops=512 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=25540132 OK
+SUMMARY threads=4 reps=3 failed_reps=0 OK
+SCENARIO threads=8 rep=0 cross_ops=2048 churn_ops=2048 calloc_realloc_ops=1024 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=105306172 OK
+SCENARIO threads=8 rep=1 cross_ops=2048 churn_ops=2048 calloc_realloc_ops=1024 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=101844158 OK
+SCENARIO threads=8 rep=2 cross_ops=2048 churn_ops=2048 calloc_realloc_ops=1024 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=104939191 OK
+SUMMARY threads=8 reps=3 failed_reps=0 OK
+SCENARIO threads=12 rep=0 cross_ops=3072 churn_ops=3072 calloc_realloc_ops=1536 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=253582656 OK
+SAMTAL threads=12 rep=0 get_codes=200,200,200,200,200 (probe, not a bound)
+SCENARIO threads=12 rep=1 cross_ops=3072 churn_ops=3072 calloc_realloc_ops=1536 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=252426213 OK
+SAMTAL threads=12 rep=1 get_codes=200,200,200,200,200 (probe, not a bound)
+SCENARIO threads=12 rep=2 cross_ops=3072 churn_ops=3072 calloc_realloc_ops=1536 pattern_fail=0 null_fail=0 zero_fail=0 realloc_fail=0 live_small_delta=0 live_map_delta=0 audit=OK wall_ns=251163604 OK
+SAMTAL threads=12 rep=2 get_codes=200,200,200,200,200 (probe, not a bound)
+SUMMARY threads=12 reps=3 failed_reps=0 OK
+RESULT: PASS
+probe_exit:0
+--- ABI (nm -D) ---
+build/libmimiralloc.so
+4
+                 w __cxa_finalize@GLIBC_2.17
+                 U __getauxval@GLIBC_2.17
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U memcpy@GLIBC_2.17
+                 U memset@GLIBC_2.17
+0000000000000998 T mimir_calloc
+0000000000000964 T mimir_free
+0000000000000934 T mimir_malloc
+00000000000009d0 T mimir_realloc
+                 U mmap@GLIBC_2.17
+                 U munmap@GLIBC_2.17
+                 U pthread_mutex_lock@GLIBC_2.17
+                 U pthread_mutex_unlock@GLIBC_2.17
+                 U sysconf@GLIBC_2.17
+samtal_after:200
+total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+ 03:58:27 up 18 days, 21:12,  4 users,  load average: 0.75, 1.03, 1.07
