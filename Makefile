@@ -858,3 +858,26 @@ test-h004: $(BUILD)/probe_h004
 	./$(BUILD)/probe_h004
 
 .PHONY: test-h004
+
+# H-005: Phase 8 owner-death evidence test -
+# the test under tests/core/ (test_h005.c) verifies
+# owner death under contention: victims die (return
+# and pthread_exit) mid-churn holding span and mapping
+# blocks while churners work, and survivors verify and
+# free the dead blocks cross-thread under renewed
+# contention, with exact audit-counter reconciliation
+# at quiescent points. Standalone via make test-h005;
+# NOT part of make test, whose composition is
+# unchanged. Recorded run:
+# tests/core/recorded_run_h005.txt; slice record:
+# docs/PHASE_8_OWNER_DEATH_H005.md.
+$(BUILD)/test_h005.o: tests/core/test_h005.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_h005.c -o $@
+
+$(BUILD)/test_h005: $(LIBOBJS) $(BUILD)/test_h005.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_h005.o -o $@
+
+test-h005: $(BUILD)/test_h005
+	./$(BUILD)/test_h005
+
+.PHONY: test-h005
