@@ -1,0 +1,215 @@
+=== F-008 RECORDED RUN (tests/mojo/recorded_run_f008.txt) ===
+Slice F-008: original Phase 1 failing command retried on the Pi ARM
+environment, exact results or blocker. Roadmap Phase 6 exit X1/X4.
+Method: every command below was run on the Pi in this slice, in
+this order, and its stdout/stderr and exit code are recorded
+verbatim. Nothing was installed. No Android/Termux device was
+accessed. The original failing command was never recorded
+exactly (see Section A), so NO command in this file is the
+original command; Sections C-D are the closest honest retry
+available on this Pi plus the absence proof for the literal one.
+
+--- environment ---
+2026-11-06T22:42:51-05:00
+purpleviking1
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+38b27b06754730504f1033f1c8d6dcd4fa9fe204
+yrsa/mimiralloc-08
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+getconf PAGESIZE: 16384
+nproc: 4
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+ldd (Debian GLIBC 2.36-9+rpt2+deb12u14) 2.36
+
+--- Samtal liveness before the run (Pi is a working home) ---
+$ curl -s -o /dev/null -w %{http_code} http://127.0.0.1:8787/
+200
+ curl exit: 0
+
+=== SECTION A: field-note facts re-verified from the repo ===
+Each grep below reads the banked file named; output verbatim.
+
+$ grep -n First-failure-paragraph docs/field-notes/android-arm64-2026-11/03_VIRTUAL_ADDRESS_AND_MOJO.md (line 5)
+The Linux ARM64 Mojo 1.2.0 package was installed in a separate glibc Python environment. Its launcher could not directly execute the compiler because the ELF requested `/lib/ld-linux-aarch64.so.1`, which was not present at that path in this Android environment. Invoking the installed Termux glibc loader directly got farther: before `--version`, the compiler aborted with a TCMalloc `MmapAligned()` failure and a diagnostic saying it assumed a 48-bit virtual address space. A tested 1.3.0.dev2026110205 nightly similarly aborted.
+
+$ sed -n 11p docs/field-notes/android-arm64-2026-11/03_VIRTUAL_ADDRESS_AND_MOJO.md (VA probe)
+A small anonymous 4 KiB `mmap` test used fixed-no-replace semantics and released successful mappings. On this device a request at `1 << 38` returned that address; requests at `1 << 39` and `1 << 47` returned ENOMEM. This is consistent with a 39-bit user virtual-address boundary, but a handful of probes is not a complete kernel configuration audit or a cross-device guarantee. Address placement, security policy, existing mappings and kernel behavior can affect a probe.
+
+$ sed -n 10,11p docs/field-notes/android-arm64-2026-11/01_EVIDENCE_AND_TIMELINE.md (ledger rows)
+| Mojo stable | Linux ARM64 Mojo 1.2.0 installed in separate glibc environment; direct loader reached compiler then TCMalloc aborted before `--version` | A runnable compiler; Android/bionic output |
+| Mojo nightly | 1.3.0.dev2026110205 produced the same allocator startup failure | Correspondence of that wheel to public source and a source-built compiler test |
+
+$ sed -n 1,4p docs/field-notes/android-arm64-2026-11/02_TABLET_INVENTORY.md (device identity)
+# 02 — Physical tablet inventory
+
+## Identified device
+
+The Android properties identified a Samsung Galaxy Tab S10 Lite Wi-Fi, model `SM-X400`, device `gts10litewifi`, SoC identifier `s5e8835`, Android 16/API 36, build `X400XXS8CZI2`, security patch 2026-09-05. The reported SoC identifier is associated with Exynos 1380. Samsung's [processor page](https://semiconductor.samsung.com/processor/mobile-processor/exynos-1380/) is useful background; the field measurements below come from the tablet.
+
+`/proc/cpuinfo` exposed eight ARM64 cores: four Cortex-A55 (`0xd05`) and four Cortex-A78 (`0xd41`). The kernel's maximum-frequency files reported 2,002,000 kHz on CPU 0 and 2,400,000 kHz on CPU 4. These are reported maximums, not measured sustained clocks. The system page size was 4,096 bytes in one probe; other Android devices can differ.
+
+## Memory snapshot
+
+| Kernel field | Reading | Meaning |
+|---|---:|---|
+
+$ grep -n No-concrete-Mojo-failure docs/failure-capture.md (A-005 inconsistency 1)
+294:1. **No concrete Mojo failure exists in the repo yet.** There is no
+295-   recorded Mojo failure command, revision, or failure log anywhere in
+296-   this repository, so the Phase 1 exit gate cannot be met by A-005
+297-   alone. A-005 delivers the capture harness and a synthetic proof of
+
+$ grep -n A6-10 docs/failure-classification.md
+564:- **A6-10 — A-006's own limit.** This framework is Proposed. It has
+565-  never been exercised against a real Mojo/tcmalloc failure, because
+566-  no such failure packet exists in the repository. The first real
+567-  classification may force revision of this framework; any such
+
+$ grep -n No-reproducible docs/INTEGRATION_LAYER_MAP.md (truth ii)
+20:| (ii) | **No reproducible Mojo/tcmalloc failure exists in the repo.** A-005's only packet is synthetic, with claim scope harness-evidence-only, so §3.3's exit gate is **Blocked**. The resumption point is: a real A-005 packet, plus the binaries it ran. | A-005 harness (`c4298b3`); evidence level: **Blocked** per Roadmap §2 |
+
+$ grep -rn of exact argv/exit-code/stderr for the tablet failure across docs/ (expected: no packet)
+$ grep -rln MmapAligned docs/ 
+docs/PHASE_6_FOUNDATION_PLAN.md
+docs/SYSTEM_ALLOCATOR_EVALUATION.md
+docs/PHASE_6_MOJO_TOOLCHAIN_READINESS.md
+docs/SUPPORTED_TARGETS.md
+docs/field-notes/android-arm64-2026-11/03_VIRTUAL_ADDRESS_AND_MOJO.md
+grep -rln exit: 0
+$ ls scripts/failure_cases/ evidence/runs/ (only the synthetic smoke case exists)
+smoke_fail.json
+smoke_fail.sh
+20261106T114752Z-smoke-fail-0f4a3c
+
+=== SECTION B: Pi toolchain inventory + absence proof ===
+$ which mojo
+/usr/local/bin/mojo
+which exit: 0
+$ cat /usr/local/bin/mojo
+#!/bin/bash
+exec /home/pi/.pixi/bin/pixi run --manifest-path /home/pi/mojo-dev/pixi.toml mojo "$@"
+$ cat /home/pi/mojo-dev/pixi.toml
+[workspace]
+authors = ["Volmarr Wyrd <122174898+hrabanazviking@users.noreply.github.com>"]
+channels = ["https://conda.modular.com/max", "conda-forge"]
+name = "mojo-dev"
+platforms = ["linux-aarch64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+mojo = ">=1.1.0,<2"
+$ ls /home/pi/mojo-dev/.pixi/envs/default/conda-meta/ | grep mojo
+mojo-1.1.0-release.json
+mojo-compiler-1.1.0-release.json
+mojo-python-1.1.0-release.json
+$ ls -l /lib/ld-linux-aarch64.so.1 (PRESENT on the Pi; ABSENT on the tablet per note 03)
+lrwxrwxrwx 1 root root 39 Jun 10 14:33 /lib/ld-linux-aarch64.so.1 -> aarch64-linux-gnu/ld-linux-aarch64.so.1
+ls exit: 0
+$ readelf -l <compiler> | grep -A1 INTERP
+  INTERP         0x00000000000002e0 0x00000000000002e0 0x00000000000002e0
+                 0x000000000000001b 0x000000000000001b  R      0x1
+
+--- absence checks: failing versions and tablet environment ---
+$ ls /data/data/com.termux (Termux app data; the tablet environment root)
+ls: cannot access '/data/data/com.termux': No such file or directory
+ls exit: 2
+$ command -v getprop (Android property tool)
+command exit: 1
+$ ls /system/bin (Android system tree)
+ls: cannot access '/system/bin': No such file or directory
+ls exit: 2
+$ find /home/pi -maxdepth 4 -iname *mojo*1.2* -o -iname *mojo*1.3.0.dev* (failing-version artifacts)
+find exit: 0 (empty output above = no artifact found)
+$ grep -l version /home/pi/mojo-dev/.pixi/envs/default/conda-meta/mojo-*.json; grep -m1 version-field:
+  "version": "1.1.0",
+$ ls /home/pi/mojo-dev/.pixi/envs/default/bin/mojo file type:
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, for GNU/Linux 3.7.0, BuildID[md5/uuid]=7e410907739ac44de3cd765083c447bc, stripped
+
+=== SECTION C: closest honest retry on the Pi (version/launcher path) ===
+The field-note failure shape was: launcher cannot exec the compiler
+(missing interpreter), then, via the Termux glibc loader invoked
+directly, the compiler aborts BEFORE --version in TCMalloc
+MmapAligned(). The three retries below walk the SAME three steps
+with the ONLY toolchain this Pi holds (Mojo 1.1.0). They are the
+Pi analogue defined in F-001 Section 5.4: their success is NOT
+exit element X1 and is recorded only as exact results toward the
+X4 blocker record.
+
+--- R1: launcher path (wrapper -> pixi -> compiler) ---
+$ mojo --version
+Mojo 1.1.0 (8189361e)
+R1 exit: 0
+
+--- R2: compiler binary directly ---
+$ /home/pi/mojo-dev/.pixi/envs/default/bin/mojo --version
+Mojo 1.1.0 (8189361e)
+R2 exit: 0
+
+--- R3: explicit glibc loader invocation (mirrors the Termux loader step) ---
+On the tablet this step is where the compiler aborted before
+--version. On the Pi the loader exists at the ELF-requested path
+and the same step is:
+$ /lib/ld-linux-aarch64.so.1 /home/pi/mojo-dev/.pixi/envs/default/bin/mojo --version
+Mojo 1.1.0 (8189361e)
+R3 exit: 0
+
+--- R4: repetition of R1 (stability of the analogue) ---
+$ mojo --version (2nd)
+Mojo 1.1.0 (8189361e)
+R4 exit: 0
+
+=== SECTION D: VA-width probe on the Pi (same method as note 03) ===
+Field note 03 method: small anonymous mmap, fixed-no-replace
+(MAP_FIXED_NOREPLACE), PROT_NONE, released immediately after a
+success. Probe length 4096 as in the note; the Pi page size is
+16384 (Section: environment) and mmap rounds the length up.
+Tablet result (note 03): 1<<38 OK; 1<<39 ENOMEM; 1<<47 ENOMEM.
+Probe source /tmp/f008_va.c (written and compiled in this slice):
+#include <sys/mman.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+int main(void){unsigned long a[3]={1UL<<38,1UL<<39,1UL<<47};for(int i=0;i<3;i++){void *p=mmap((void*)a[i],4096,PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0);if(p==MAP_FAILED){printf("addr 0x%lx: FAIL errno=%d (%s)\n",a[i],errno,strerror(errno));}else{printf("addr 0x%lx: OK returned %p\n",a[i],p);munmap(p,4096);}}return 0;}
+$ cc -O2 -o /tmp/f008_va /tmp/f008_va.c
+cc exit: 0
+$ /tmp/f008_va
+addr 0x4000000000: OK returned 0x4000000000
+addr 0x8000000000: OK returned 0x8000000000
+addr 0x800000000000: FAIL errno=12 (Cannot allocate memory)
+probe exit: 0
+Reading: on the Pi, 1<<39 SUCCEEDS (the tablet failed there);
+1<<47 fails with ENOMEM (errno 12) on both. The Pi therefore
+does NOT exhibit the 39-bit user-VA ceiling the tablet probe
+was consistent with. A handful of probes is not a complete
+kernel audit (note 03 says the same of its own probe).
+
+=== SECTION E: closing checks ===
+$ sha256sum README.md include/mimir_alloc.h (must equal HEAD)
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  -
+$ curl Samtal after the run
+200
+ curl exit: 0
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+
+=== VERDICT RECORDED BY THIS RUN ===
+Literal retry of the original failing command: NOT RUNNABLE on
+this Pi - BLOCKED. The command itself was never recorded
+exactly (Section A); the affected environment (SM-X400,
+Android 16, Termux glibc userspace, 39-bit user VA) is absent
+(Section B); both failing versions (Mojo 1.2.0 and nightly
+1.3.0.dev2026110205) are absent - only Mojo 1.1.0 is installed
+(Section B). Pi analogue (Section C): R1/R2/R3/R4 all exit 0,
+Mojo 1.1.0 (8189361e) - the tablet failure does NOT reproduce
+here, and that success is NOT exit element X1 (F-001 5.4, X5).
+This file is the exact-results half of the X4 blocker record;
+docs/PHASE_6_ORIGINAL_FAILURE_RETRY_F008.md states the blocker.
+=== END F-008 RECORDED RUN ===
