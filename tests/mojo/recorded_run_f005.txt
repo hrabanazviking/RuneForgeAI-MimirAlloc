@@ -1,0 +1,336 @@
+===================================================================
+F-005 RECORDED RUN - allocator-use proof on the Mojo path
+Slice F-005 (Wave 6, Phase 6), team-05, binding grade.
+Worktree: /home/pi/mimiralloc-team-05 (purpleviking1, Raspberry Pi)
+===================================================================
+
+--- S0. Environment and base state ---
+$ date -Iseconds
+2026-11-06T22:06:56-05:00
+$ uname -a
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+$ git rev-parse HEAD
+08433aec2b9a58d2c38d6e10d5e8647a3d0b38b9
+$ git branch --show-current
+yrsa/mimiralloc-05
+$ git status --porcelain
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/mojo/f005_audit.c
+?? tests/mojo/f005_probe.c
+?? tests/mojo/recorded_run_f005.txt
+?? tests/mojo/test_f005.mojo
+?? tests/mojo/test_f005_audit.mojo
+$ cc --version | head -n 1
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+$ cat /usr/local/bin/mojo
+#!/bin/bash
+exec /home/pi/.pixi/bin/pixi run --manifest-path /home/pi/mojo-dev/pixi.toml mojo "$@"
+$ mojo --version
+Mojo 1.1.0 (8189361e)
+exit:0
+$ getconf PAGESIZE
+16384
+$ free -g
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+$ curl Samtal http code: 200
+
+--- S1. Slice sources (hashes as recorded) ---
+$ sha256sum tests/mojo/test_f005.mojo tests/mojo/test_f005_audit.mojo tests/mojo/f005_probe.c tests/mojo/f005_audit.c
+67f99568ec62fe29b0b110845b4557210bc19267c050142098befc355a1ac4db  tests/mojo/test_f005.mojo
+8a42c99d835fb86bda5c522f8aa3e92b346c6f42d79caa1315c0704a05f605e6  tests/mojo/test_f005_audit.mojo
+b02dd783609cd50dd42283acb3a950d3d162d2a6a001cfb8341d368f2d783501  tests/mojo/f005_probe.c
+bd1e24df26b8dcbfd7dc055657959bb6d32c144510dc40a77ea4f5f598287839  tests/mojo/f005_audit.c
+$ wc -l tests/mojo/test_f005.mojo tests/mojo/test_f005_audit.mojo tests/mojo/f005_probe.c tests/mojo/f005_audit.c Makefile
+  357 tests/mojo/test_f005.mojo
+  365 tests/mojo/test_f005_audit.mojo
+  103 tests/mojo/f005_probe.c
+   65 tests/mojo/f005_audit.c
+  552 Makefile
+ 1442 total
+
+--- S2. Shared library: exactly-4 exports; audit counters NOT exported ---
+$ make lib
+make: Nothing to be done for 'lib'.
+exit:0
+$ nm -D --defined-only build/libmimiralloc.so
+0000000000000988 T mimir_calloc
+0000000000000954 T mimir_free
+0000000000000924 T mimir_malloc
+00000000000009c0 T mimir_realloc
+$ nm -D build/libmimiralloc.so | grep -c mimir_audit
+0
+grep exit:1 (1 = no audit symbol in the dynamic table, as designed)
+$ audit-reference link probe against the .so (EXPECTED to fail: the counters are local there)
+$ cc /tmp/f005_audit_probe.c -Lbuild -lmimiralloc -Wl,-rpath,build -o /tmp/f005_audit_probe
+/usr/bin/ld: /tmp/cc8IJz0y.o: in function `main':
+f005_audit_probe.c:(.text+0x0): undefined reference to `mimir_audit_call_malloc'
+/usr/bin/ld: f005_audit_probe.c:(.text+0x4): undefined reference to `mimir_audit_call_malloc'
+collect2: error: ld returned 1 exit status
+exit:1 (1 = cannot link counters against the .so, as designed)
+
+--- S3. Builds (exact commands; the same lines make test-f005 runs) ---
+$ cc -std=c11 -Wall -Wextra -Werror -fPIC -shared tests/mojo/f005_probe.c -o build/libf005probe.so
+exit:0
+$ cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -c tests/mojo/f005_audit.c -o build/f005_audit.o
+exit:0
+$ make all (library objects for the static leg)
+exit:0
+make: Nothing to be done for 'all'.
+$ mojo build -o build/test_f005 tests/mojo/test_f005.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$ORIGIN'
+exit:0
+$ mojo build -o build/test_f005_audit tests/mojo/test_f005_audit.mojo -Xlinker build/mimir_alloc.o -Xlinker build/mimir_core.o -Xlinker build/mimir_platform.o -Xlinker build/f005_audit.o -Xlinker -lpthread
+exit:0
+
+--- S4. ELF evidence ---
+$ file build/test_f005 build/test_f005_audit
+build/test_f005:       ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=a175b3e0e663947c55d956e77617d470ee67faa8, for GNU/Linux 3.7.0, not stripped
+build/test_f005_audit: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=b2a5653fafc0b1bd22ec221c04adcaa152a05aa0, for GNU/Linux 3.7.0, not stripped
+$ readelf -d build/test_f005 | grep -E 'NEEDED|RUNPATH'
+ 0x0000000000000001 (NEEDED)             Shared library: [libKGENCompilerRTShared.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libf005probe.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/home/pi/mojo-dev/.pixi/envs/default/lib:$ORIGIN]
+$ readelf -d build/test_f005_audit | grep -E 'NEEDED|RUNPATH'
+ 0x0000000000000001 (NEEDED)             Shared library: [libKGENCompilerRTShared.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/home/pi/mojo-dev/.pixi/envs/default/lib]
+$ nm -D build/test_f005 | grep -E 'mimir|f005'
+                 U f005_descriptor_valid
+                 U f005_mapped_bytes
+                 U f005_page_size
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+$ nm build/test_f005_audit | grep -E ' T mimir_'
+0000000000003e04 T mimir_calloc
+00000000000043cc T mimir_core_alloc
+0000000000004424 T mimir_core_calloc
+0000000000004618 T mimir_core_free
+00000000000044cc T mimir_core_realloc
+0000000000003dd0 T mimir_free
+0000000000003da0 T mimir_malloc
+0000000000004914 T mimir_platform_global_lock
+0000000000004944 T mimir_platform_global_unlock
+00000000000047b8 T mimir_platform_map_acquire
+00000000000048bc T mimir_platform_map_release
+00000000000046a0 T mimir_platform_page_size
+0000000000003e3c T mimir_realloc
+$ ldd build/test_f005 | grep -E 'mimir|f005'
+	libmimiralloc.so => /home/pi/mimiralloc-team-05/build/libmimiralloc.so (0x00007fff21250000)
+	libf005probe.so => /home/pi/mimiralloc-team-05/build/libf005probe.so (0x00007fff21220000)
+
+--- S5. Runs ---
+$ ./build/test_f005
+F-005 dynamic leg (Mojo program linked against libmimiralloc.so only,
+plus the test-only libf005probe.so observer)
+  [ok] f005_page_size() > 0
+PAGE: 16384
+warmup pass 0 done
+warmup pass 1 done
+warmup pass 2 done
+MAPPED base= 2475163648 (quiescent baseline, INC-F005-01)
+  [ok] mapped base > 0
+  [ok] 4x mimir_malloc(64) non-null
+  [ok] validated == site_malloc (4)
+  [ok] mimir_malloc block pattern write/readback
+MAPPED after_mimir_malloc_x4= 2475294720  delta= 131072
+  [ok] mapped delta == 4 * page_round_up(page + 64)
+  [ok] 4x libc malloc(64) non-null
+MAPPED after_libc_malloc_x4= 2475294720  delta_vs_mimir= 0
+  [ok] libc allocations move no mapped bytes
+  [ok] mapped unchanged after libc frees
+  [ok] 2x mimir_calloc(16, 8) non-null
+  [ok] calloc extents arrive zeroed (128 bytes x2)
+  [ok] validated == site_malloc + site_calloc (6)
+MAPPED after_mimir_calloc_x2= 2475360256  delta= 65536
+  [ok] mapped delta == 2 * page_round_up(page + 128)
+  [ok] mimir_realloc(p0, 96) non-null
+  [ok] grown block descriptor records 96 bytes
+  [ok] realloc grow preserves first 64 bytes
+  [ok] mapped unchanged by realloc grow (publish + retire)
+MAPPED final= 2475163648  base= 2475163648
+  [ok] mapped returns exactly to baseline after all frees
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+exit:0
+
+$ ./build/test_f005_audit
+F-005 audit leg (Mojo program, library objects linked directly;
+E-005 counters read through f005_audit_* getters)
+AUDIT start  call_malloc= 0  call_calloc= 0  call_realloc= 0  call_free= 0  published= 0  retired= 0  live= 0
+  [ok] phase1: 5x mimir_malloc non-null
+AUDIT phase1-mimir-malloc-x5  call_malloc= 5  call_calloc= 0  call_realloc= 0  call_free= 0  published= 5  retired= 0  live= 5
+  [ok] phase2: libc allocations non-null
+  [ok] phase2: libc realloc non-null
+AUDIT phase2-libc-bypass  call_malloc= 5  call_calloc= 0  call_realloc= 0  call_free= 0  published= 5  retired= 0  live= 5
+  [ok] phase3: 3x mimir_calloc non-null
+  [ok] phase3: calloc extents zeroed
+AUDIT phase3-mimir-calloc-x3  call_malloc= 5  call_calloc= 3  call_realloc= 0  call_free= 0  published= 8  retired= 0  live= 8
+  [ok] phase4: realloc grow m0 32 -> 96 non-null
+  [ok] phase4: grow preserves first 32 bytes
+  [ok] phase4: realloc grow m1 64 -> 128 non-null
+AUDIT phase4a-realloc-grow-x2  call_malloc= 5  call_calloc= 3  call_realloc= 2  call_free= 0  published= 10  retired= 2  live= 8
+  [ok] phase4: shrink m4 512 -> 128 retains pointer
+  [ok] phase4: same-size m3 256 -> 256 retains pointer
+AUDIT phase4b-realloc-shrink-same  call_malloc= 5  call_calloc= 3  call_realloc= 4  call_free= 0  published= 10  retired= 2  live= 8
+  [ok] phase5: oversize mimir_malloc returns null
+  [ok] phase5: overflow mimir_calloc returns null
+AUDIT phase5-defined-failures  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 0  published= 10  retired= 2  live= 8
+  [ok] phase6: runtime-derived null address is 0
+AUDIT phase6a-free-null  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 1  published= 10  retired= 2  live= 8
+AUDIT phase6b-free-x4  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 5  published= 10  retired= 6  live= 4
+AUDIT phase7-free-rest  call_malloc= 6  call_calloc= 4  call_realloc= 4  call_free= 9  published= 10  retired= 10  live= 0
+  [ok] phase7: published == retired (live 0)
+CHECKS: 24 run, 0 failed
+F-005 AUDIT LEG RESULT: PASS
+exit:0
+
+--- S5b. Stability repetitions ---
+$ ./build/test_f005 x5 (dynamic leg; INC-F005-01 quiescence check)
+dynamic rep 1 exit:0 F-005 DYNAMIC LEG RESULT: PASS | checks: CHECKS: 18 run, 0 failed
+dynamic rep 2 exit:0 F-005 DYNAMIC LEG RESULT: PASS | checks: CHECKS: 18 run, 0 failed
+dynamic rep 3 exit:0 F-005 DYNAMIC LEG RESULT: PASS | checks: CHECKS: 18 run, 0 failed
+dynamic rep 4 exit:0 F-005 DYNAMIC LEG RESULT: PASS | checks: CHECKS: 18 run, 0 failed
+dynamic rep 5 exit:0 F-005 DYNAMIC LEG RESULT: PASS | checks: CHECKS: 18 run, 0 failed
+$ ./build/test_f005_audit x3 (audit leg)
+audit rep 1 exit:0 F-005 AUDIT LEG RESULT: PASS | checks: CHECKS: 24 run, 0 failed
+audit rep 2 exit:0 F-005 AUDIT LEG RESULT: PASS | checks: CHECKS: 24 run, 0 failed
+audit rep 3 exit:0 F-005 AUDIT LEG RESULT: PASS | checks: CHECKS: 24 run, 0 failed
+
+--- S6. LD_DEBUG=bindings on the dynamic leg (E-004 shape) ---
+$ LD_DEBUG=bindings ./build/test_f005 ; echo exit:$?
+exit:0
+$ cat stdout of the bindings run
+F-005 dynamic leg (Mojo program linked against libmimiralloc.so only,
+plus the test-only libf005probe.so observer)
+  [ok] f005_page_size() > 0
+PAGE: 16384
+warmup pass 0 done
+warmup pass 1 done
+warmup pass 2 done
+MAPPED base= 2475163648 (quiescent baseline, INC-F005-01)
+  [ok] mapped base > 0
+  [ok] 4x mimir_malloc(64) non-null
+  [ok] validated == site_malloc (4)
+  [ok] mimir_malloc block pattern write/readback
+MAPPED after_mimir_malloc_x4= 2475294720  delta= 131072
+  [ok] mapped delta == 4 * page_round_up(page + 64)
+  [ok] 4x libc malloc(64) non-null
+MAPPED after_libc_malloc_x4= 2475294720  delta_vs_mimir= 0
+  [ok] libc allocations move no mapped bytes
+  [ok] mapped unchanged after libc frees
+  [ok] 2x mimir_calloc(16, 8) non-null
+  [ok] calloc extents arrive zeroed (128 bytes x2)
+  [ok] validated == site_malloc + site_calloc (6)
+MAPPED after_mimir_calloc_x2= 2475360256  delta= 65536
+  [ok] mapped delta == 2 * page_round_up(page + 128)
+  [ok] mimir_realloc(p0, 96) non-null
+  [ok] grown block descriptor records 96 bytes
+  [ok] realloc grow preserves first 64 bytes
+  [ok] mapped unchanged by realloc grow (publish + retire)
+MAPPED final= 2475163648  base= 2475163648
+  [ok] mapped returns exactly to baseline after all frees
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+$ grep binding lines: generated executable -> libmimiralloc.so (mimir_*)
+    988406:	binding file ./build/test_f005 [0] to /home/pi/mimiralloc-team-05/build/libmimiralloc.so [0]: normal symbol `mimir_malloc'
+    988406:	binding file ./build/test_f005 [0] to /home/pi/mimiralloc-team-05/build/libmimiralloc.so [0]: normal symbol `mimir_free'
+    988406:	binding file ./build/test_f005 [0] to /home/pi/mimiralloc-team-05/build/libmimiralloc.so [0]: normal symbol `mimir_calloc'
+    988406:	binding file ./build/test_f005 [0] to /home/pi/mimiralloc-team-05/build/libmimiralloc.so [0]: normal symbol `mimir_realloc'
+$ count of those lines
+4
+$ grep binding lines: generated executable -> libf005probe.so (f005_*)
+    988406:	binding file ./build/test_f005 [0] to /home/pi/mimiralloc-team-05/build/libf005probe.so [0]: normal symbol `f005_page_size'
+    988406:	binding file ./build/test_f005 [0] to /home/pi/mimiralloc-team-05/build/libf005probe.so [0]: normal symbol `f005_descriptor_valid'
+    988406:	binding file ./build/test_f005 [0] to /home/pi/mimiralloc-team-05/build/libf005probe.so [0]: normal symbol `f005_mapped_bytes'
+
+--- S7. Negative controls (EXPECTED failures) ---
+$ mojo build -o /tmp/test_f005_nolink tests/mojo/test_f005.mojo   (no -Xlinker at all)
+exit:1 (1 = link fails without the boundary, as designed)
+      8 undefined reference to `f005_descriptor_valid'
+      9 undefined reference to `f005_mapped_bytes'
+      1 undefined reference to `f005_page_size'
+      2 undefined reference to `mimir_calloc'
+      6 undefined reference to `mimir_free'
+      5 undefined reference to `mimir_malloc'
+      1 undefined reference to `mimir_realloc'
+33
+$ mojo build -o /tmp/test_f005_audit_nolink tests/mojo/test_f005_audit.mojo   (no -Xlinker at all)
+exit:1 (1 = link fails without the objects, as designed)
+      2 undefined reference to `f005_audit_call_calloc'
+      4 undefined reference to `f005_audit_call_free'
+      2 undefined reference to `f005_audit_call_malloc'
+      2 undefined reference to `f005_audit_call_realloc'
+      4 undefined reference to `f005_audit_published'
+      4 undefined reference to `f005_audit_retired'
+      4 undefined reference to `mimir_calloc'
+      5 undefined reference to `mimir_free'
+      6 undefined reference to `mimir_malloc'
+      4 undefined reference to `mimir_realloc'
+38
+$ null-Pointer literal probe (EXPECTED compile failure: INC-F005-02)
+probe source /tmp/f005probe/probe.mojo contains: Pointer(unsafe_from_address=0)
+46:    var np = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=0)
+exit:1 (1 = literal null Pointer rejected at compile time)
+                                               ^
+Mojo/stdlib/std/memory/pointer.mojo:491:9: note: constraint failed: Pointer is non-nullable. To construct a null pointer, use Optional[Pointer] to model nullability.
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+
+--- S8. F-003 / F-004 join re-runs in this worktree (same base) ---
+$ make test-f003
+exit:0
+./build/test_f003
+STEP1 mimir_malloc(64) + pattern write/readback: PASS
+STEP2 mimir_calloc(16, 4) arrives zeroed (64 bytes): PASS
+STEP3 mimir_realloc grow 64 -> 256, contents preserved + tail writable: PASS
+STEP4 mimir_free(realloc block) + mimir_free(calloc block): PASS
+F-003 RESULT: PASS (4/4 steps)
+$ make test-f004-mojo
+exit:0
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+
+--- S9. Standalone Makefile target, from clean F-005 artifacts ---
+$ rm -f build/test_f005 build/test_f005_audit build/libf005probe.so build/f005_audit.o && make test-f005
+exit:0
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+CHECKS: 24 run, 0 failed
+F-005 AUDIT LEG RESULT: PASS
+
+--- S10. Native gate and tree state ---
+$ make test
+exit:0
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+$ sha256sum README.md && git show HEAD:README.md | sha256sum
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+$ git diff HEAD --numstat
+42	0	Makefile
+$ git status --porcelain
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/mojo/f005_audit.c
+?? tests/mojo/f005_probe.c
+?? tests/mojo/recorded_run_f005.txt
+?? tests/mojo/test_f005.mojo
+?? tests/mojo/test_f005_audit.mojo
+$ free -g
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+$ curl Samtal http code: 200
+
+=== END OF F-005 RECORDED RUN ===

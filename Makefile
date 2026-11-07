@@ -508,3 +508,45 @@ test-f004-mojo:
 	fi
 
 .PHONY: test-f004-mojo
+
+# F-005: allocator-use proof on the Mojo path (binding
+# grade) - the two generated Mojo programs under
+# tests/mojo/ upgrade F-003's verdict+linkage proof to
+# binding grade, adapting E-004's binding proof and
+# E-005's two legs to the Mojo path. DYNAMIC leg:
+# tests/mojo/test_f005.mojo is linked against
+# build/libmimiralloc.so (the F-003 B2 boundary) plus the
+# test-only observer build/libf005probe.so (from
+# tests/mojo/f005_probe.c: descriptor validation +
+# /proc/self/maps mapped-bytes accounting, E-005 dynamic
+# leg); the recorded run adds LD_DEBUG=bindings evidence
+# (E-004's shape). STATIC leg:
+# tests/mojo/test_f005_audit.mojo links the library
+# OBJECTS and the getter object build/f005_audit.o (from
+# tests/mojo/f005_audit.c) directly, so the program reads
+# the six internal E-005 audit counters its own mimir_*
+# calls move, exactly as `make test-e005` does in C.
+# Standalone via `make test-f005`; NOT part of `make
+# test`, whose composition is unchanged, and `make test`
+# does not depend on Mojo being present - this target is
+# (with test-f003) one of the only ones that invoke mojo,
+# using the `mojo` found on PATH. See
+# docs/PHASE_6_ALLOCATOR_USE_PROOF_F005.md and
+# tests/mojo/recorded_run_f005.txt.
+$(BUILD)/libf005probe.so: tests/mojo/f005_probe.c | $(BUILD)
+	$(CC) -std=c11 -Wall -Wextra -Werror -fPIC -shared tests/mojo/f005_probe.c -o $@
+
+$(BUILD)/test_f005: tests/mojo/test_f005.mojo $(BUILD)/libmimiralloc.so $(BUILD)/libf005probe.so | $(BUILD)
+	$(MOJO) build -o $@ tests/mojo/test_f005.mojo -Xlinker -L$(BUILD) -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$$ORIGIN'
+
+$(BUILD)/f005_audit.o: tests/mojo/f005_audit.c | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/mojo/f005_audit.c -o $@
+
+$(BUILD)/test_f005_audit: tests/mojo/test_f005_audit.mojo $(LIBOBJS) $(BUILD)/f005_audit.o | $(BUILD)
+	$(MOJO) build -o $@ tests/mojo/test_f005_audit.mojo -Xlinker $(BUILD)/mimir_alloc.o -Xlinker $(BUILD)/mimir_core.o -Xlinker $(BUILD)/mimir_platform.o -Xlinker $(BUILD)/f005_audit.o -Xlinker -lpthread
+
+test-f005: $(BUILD)/test_f005 $(BUILD)/test_f005_audit
+	./$(BUILD)/test_f005
+	./$(BUILD)/test_f005_audit
+
+.PHONY: test-f005
