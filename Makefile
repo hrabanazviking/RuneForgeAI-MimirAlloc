@@ -1507,3 +1507,22 @@ test-k006: $(BUILD)/bench_k006_glibc $(BUILD)/bench_k006_mimir
 	python3 tests/perf/summarize_k006.py /tmp/k006_smoke.txt
 
 .PHONY: bench-k006 test-k006
+
+# K-007: Phase 11 batching experiments - one harness
+# (tests/perf/bench_k007.c) built twice: glibc leg
+# (-DLEG_GLIBC, stdlib malloc/free) and MimirAlloc leg
+# (banked LIBOBJS, shipped -O2 flavour per K-004; harness
+# compiled -O2, bench_k002 precedent). Standalone via
+# `make bench-k007`; NOT part of `make test`.
+$(BUILD)/bench_k007_glibc.o: tests/perf/bench_k007.c | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -DLEG_GLIBC -c tests/perf/bench_k007.c -o $@
+$(BUILD)/bench_k007_glibc: $(BUILD)/bench_k007_glibc.o
+	$(CC) $(CFLAGS) -O2 $(BUILD)/bench_k007_glibc.o -o $@
+$(BUILD)/bench_k007_mimir.o: tests/perf/bench_k007.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -c tests/perf/bench_k007.c -o $@
+$(BUILD)/bench_k007_mimir: $(LIBOBJS) $(BUILD)/bench_k007_mimir.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/bench_k007_mimir.o -o $@
+bench-k007: $(BUILD)/bench_k007_glibc $(BUILD)/bench_k007_mimir
+	./tests/perf/run_bench_k007.sh /tmp/k007_raw.txt 7
+	python3 tests/perf/summarize_k007.py /tmp/k007_raw.txt
+.PHONY: bench-k007
