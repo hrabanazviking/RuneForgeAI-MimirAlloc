@@ -838,3 +838,23 @@ test-h003: $(BUILD)/test_h003
 	./$(BUILD)/test_h003
 
 .PHONY: test-h003
+
+# H-004: Phase 8 contention controls probe - test-only
+# harness under tests/perf/ (probe_h004.c) measuring the
+# status quo (real allocator, H-002 Phase B shape) against
+# two lock/queue MODELS (striped shards, bounded remote-
+# free queue) over a fixed slot pool. Standalone via
+# `make test-h004`; NOT part of `make test`, whose
+# composition is unchanged. No src/ change. Recorded run:
+# tests/perf/recorded_run_h004.txt; slice record:
+# docs/PHASE_8_CONTENTION_CONTROLS_H004.md.
+$(BUILD)/probe_h004.o: tests/perf/probe_h004.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_h004.c -o $@
+
+$(BUILD)/probe_h004: $(LIBOBJS) $(BUILD)/probe_h004.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_h004.o -o $@
+
+test-h004: $(BUILD)/probe_h004
+	./$(BUILD)/probe_h004
+
+.PHONY: test-h004

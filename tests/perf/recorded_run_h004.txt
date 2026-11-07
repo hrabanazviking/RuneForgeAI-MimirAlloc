@@ -1,0 +1,82 @@
+H-004 recorded run - Phase 8 contention controls
+Sat Nov  7 03:11:56 AM EST 2026
+base: 7c31df95093d317798f940d757886ca97817ccd3 branch: yrsa/mimiralloc-04
+aarch64
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_before:200
+--- make clean && make test ---
+make_test_exit:0
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+--- make test-h004 x3 (each line is median of 3 internal reps) ---
+REP 1
+probe_exit:0
+V2 threads=1 rep=0 queue_fallbacks=0
+V2 threads=1 rep=1 queue_fallbacks=0
+V2 threads=1 rep=2 queue_fallbacks=0
+CONFIG threads=1 v0_real_ns_per_op=1967 v1_shard_model_ns_per_op=361 v2_queue_model_ns_per_op=321 OK
+V2 threads=2 rep=0 queue_fallbacks=1974
+V2 threads=2 rep=1 queue_fallbacks=1965
+V2 threads=2 rep=2 queue_fallbacks=1944
+CONFIG threads=2 v0_real_ns_per_op=3214 v1_shard_model_ns_per_op=515 v2_queue_model_ns_per_op=528 OK
+V2 threads=4 rep=0 queue_fallbacks=3718
+V2 threads=4 rep=1 queue_fallbacks=3827
+V2 threads=4 rep=2 queue_fallbacks=3708
+CONFIG threads=4 v0_real_ns_per_op=5780 v1_shard_model_ns_per_op=698 v2_queue_model_ns_per_op=677 OK
+V2 threads=8 rep=0 queue_fallbacks=7766
+V2 threads=8 rep=1 queue_fallbacks=7422
+V2 threads=8 rep=2 queue_fallbacks=7846
+CONFIG threads=8 v0_real_ns_per_op=10498 v1_shard_model_ns_per_op=1163 v2_queue_model_ns_per_op=888 OK
+RESULT: PASS
+REP 2
+probe_exit:0
+V2 threads=1 rep=0 queue_fallbacks=0
+V2 threads=1 rep=1 queue_fallbacks=0
+V2 threads=1 rep=2 queue_fallbacks=0
+CONFIG threads=1 v0_real_ns_per_op=1968 v1_shard_model_ns_per_op=358 v2_queue_model_ns_per_op=320 OK
+V2 threads=2 rep=0 queue_fallbacks=1973
+V2 threads=2 rep=1 queue_fallbacks=1956
+V2 threads=2 rep=2 queue_fallbacks=1961
+CONFIG threads=2 v0_real_ns_per_op=2994 v1_shard_model_ns_per_op=517 v2_queue_model_ns_per_op=502 OK
+V2 threads=4 rep=0 queue_fallbacks=3833
+V2 threads=4 rep=1 queue_fallbacks=3712
+V2 threads=4 rep=2 queue_fallbacks=3938
+CONFIG threads=4 v0_real_ns_per_op=5617 v1_shard_model_ns_per_op=710 v2_queue_model_ns_per_op=694 OK
+V2 threads=8 rep=0 queue_fallbacks=7857
+V2 threads=8 rep=1 queue_fallbacks=7901
+V2 threads=8 rep=2 queue_fallbacks=7903
+CONFIG threads=8 v0_real_ns_per_op=9873 v1_shard_model_ns_per_op=1177 v2_queue_model_ns_per_op=725 OK
+RESULT: PASS
+REP 3
+probe_exit:0
+V2 threads=1 rep=0 queue_fallbacks=0
+V2 threads=1 rep=1 queue_fallbacks=0
+V2 threads=1 rep=2 queue_fallbacks=0
+CONFIG threads=1 v0_real_ns_per_op=1884 v1_shard_model_ns_per_op=358 v2_queue_model_ns_per_op=319 OK
+V2 threads=2 rep=0 queue_fallbacks=1964
+V2 threads=2 rep=1 queue_fallbacks=1961
+V2 threads=2 rep=2 queue_fallbacks=1964
+CONFIG threads=2 v0_real_ns_per_op=3058 v1_shard_model_ns_per_op=514 v2_queue_model_ns_per_op=499 OK
+V2 threads=4 rep=0 queue_fallbacks=3696
+V2 threads=4 rep=1 queue_fallbacks=3685
+V2 threads=4 rep=2 queue_fallbacks=3688
+CONFIG threads=4 v0_real_ns_per_op=5699 v1_shard_model_ns_per_op=731 v2_queue_model_ns_per_op=509 OK
+V2 threads=8 rep=0 queue_fallbacks=7699
+V2 threads=8 rep=1 queue_fallbacks=7124
+V2 threads=8 rep=2 queue_fallbacks=7283
+CONFIG threads=8 v0_real_ns_per_op=9969 v1_shard_model_ns_per_op=1112 v2_queue_model_ns_per_op=842 OK
+RESULT: PASS
+--- ABI ---
+4
+0000000000000998 T mimir_calloc
+0000000000000964 T mimir_free
+0000000000000934 T mimir_malloc
+00000000000009d0 T mimir_realloc
+samtal_after:200
