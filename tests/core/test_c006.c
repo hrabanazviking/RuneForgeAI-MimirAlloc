@@ -132,6 +132,85 @@ static const void *rd_ptr(const unsigned char *d, size_t off)
     return v;
 }
 
+/* G-003 shape awareness (docs/PHASE_7_SMALL_OBJECT_PATH_G003.md,
+ * INC-G003-01): from Phase 7, requests of 1..1024 bytes are
+ * served from size-class spans (banked G-002 design), whose
+ * serving header sits at the start of the span's one system
+ * page -- NOT one page before the user pointer, and the
+ * pointer is 16-aligned, not page-aligned (G-002 S9 expressly
+ * disowns the mapping form's page alignment as an accident
+ * no caller or test may rely on). The descriptor read-backs
+ * in this file therefore branch on the serving form:
+ * page-aligned user pointers (the mapping path) keep the
+ * original B-006 S7.3 descriptor checks at full strength;
+ * span-served pointers get the equivalent clean-init
+ * verification of the span header (G-002 S7 / G-003 layout:
+ * magic "MIMIRSPN", base == header address, mapping_length
+ * == one system page, usable_offset == 96, class-size field
+ * == the class serving the request, usable_size ==
+ * mapping_length - 96, state LIVE, class index in range,
+ * live_count >= 1, pointer at the class stride inside the
+ * object area). No contract-level check in this file
+ * changed: patterns, max_align_t alignment, overflow
+ * refusals, health cycles and postures are untouched. */
+#define SPAN_MAGIC UINT64_C(0x4D494D495253504E) /* "MIMIRSPN" */
+#define SPAN_OFF_CLASS_INDEX    52u
+#define SPAN_OFF_LIVE_COUNT     80u
+
+static size_t g003_class_for(size_t n, size_t *idx_out)
+{
+    static const size_t cs[20] = {
+        16, 32, 48, 64, 80, 96, 112, 128, 160, 192,
+        224, 256, 320, 384, 448, 512, 640, 768, 896, 1024
+    };
+    size_t i;
+
+    for (i = 0; i < 20; i++) {
+        if (n <= cs[i]) {
+            if (idx_out != NULL) {
+                *idx_out = i;
+            }
+            return cs[i];
+        }
+    }
+    if (idx_out != NULL) {
+        *idx_out = 20;
+    }
+    return 0;
+}
+
+static const unsigned char *g003_span_header_of(const void *user,
+                                                size_t page)
+{
+    return (const unsigned char *)((uintptr_t)user &
+                                   ~(uintptr_t)(page - 1));
+}
+
+static int g003_span_clean(const unsigned char *h,
+                           const void *user, size_t page,
+                           size_t requested)
+{
+    size_t idx = 20;
+    size_t cs = g003_class_for(requested, &idx);
+    size_t off;
+
+    if (cs == 0) {
+        return 0;
+    }
+    off = (size_t)((const unsigned char *)user - h);
+    return rd_u64(h, DESC_OFF_MAGIC) == SPAN_MAGIC &&
+           rd_ptr(h, DESC_OFF_MAPPING_BASE) == (const void *)h &&
+           rd_size(h, DESC_OFF_MAPPING_LENGTH) == page &&
+           rd_size(h, DESC_OFF_USABLE_OFFSET) == 96 &&
+           rd_size(h, DESC_OFF_REQUESTED_SIZE) == cs &&
+           rd_size(h, DESC_OFF_USABLE_SIZE) == page - 96 &&
+           rd_u32(h, DESC_OFF_STATE) == DESC_STATE_LIVE &&
+           rd_u32(h, SPAN_OFF_CLASS_INDEX) == (uint32_t)idx &&
+           rd_size(h, SPAN_OFF_LIVE_COUNT) >= 1 &&
+           off >= 96 && (off - 96) % cs == 0;
+}
+
+
 static void fill_pattern(unsigned char *p, size_t n,
                          unsigned int seed)
 {
@@ -237,31 +316,43 @@ int main(void)
               "MA-6.3-001/-005: first mimir_malloc succeeds "
               "with no prior initialisation");
         if (p != NULL) {
-            const unsigned char *d =
-                (const unsigned char *)p - page;
-            int clean = 1;
-            size_t i;
+            int clean;
 
-            if (rd_u64(d, DESC_OFF_MAGIC) != DESC_MAGIC ||
-                rd_ptr(d, DESC_OFF_MAPPING_BASE) !=
-                    (const void *)d ||
-                rd_size(d, DESC_OFF_USABLE_OFFSET) != page ||
-                rd_size(d, DESC_OFF_REQUESTED_SIZE) != 48 ||
-                rd_size(d, DESC_OFF_USABLE_SIZE) !=
-                    rd_size(d, DESC_OFF_MAPPING_LENGTH) - page ||
-                rd_u32(d, DESC_OFF_STATE) != DESC_STATE_LIVE ||
-                rd_u32(d, DESC_OFF_FLAGS) != 0) {
-                clean = 0;
-            }
-            for (i = 0; i < DESC_RESERVED_LEN; i++) {
-                if (d[DESC_OFF_RESERVED + i] != 0) {
+            if ((uintptr_t)p % page == 0) {
+                const unsigned char *d =
+                    (const unsigned char *)p - page;
+                size_t i;
+
+                clean = 1;
+                if (rd_u64(d, DESC_OFF_MAGIC) != DESC_MAGIC ||
+                    rd_ptr(d, DESC_OFF_MAPPING_BASE) !=
+                        (const void *)d ||
+                    rd_size(d, DESC_OFF_USABLE_OFFSET) != page ||
+                    rd_size(d, DESC_OFF_REQUESTED_SIZE) != 48 ||
+                    rd_size(d, DESC_OFF_USABLE_SIZE) !=
+                        rd_size(d, DESC_OFF_MAPPING_LENGTH) -
+                            page ||
+                    rd_u32(d, DESC_OFF_STATE) != DESC_STATE_LIVE ||
+                    rd_u32(d, DESC_OFF_FLAGS) != 0) {
                     clean = 0;
                 }
+                for (i = 0; i < DESC_RESERVED_LEN; i++) {
+                    if (d[DESC_OFF_RESERVED + i] != 0) {
+                        clean = 0;
+                    }
+                }
+            } else {
+                /* G-003 (INC-G003-01): 48 bytes is span-served
+                 * from Phase 7; the fully-formed-before-
+                 * publication duty is verified on the span
+                 * header that actually serves the call. */
+                clean = g003_span_clean(
+                    g003_span_header_of(p, page), p, page, 48);
             }
             check(clean,
-                  "B-007 C1.4: first descriptor fully formed "
-                  "before publication (magic, base, sizes, "
-                  "LIVE, flags/reserved zero)");
+                  "B-007 C1.4: first serving header fully formed "
+                  "before publication (descriptor or span form: "
+                  "magic, base, sizes, LIVE)");
             mimir_free(p);
         }
     }

@@ -150,6 +150,85 @@ static const unsigned char *descriptor_of(const void *user,
     return (const unsigned char *)user - page;
 }
 
+/* G-003 shape awareness (docs/PHASE_7_SMALL_OBJECT_PATH_G003.md,
+ * INC-G003-01): from Phase 7, requests of 1..1024 bytes are
+ * served from size-class spans (banked G-002 design), whose
+ * serving header sits at the start of the span's one system
+ * page -- NOT one page before the user pointer, and the
+ * pointer is 16-aligned, not page-aligned (G-002 S9 expressly
+ * disowns the mapping form's page alignment as an accident
+ * no caller or test may rely on). The descriptor read-backs
+ * in this file therefore branch on the serving form:
+ * page-aligned user pointers (the mapping path) keep the
+ * original B-006 S7.3 descriptor checks at full strength;
+ * span-served pointers get the equivalent clean-init
+ * verification of the span header (G-002 S7 / G-003 layout:
+ * magic "MIMIRSPN", base == header address, mapping_length
+ * == one system page, usable_offset == 96, class-size field
+ * == the class serving the request, usable_size ==
+ * mapping_length - 96, state LIVE, class index in range,
+ * live_count >= 1, pointer at the class stride inside the
+ * object area). No contract-level check in this file
+ * changed: patterns, max_align_t alignment, overflow
+ * refusals, health cycles and postures are untouched. */
+#define SPAN_MAGIC UINT64_C(0x4D494D495253504E) /* "MIMIRSPN" */
+#define SPAN_OFF_CLASS_INDEX    52u
+#define SPAN_OFF_LIVE_COUNT     80u
+
+static size_t g003_class_for(size_t n, size_t *idx_out)
+{
+    static const size_t cs[20] = {
+        16, 32, 48, 64, 80, 96, 112, 128, 160, 192,
+        224, 256, 320, 384, 448, 512, 640, 768, 896, 1024
+    };
+    size_t i;
+
+    for (i = 0; i < 20; i++) {
+        if (n <= cs[i]) {
+            if (idx_out != NULL) {
+                *idx_out = i;
+            }
+            return cs[i];
+        }
+    }
+    if (idx_out != NULL) {
+        *idx_out = 20;
+    }
+    return 0;
+}
+
+static const unsigned char *g003_span_header_of(const void *user,
+                                                size_t page)
+{
+    return (const unsigned char *)((uintptr_t)user &
+                                   ~(uintptr_t)(page - 1));
+}
+
+static int g003_span_clean(const unsigned char *h,
+                           const void *user, size_t page,
+                           size_t requested)
+{
+    size_t idx = 20;
+    size_t cs = g003_class_for(requested, &idx);
+    size_t off;
+
+    if (cs == 0) {
+        return 0;
+    }
+    off = (size_t)((const unsigned char *)user - h);
+    return rd_u64(h, DESC_OFF_MAGIC) == SPAN_MAGIC &&
+           rd_ptr(h, DESC_OFF_MAPPING_BASE) == (const void *)h &&
+           rd_size(h, DESC_OFF_MAPPING_LENGTH) == page &&
+           rd_size(h, DESC_OFF_USABLE_OFFSET) == 96 &&
+           rd_size(h, DESC_OFF_REQUESTED_SIZE) == cs &&
+           rd_size(h, DESC_OFF_USABLE_SIZE) == page - 96 &&
+           rd_u32(h, DESC_OFF_STATE) == DESC_STATE_LIVE &&
+           rd_u32(h, SPAN_OFF_CLASS_INDEX) == (uint32_t)idx &&
+           rd_size(h, SPAN_OFF_LIVE_COUNT) >= 1 &&
+           off >= 96 && (off - 96) % cs == 0;
+}
+
+
 static int reserved_is_zero(const unsigned char *d)
 {
     size_t i;
@@ -244,12 +323,15 @@ int main(void)
         check(p != NULL,
               "C2/F-08: first call in process succeeds, no init step");
         if (p != NULL) {
-            const unsigned char *d = descriptor_of(p, page);
-
-            check((uintptr_t)p % page == 0,
-                  "B.1: first pointer system-page aligned by construction");
-            check(descriptor_clean(d, p, page, 37, 2 * page),
-                  "C1.4: first descriptor fully clean-initialised");
+            check((uintptr_t)p % _Alignof(max_align_t) == 0,
+                  "B.1: first pointer aligned to max_align_t "
+                  "(G-002 S9: page alignment is the mapping "
+                  "form's accident, not the class path's claim)");
+            check(g003_span_clean(g003_span_header_of(p, page),
+                                  p, page, 37),
+                  "C1.4: first serving header (span form) fully "
+                  "clean-initialised (G-003; the descriptor form "
+                  "of this check runs on the large sizes below)");
             fill_pattern(p, 37, 5);
             check(pattern_ok(p, 37, 5),
                   "C1.2: first block pattern verifies over full extent");
@@ -283,18 +365,28 @@ int main(void)
             if (p == NULL) {
                 continue;
             }
-            snprintf(label, sizeof label,
-                     "B.1: malloc(%zu) system-page aligned", n);
-            check((uintptr_t)p % page == 0, label);
+            if (n > 1024) {
+                snprintf(label, sizeof label,
+                         "B.1: malloc(%zu) system-page aligned", n);
+                check((uintptr_t)p % page == 0, label);
+                snprintf(label, sizeof label,
+                         "C1.4/A5/A6/A8: malloc(%zu) descriptor "
+                         "clean, mapping_length == %zu",
+                         n, want_mlen);
+                check(descriptor_clean(descriptor_of(p, page), p,
+                                       page, n, want_mlen), label);
+            } else {
+                snprintf(label, sizeof label,
+                         "C1.4 (span form): malloc(%zu) span "
+                         "header clean, one system page", n);
+                check(g003_span_clean(
+                          g003_span_header_of(p, page), p, page, n),
+                      label);
+            }
             snprintf(label, sizeof label,
                      "B.1: malloc(%zu) aligned to max_align_t", n);
             check((uintptr_t)p % _Alignof(max_align_t) == 0,
                   label);
-            snprintf(label, sizeof label,
-                     "C1.4/A5/A6/A8: malloc(%zu) descriptor clean, "
-                     "mapping_length == %zu", n, want_mlen);
-            check(descriptor_clean(descriptor_of(p, page), p,
-                                   page, n, want_mlen), label);
             fill_pattern(p, n, (unsigned int)(11 + i));
             snprintf(label, sizeof label,
                      "C1.2: malloc(%zu) pattern verifies over "
@@ -320,13 +412,23 @@ int main(void)
                 all_clean = 0;
                 break;
             }
-            {
+            if (n > 1024) {
                 const unsigned char *d = descriptor_of(p, page);
 
                 if (rd_u64(d, DESC_OFF_MAGIC) != DESC_MAGIC ||
                     rd_u32(d, DESC_OFF_STATE) != DESC_STATE_LIVE ||
                     rd_u32(d, DESC_OFF_FLAGS) != 0 ||
                     !reserved_is_zero(d)) {
+                    all_clean = 0;
+                }
+            } else {
+                const unsigned char *h =
+                    g003_span_header_of(p, page);
+
+                if (rd_u64(h, DESC_OFF_MAGIC) != SPAN_MAGIC ||
+                    rd_u32(h, DESC_OFF_STATE) != DESC_STATE_LIVE ||
+                    rd_size(h, DESC_OFF_REQUESTED_SIZE) !=
+                        g003_class_for(n, NULL)) {
                     all_clean = 0;
                 }
             }
@@ -336,7 +438,8 @@ int main(void)
             }
         }
         check(all_clean,
-              "C1.4: 24 alloc/free cycles, every descriptor clean-init");
+              "C1.4: 24 alloc/free cycles, every serving header "
+              "clean-init (descriptor or span form, G-003)");
     }
 
     /* --- Interleaved live blocks (C1.2, Invariant 1) ------ */

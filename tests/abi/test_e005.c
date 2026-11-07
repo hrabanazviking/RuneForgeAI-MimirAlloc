@@ -39,6 +39,24 @@
  * realloc-to-zero postures are NOT exercised: no behaviour
  * is promised for them (U-09 / U-12 unresolved).
  *
+ * G-003 re-teach (INC-G002-09): every size in the phase
+ * script below is <= 1024, so from Phase 7 the script's
+ * allocations are span-served and publish/retire in the
+ * G-003 span/object counters (tests/core/
+ * mimir_small_g003.h), NOT in the mapping counters this
+ * file originally asserted. expect() therefore asserts
+ * both registries: mapping published/retired stay 0
+ * throughout this script, and the small counters carry
+ * exactly the totals the mapping counters carried at
+ * E-005 (published 5/8/10, retired 2/6/10 by phase).
+ * The proof's claim is unchanged: counters move exactly
+ * per call / per publication / per retirement, in
+ * whichever registry serves the size, and libc bypass
+ * moves none of them. Span publications/retirements are
+ * printed in the AUDIT line for the record (this script
+ * publishes 7 spans, retires 0: one span per class it
+ * touches, all within the retention bound).
+ *
  * Standalone on purpose: built and run via `make
  * test-e005`; NOT part of `make test`. See
  * docs/PHASE_5_AUDIT_HOOK_E005.md and the recorded run
@@ -46,6 +64,7 @@
  */
 #include "mimir_alloc.h"
 #include "mimir_audit_e005.h"
+#include "../core/mimir_small_g003.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -75,7 +94,8 @@ static void audit_line(const char *phase)
 {
     printf("AUDIT %s call_malloc=%lu call_calloc=%lu "
            "call_realloc=%lu call_free=%lu published=%lu "
-           "retired=%lu live=%lu\n",
+           "retired=%lu live=%lu span_published=%lu "
+           "span_retired=%lu small_alloc=%lu small_free=%lu\n",
            phase,
            load(&mimir_audit_call_malloc),
            load(&mimir_audit_call_calloc),
@@ -84,20 +104,27 @@ static void audit_line(const char *phase)
            load(&mimir_audit_alloc_published),
            load(&mimir_audit_mapping_retired),
            load(&mimir_audit_alloc_published) -
-               load(&mimir_audit_mapping_retired));
+               load(&mimir_audit_mapping_retired),
+           load(&mimir_audit_span_published),
+           load(&mimir_audit_span_retired),
+           load(&mimir_audit_small_alloc),
+           load(&mimir_audit_small_free));
 }
 
 static int expect(const char *phase, unsigned long cm,
                   unsigned long cc, unsigned long cr,
                   unsigned long cf, unsigned long pub,
-                  unsigned long ret)
+                  unsigned long ret, unsigned long sa,
+                  unsigned long sf)
 {
     int ok = load(&mimir_audit_call_malloc) == cm &&
              load(&mimir_audit_call_calloc) == cc &&
              load(&mimir_audit_call_realloc) == cr &&
              load(&mimir_audit_call_free) == cf &&
              load(&mimir_audit_alloc_published) == pub &&
-             load(&mimir_audit_mapping_retired) == ret;
+             load(&mimir_audit_mapping_retired) == ret &&
+             load(&mimir_audit_small_alloc) == sa &&
+             load(&mimir_audit_small_free) == sf;
     audit_line(phase);
     return ok;
 }
@@ -108,7 +135,7 @@ int main(void)
            "objects linked directly)\n");
 
     /* Start state: every counter zero before any call. */
-    CHECK(expect("start", 0, 0, 0, 0, 0, 0));
+    CHECK(expect("start", 0, 0, 0, 0, 0, 0, 0, 0));
 
     /* Phase 1: five mimir_malloc through the public path. */
     static const size_t msz[5] = {32, 64, 128, 256, 512};
@@ -120,7 +147,7 @@ int main(void)
             memset(m[i], 0x40 + i, msz[i]);
         }
     }
-    CHECK(expect("phase1-mimir-malloc-x5", 5, 0, 0, 0, 5, 0));
+    CHECK(expect("phase1-mimir-malloc-x5", 5, 0, 0, 0, 0, 0, 5, 0));
 
     /* Phase 2 (NEGATIVE): libc calls in the same process
      * bypass MimirAlloc entirely; no counter may move. */
@@ -138,7 +165,7 @@ int main(void)
     free(x);
     free(y);
     free(z);
-    CHECK(expect("phase2-libc-bypass", 5, 0, 0, 0, 5, 0));
+    CHECK(expect("phase2-libc-bypass", 5, 0, 0, 0, 0, 0, 5, 0));
 
     /* Phase 3: three mimir_calloc; extents read zero. */
     unsigned char *c[3];
@@ -158,7 +185,7 @@ int main(void)
             CHECK(zeroed);
         }
     }
-    CHECK(expect("phase3-mimir-calloc-x3", 5, 3, 0, 0, 8, 0));
+    CHECK(expect("phase3-mimir-calloc-x3", 5, 3, 0, 0, 0, 0, 8, 0));
 
     /* Phase 4: realloc - grow x2 moves (publish + retire),
      * shrink x1 and same-size x1 move no mapping counter. */
@@ -186,7 +213,7 @@ int main(void)
             m[1] = g;
         }
     }
-    CHECK(expect("phase4a-realloc-grow-x2", 5, 3, 2, 0, 10, 2));
+    CHECK(expect("phase4a-realloc-grow-x2", 5, 3, 2, 0, 0, 0, 10, 2));
     if (m[4] != NULL) {
         unsigned char *s = mimir_realloc(m[4], 128);
         CHECK(s == m[4]);
@@ -195,7 +222,7 @@ int main(void)
         unsigned char *s = mimir_realloc(m[3], 256);
         CHECK(s == m[3]);
     }
-    CHECK(expect("phase4b-realloc-shrink-same", 5, 3, 4, 0, 10, 2));
+    CHECK(expect("phase4b-realloc-shrink-same", 5, 3, 4, 0, 0, 0, 10, 2));
 
     /* Phase 5: defined failures. The call counters move
      * (the call reached MimirAlloc); the mapping counters
@@ -204,17 +231,17 @@ int main(void)
     CHECK(big == NULL);
     void *ovf = mimir_calloc(SIZE_MAX, 2);
     CHECK(ovf == NULL);
-    CHECK(expect("phase5-defined-failures", 6, 4, 4, 0, 10, 2));
+    CHECK(expect("phase5-defined-failures", 6, 4, 4, 0, 0, 0, 10, 2));
 
     /* Phase 6: free(NULL) counts as a call and retires
      * nothing; four live frees retire four mappings. */
     mimir_free(NULL);
-    CHECK(expect("phase6a-free-null", 6, 4, 4, 1, 10, 2));
+    CHECK(expect("phase6a-free-null", 6, 4, 4, 1, 0, 0, 10, 2));
     mimir_free(m[2]);
     mimir_free(m[3]);
     mimir_free(c[0]);
     mimir_free(c[1]);
-    CHECK(expect("phase6b-free-x4", 6, 4, 4, 5, 10, 6));
+    CHECK(expect("phase6b-free-x4", 6, 4, 4, 5, 0, 0, 10, 6));
 
     /* Phase 7: free the remaining four live blocks; the
      * books balance exactly: published == retired. */
@@ -222,9 +249,11 @@ int main(void)
     mimir_free(m[1]);
     mimir_free(m[4]);
     mimir_free(c[2]);
-    CHECK(expect("phase7-free-rest", 6, 4, 4, 9, 10, 10));
+    CHECK(expect("phase7-free-rest", 6, 4, 4, 9, 0, 0, 10, 10));
     CHECK(load(&mimir_audit_alloc_published) ==
           load(&mimir_audit_mapping_retired));
+    CHECK(load(&mimir_audit_small_alloc) ==
+          load(&mimir_audit_small_free));
 
     printf("CHECKS: %d run, %d failed\n", checks_run,
            checks_failed);

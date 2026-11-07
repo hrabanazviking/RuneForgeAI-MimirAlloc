@@ -107,6 +107,18 @@
  * original preserved on any failure). Zero cases remain
  * postures only (U-09 / U-12 unresolved). The slice record
  * is tests/core/NOTES_C005.md.
+ *
+ * G-003 addendum (Phase 7 small-object path, per the
+ * banked G-002 design): requests of 1..1024 bytes are
+ * served from size-class spans (one system page each,
+ * 96-byte header) with bounded reuse; requests above
+ * the cutoff keep this file's mapping-per-allocation
+ * path unchanged (G-002 R-1). The span machinery, its
+ * header assignment (INC-G002-04), the two-registry
+ * free path (R-4) and the span/object counters (R-5)
+ * live in the G-003 block below, before
+ * mimir_core_alloc. The slice record is
+ * docs/PHASE_7_SMALL_OBJECT_PATH_G003.md.
  */
 
 #include "mimir_core.h"
@@ -459,6 +471,513 @@ static void *alloc_locked(size_t size, int zero_user,
     return (void *)((unsigned char *)base + usable_offset);
 }
 
+/*
+ * G-003 addendum (Phase 7 small-object path, per the banked
+ * G-002 design docs/PHASE_7_SIZE_CLASSES_G002.md): requests
+ * of 1..1024 bytes are served from size-class spans carved
+ * out of one system page each; every request above the
+ * 1024-byte cutoff takes the banked mapping-per-allocation
+ * path above, unchanged (G-002 R-1). The span machinery
+ * below runs under the same one L6 global lock, in the same
+ * locked sections as the mapping registry discipline, and
+ * publishes/frees nothing outside them. L3 remains the
+ * banked pass-through (G-002 C-5): class selection lives
+ * here in L4, spans are owned by L5-in-this-file, and no
+ * thread-local cache exists in this slice (INC-G003-02).
+ *
+ * Span header (G-002 S7, INC-G002-04 assignment made by
+ * this slice): exactly 96 bytes at offset 0 of the span's
+ * single system page, following the B-006 S7.3 descriptor
+ * discipline and sharing its field offsets for the common
+ * prefix, so the offsets the mapping path's validation
+ * relies on never move:
+ *    0  8  magic (span magic, distinct from the mapping
+ *               descriptor magic so the two registries can
+ *               never be confused for each other)
+ *    8  8  mapping_base (the span's own address)
+ *   16  8  mapping_length (exactly one system page)
+ *   24  8  usable_offset (96: the first object offset)
+ *   32  8  requested_size -- REUSED as the span's class
+ *               size (the span serves exactly one class
+ *               for its whole lifetime, G-002 S7)
+ *   40  8  usable_size (mapping_length - 96, as in the
+ *               mapping descriptor's own arithmetic)
+ *   48  4  state (LIVE / RETIRED, same values as S7.3)
+ *   52  4  flags -- ASSIGNED: the class index (0..19)
+ *   56  8  list_next / 64 8 list_prev (span registry)
+ *   72  8  free_head (first free object of this span, or
+ *               NULL; free objects thread their own first
+ *               8 bytes, G-002 C-8)
+ *   80  8  live_count (objects currently handed out)
+ *   88  8  carve_count (objects ever carved; objects are
+ *               carved sequentially from offset 96 at the
+ *               class stride until capacity, G-002 S7)
+ * The header never grows: 96 bytes total, static-asserted.
+ *
+ * Bounded reuse (the Phase 7 element this slice owns):
+ * a freed span object goes onto its span's free list and
+ * is the first object its class hands out again; a span
+ * whose live_count returns to 0 is an EMPTY span, and at
+ * most MIMIR_MAX_EMPTY_SPANS_PER_CLASS (2) empty spans per
+ * class are retained -- the empty span that would exceed
+ * the bound is released whole via L6 with its exact
+ * acquired pair in the same locked section (INC-G003-03).
+ * Live spans are bounded by live demand, never by cache:
+ * retained-after-free memory is therefore at most
+ * 20 classes x 2 spans x one system page.
+ *
+ * Counters (G-002 R-5 / INC-G002-09): span-served objects
+ * are NOT mappings and are never folded into the E-005
+ * mapping counters above; the four counters below count
+ * span publications/retirements and small-object
+ * publications/retirements beside them, in the same
+ * INC-E001-07 shape (b): internal audit state, declared
+ * in no installed header, readable only by a test-only
+ * static build (tests/core/mimir_small_g003.h), bound
+ * local in the shared library. published - retired, for
+ * each pair, is the live count of what it names.
+ */
+
+#define MIMIR_SMALL_CUTOFF ((size_t)1024)
+#define MIMIR_SMALL_CLASS_COUNT 20
+#define MIMIR_SPAN_HEADER_SIZE ((size_t)96)
+#define MIMIR_MAX_EMPTY_SPANS_PER_CLASS ((size_t)2)
+
+/* Span magic: the bytes spell "MIMIRSPN" in ASCII. A sanity
+ * check only, exactly as the descriptor magic is (S7.3). */
+#define MIMIR_SPAN_MAGIC UINT64_C(0x4D494D495253504E)
+
+static const size_t mimir_class_sizes[MIMIR_SMALL_CLASS_COUNT] = {
+    16, 32, 48, 64, 80, 96, 112, 128, 160, 192,
+    224, 256, 320, 384, 448, 512, 640, 768, 896, 1024
+};
+
+struct mimir_span_header {
+    uint64_t magic;
+    void *mapping_base;
+    size_t mapping_length;
+    size_t usable_offset;
+    size_t class_size;
+    size_t usable_size;
+    uint32_t state;
+    uint32_t class_index;
+    struct mimir_span_header *list_next;
+    struct mimir_span_header *list_prev;
+    void *free_head;
+    size_t live_count;
+    size_t carve_count;
+};
+
+_Static_assert(sizeof(struct mimir_span_header) == 96,
+               "span header must be exactly 96 bytes (G-002 S7)");
+_Static_assert(offsetof(struct mimir_span_header, mapping_base) == 8,
+               "span mapping_base offset (B-006 S7.3 discipline)");
+_Static_assert(offsetof(struct mimir_span_header, state) == 48,
+               "span state offset (B-006 S7.3 discipline)");
+_Static_assert(offsetof(struct mimir_span_header, list_next) == 56,
+               "span list_next offset (B-006 S7.3 discipline)");
+_Static_assert(offsetof(struct mimir_span_header, free_head) == 72,
+               "span free_head offset (G-003 assignment, INC-G002-04)");
+_Static_assert(offsetof(struct mimir_span_header, live_count) == 80,
+               "span live_count offset (G-003 assignment)");
+_Static_assert(offsetof(struct mimir_span_header, carve_count) == 88,
+               "span carve_count offset (G-003 assignment)");
+
+/* Span registry anchors and counters: fixed static storage
+ * below L1, exactly as the mapping registry's are (B-006
+ * S7.2 / S8.1). A span header is on this list if and only
+ * if its state is LIVE. mimir_class_active is a per-class
+ * hint for the span to try first; correctness never rests
+ * on it -- the registry walk is authoritative. */
+static struct mimir_span_header *mimir_span_head; /* NULL: empty */
+static struct mimir_span_header *mimir_class_active[MIMIR_SMALL_CLASS_COUNT];
+static size_t mimir_live_spans;
+static size_t mimir_live_span_bytes;
+static size_t mimir_live_small_objects;
+
+unsigned long mimir_audit_span_published;
+unsigned long mimir_audit_span_retired;
+unsigned long mimir_audit_small_alloc;
+unsigned long mimir_audit_small_free;
+
+/* Smallest class index whose class size is >= size.
+ * Caller guarantees 1 <= size <= MIMIR_SMALL_CUTOFF, so the
+ * search always succeeds. */
+static size_t class_index_for(size_t size)
+{
+    size_t i;
+
+    for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
+        if (size <= mimir_class_sizes[i]) {
+            return i;
+        }
+    }
+    return MIMIR_SMALL_CLASS_COUNT - 1; /* unreachable */
+}
+
+/* Objects a span of this header's class can ever hold:
+ * the G-002 Part C packing arithmetic, computed from the
+ * header's own recorded mapping length. */
+static size_t span_capacity(const struct mimir_span_header *span)
+{
+    return (span->mapping_length - MIMIR_SPAN_HEADER_SIZE) /
+           span->class_size;
+}
+
+static void span_registry_insert(struct mimir_span_header *span)
+{
+    span->list_prev = NULL;
+    span->list_next = mimir_span_head;
+    if (mimir_span_head != NULL) {
+        mimir_span_head->list_prev = span;
+    }
+    mimir_span_head = span;
+}
+
+static void span_registry_remove(struct mimir_span_header *span)
+{
+    if (span->list_prev != NULL) {
+        span->list_prev->list_next = span->list_next;
+    } else {
+        mimir_span_head = span->list_next;
+    }
+    if (span->list_next != NULL) {
+        span->list_next->list_prev = span->list_prev;
+    }
+    span->list_next = NULL;
+    span->list_prev = NULL;
+}
+
+static int span_header_is_live(const struct mimir_span_header *span)
+{
+    return span->magic == MIMIR_SPAN_MAGIC &&
+           span->state == MIMIR_STATE_LIVE &&
+           span->mapping_base == (const void *)span &&
+           span->usable_offset == MIMIR_SPAN_HEADER_SIZE &&
+           span->class_index < MIMIR_SMALL_CLASS_COUNT &&
+           span->class_size == mimir_class_sizes[span->class_index];
+}
+
+/*
+ * Acquire and publish one fresh span for class_index, with
+ * the lock held. The mapping is exactly one system page,
+ * discovered at runtime through L6 on this call (never a
+ * constant, G-002 C-2) and acquired through L6's checked
+ * all-or-nothing acquire. Publication mirrors
+ * alloc_locked: counter checks before publication, header
+ * written in full, then linked and counted in this same
+ * locked section. On any failure nothing is published and
+ * the registry and counters are unchanged (G-002 C-7).
+ */
+static struct mimir_span_header *span_acquire_locked(size_t class_index)
+{
+    size_t page_size;
+    void *base = NULL;
+    size_t mapping_length = 0;
+    struct mimir_span_header *span;
+    int status;
+
+    status = mimir_platform_page_size(&page_size);
+    if (status != MIMIR_PLATFORM_OK || page_size == 0) {
+        return NULL;
+    }
+    /* A span must hold its header plus at least one object
+     * of its class; on every admitted host (page >= 4096,
+     * class <= 1024) this holds by the G-002 S6 arithmetic,
+     * and the check keeps the invariant explicit rather
+     * than assumed. */
+    if (page_size <= MIMIR_SPAN_HEADER_SIZE ||
+        page_size - MIMIR_SPAN_HEADER_SIZE <
+            mimir_class_sizes[class_index]) {
+        return NULL;
+    }
+    status = mimir_platform_map_acquire(page_size, &base,
+                                        &mapping_length);
+    if (status != MIMIR_PLATFORM_OK) {
+        return NULL;
+    }
+    if (mapping_length != page_size) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        return NULL;
+    }
+    if (mapping_length > SIZE_MAX - mimir_live_span_bytes ||
+        mimir_live_spans == SIZE_MAX) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        return NULL;
+    }
+
+    span = (struct mimir_span_header *)base;
+    span->magic = MIMIR_SPAN_MAGIC;
+    span->mapping_base = base;
+    span->mapping_length = mapping_length;
+    span->usable_offset = MIMIR_SPAN_HEADER_SIZE;
+    span->class_size = mimir_class_sizes[class_index];
+    span->usable_size = mapping_length - MIMIR_SPAN_HEADER_SIZE;
+    span->state = MIMIR_STATE_LIVE;
+    span->class_index = (uint32_t)class_index;
+    span->free_head = NULL;
+    span->live_count = 0;
+    span->carve_count = 0;
+
+    span_registry_insert(span);
+    mimir_live_spans += 1;
+    mimir_live_span_bytes += mapping_length;
+    __atomic_fetch_add(&mimir_audit_span_published, 1UL,
+                       __ATOMIC_RELAXED);
+    mimir_class_active[class_index] = span;
+    return span;
+}
+
+/*
+ * Release one LIVE span whole, with the lock held: the
+ * exact acquired pair is captured before release and the
+ * header is never read after a successful release
+ * (Invariant 2). On release failure the retirement is
+ * rolled back in full (header restored LIVE and
+ * re-linked, counters restored), the F-06 discipline of
+ * retire_locked carried to spans. Returns 1 on success,
+ * 0 on rolled-back failure.
+ */
+static int span_release_locked(struct mimir_span_header *span)
+{
+    void *mapping_base = span->mapping_base;
+    size_t mapping_length = span->mapping_length;
+    size_t class_index = span->class_index;
+    int status;
+
+    span->state = MIMIR_STATE_RETIRED;
+    span_registry_remove(span);
+    if (mimir_class_active[class_index] == span) {
+        mimir_class_active[class_index] = NULL;
+    }
+    mimir_live_spans -= 1;
+    mimir_live_span_bytes -= mapping_length;
+
+    status = mimir_platform_map_release(mapping_base,
+                                        mapping_length);
+    if (status != MIMIR_PLATFORM_OK) {
+        span->state = MIMIR_STATE_LIVE;
+        span_registry_insert(span);
+        mimir_class_active[class_index] = span;
+        mimir_live_spans += 1;
+        mimir_live_span_bytes += mapping_length;
+        return 0;
+    }
+    __atomic_fetch_add(&mimir_audit_span_retired, 1UL,
+                       __ATOMIC_RELAXED);
+    return 1;
+}
+
+/* Count retained EMPTY spans of one class (lock held). */
+static size_t empty_spans_of_class_locked(size_t class_index)
+{
+    struct mimir_span_header *span = mimir_span_head;
+    size_t count = 0;
+
+    while (span != NULL) {
+        if (span->class_index == class_index &&
+            span->live_count == 0) {
+            count++;
+        }
+        span = span->list_next;
+    }
+    return count;
+}
+
+static int span_can_serve(const struct mimir_span_header *span)
+{
+    return span->free_head != NULL ||
+           span->carve_count < span_capacity(span);
+}
+
+/*
+ * Ownership determination for the span registry (G-002
+ * R-4), with the lock held: find the LIVE span whose
+ * object area contains ptr at its class stride, computed
+ * only from the trusted span header's own fields -- bytes
+ * at the candidate pointer are never read to decide
+ * ownership. A carved object is LIVE for this path if and
+ * only if it is not on its span's free list (the free-list
+ * walk reads allocator-written links inside allocator-
+ * owned free objects, never user bytes of a live object).
+ * Returns the span, or NULL when ptr is not a live span
+ * object (foreign, interior, uncarved, already-freed, or
+ * a pointer at the span header itself -- INC-G002-05's
+ * sharpest case, which lands outside the object area by
+ * construction and is refused here).
+ */
+static struct mimir_span_header *find_span_live_locked(void *ptr)
+{
+    struct mimir_span_header *span = mimir_span_head;
+    uintptr_t target = (uintptr_t)ptr;
+
+    while (span != NULL) {
+        uintptr_t base = (uintptr_t)span->mapping_base;
+        uintptr_t first = base + MIMIR_SPAN_HEADER_SIZE;
+
+        if (span_header_is_live(span) && target >= first &&
+            target < base + span->mapping_length) {
+            size_t offset = (size_t)(target - first);
+            size_t index;
+            void *node;
+
+            if (offset % span->class_size != 0) {
+                return NULL; /* interior: not an object start */
+            }
+            index = offset / span->class_size;
+            if (index >= span->carve_count) {
+                return NULL; /* uncarved tail area */
+            }
+            node = span->free_head;
+            while (node != NULL) {
+                if (node == ptr) {
+                    return NULL; /* already freed */
+                }
+                node = *(void **)node;
+            }
+            return span;
+        }
+        span = span->list_next;
+    }
+    return NULL;
+}
+
+/*
+ * Serve one small object from the class path, with the
+ * lock held. size is admitted by the caller (1..1024).
+ * Reuse order (bounded local reuse): the class's active
+ * span, then any registered span of the class that can
+ * serve, then one fresh span. A backing failure is the
+ * defined NULL failure -- a small request is NEVER
+ * silently re-routed to a private mapping (G-002 R-1).
+ * If zero_user is non-zero the whole CLASS extent is
+ * zeroed before publication (G-002 R-2: the slack bytes
+ * are the free-list link's home and must never carry a
+ * previous owner's data forward). On success *out_span
+ * (when non-NULL) receives the serving span's header.
+ */
+static void *small_alloc_locked(size_t size, int zero_user,
+                                struct mimir_span_header **out_span)
+{
+    size_t class_index = class_index_for(size);
+    size_t class_size = mimir_class_sizes[class_index];
+    struct mimir_span_header *span = mimir_class_active[class_index];
+    void *obj;
+
+    if (span == NULL || !span_header_is_live(span) ||
+        !span_can_serve(span)) {
+        span = mimir_span_head;
+        while (span != NULL) {
+            if (span->class_index == class_index &&
+                span_header_is_live(span) && span_can_serve(span)) {
+                break;
+            }
+            span = span->list_next;
+        }
+        if (span == NULL) {
+            span = span_acquire_locked(class_index);
+            if (span == NULL) {
+                return NULL;
+            }
+        }
+        mimir_class_active[class_index] = span;
+    }
+
+    if (span->free_head != NULL) {
+        obj = span->free_head;
+        span->free_head = *(void **)obj;
+    } else {
+        obj = (void *)((unsigned char *)span->mapping_base +
+                       MIMIR_SPAN_HEADER_SIZE +
+                       span->carve_count * class_size);
+        span->carve_count += 1;
+    }
+
+    if (zero_user) {
+        memset(obj, 0, class_size);
+    }
+
+    span->live_count += 1;
+    mimir_live_small_objects += 1;
+    __atomic_fetch_add(&mimir_audit_small_alloc, 1UL,
+                       __ATOMIC_RELAXED);
+    if (out_span != NULL) {
+        *out_span = span;
+    }
+    return obj;
+}
+
+/*
+ * Retire one live span object, with the lock held (the
+ * span form of retire exactly once): the object is
+ * threaded onto its span's free list -- its first 8 bytes
+ * become the link, which is allocator metadata written
+ * only as ownership leaves the caller (G-002 S7) -- and
+ * if the span thereby becomes EMPTY beyond the per-class
+ * retention bound it is released whole in this same
+ * locked section. A release failure leaves the span
+ * retained as an empty span (span_release_locked has
+ * already rolled itself back); the object stays freed
+ * either way, so this helper has no failure return.
+ */
+static void small_free_locked(void *ptr)
+{
+    struct mimir_span_header *span = find_span_live_locked(ptr);
+
+    if (span == NULL) {
+        return;
+    }
+    *(void **)ptr = span->free_head;
+    span->free_head = ptr;
+    span->live_count -= 1;
+    mimir_live_small_objects -= 1;
+    __atomic_fetch_add(&mimir_audit_small_free, 1UL,
+                       __ATOMIC_RELAXED);
+
+    if (span->live_count == 0 &&
+        empty_spans_of_class_locked(span->class_index) >
+            MIMIR_MAX_EMPTY_SPANS_PER_CLASS) {
+        (void)span_release_locked(span);
+    }
+}
+
+/*
+ * The one construction dispatcher (G-002 R-1), with the
+ * lock held: 1..1024 goes to the class path, anything
+ * larger to the banked alloc_locked mapping path,
+ * byte-for-byte as before. Exactly one of *out_desc /
+ * *out_span (when non-NULL) is set on success, so a
+ * realloc rollback can retire the new block through
+ * whichever registry published it.
+ */
+static void *alloc_any_locked(size_t size, int zero_user,
+                              struct mimir_descriptor **out_desc,
+                              struct mimir_span_header **out_span)
+{
+    if (out_desc != NULL) {
+        *out_desc = NULL;
+    }
+    if (out_span != NULL) {
+        *out_span = NULL;
+    }
+    if (size <= MIMIR_SMALL_CUTOFF) {
+        return small_alloc_locked(size, zero_user, out_span);
+    }
+    return alloc_locked(size, zero_user, out_desc);
+}
+
+/* Retire a block constructed by alloc_any_locked through
+ * the registry that published it (realloc rollback). */
+static void retire_any_locked(void *ptr,
+                              struct mimir_descriptor *desc)
+{
+    if (desc != NULL) {
+        (void)retire_locked(desc);
+    } else {
+        small_free_locked(ptr);
+    }
+}
+
 /* L2 admission (B-007 A1) + L4 lock wrapper over
  * alloc_locked: zero-size is not admitted as a supported
  * call (posture only: NULL, U-09 unresolved). On lock
@@ -480,7 +999,7 @@ void *mimir_core_alloc(size_t size)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return NULL;
     }
-    result = alloc_locked(size, 0, NULL);
+    result = alloc_any_locked(size, 0, NULL, NULL);
     (void)mimir_platform_global_unlock();
     return result;
 }
@@ -530,7 +1049,7 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return NULL;
     }
-    result = alloc_locked(product, 1, NULL);
+    result = alloc_any_locked(product, 1, NULL, NULL);
     (void)mimir_platform_global_unlock();
     return result;
 }
@@ -622,39 +1141,98 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
     }
 
     desc = find_candidate_locked(ptr);
-    if (desc == NULL || !descriptor_is_live(desc)) {
-        (void)mimir_platform_global_unlock();
-        return NULL;
-    }
-    old_size = desc->requested_size;
+    if (desc != NULL && descriptor_is_live(desc)) {
+        /* Mapping-registry block: the banked B-008 S4 cases,
+         * unchanged, except that the grow construction goes
+         * through the R-1 dispatcher (a mapping block's
+         * requested size is always above the cutoff, so a
+         * grow always routes large in practice; the
+         * dispatcher keeps the rule in exactly one place). */
+        struct mimir_span_header *new_span = NULL;
 
-    if (new_size == old_size) {
+        old_size = desc->requested_size;
+
+        if (new_size == old_size) {
+            (void)mimir_platform_global_unlock();
+            return ptr;
+        }
+        if (new_size < old_size) {
+            desc->requested_size = new_size;
+            (void)mimir_platform_global_unlock();
+            return ptr;
+        }
+
+        /* Grow: construct the new block completely first
+         * (S4.5 steps 2-3), copy (step 4), then transfer and
+         * retire the old block exactly once (step 5). */
+        new_ptr = alloc_any_locked(new_size, 0, &new_desc,
+                                   &new_span);
+        if (new_ptr == NULL) {
+            (void)mimir_platform_global_unlock();
+            return NULL;
+        }
+        memcpy(new_ptr, ptr, old_size);
+
+        if (!retire_locked(desc)) {
+            retire_any_locked(new_ptr, new_desc);
+            (void)mimir_platform_global_unlock();
+            return NULL;
+        }
         (void)mimir_platform_global_unlock();
-        return ptr;
-    }
-    if (new_size < old_size) {
-        desc->requested_size = new_size;
-        (void)mimir_platform_global_unlock();
-        return ptr;
+        return new_ptr;
     }
 
-    /* Grow: construct the new block completely first
-     * (S4.5 steps 2-3), copy (step 4), then transfer and
-     * retire the old block exactly once (step 5). */
-    new_ptr = alloc_locked(new_size, 0, &new_desc);
-    if (new_ptr == NULL) {
-        (void)mimir_platform_global_unlock();
-        return NULL;
-    }
-    memcpy(new_ptr, ptr, old_size);
+    /* Span-registry block (G-003, G-002 R-3): the old
+     * block's recorded size is its class size -- no
+     * per-object requested-size record exists under the
+     * G-002 span layout (INC-G003-01). Staying cases need
+     * no record: any new_size the old class can serve
+     * returns the same pointer with every byte physically
+     * preserved, which covers same-size, shrink (the B-008
+     * shrink posture carried down: the larger class is
+     * retained) and grow-within-class in one rule. Moving
+     * cases follow the banked S4.5 sequence through the
+     * R-1 dispatcher for the NEW size -- construct
+     * completely, copy, retire the old exactly once,
+     * original preserved on any failure. The copy length
+     * on a move is the old class extent: it covers the
+     * caller's whole preserved range (requested <= class)
+     * and is in-bounds on both sides; the bytes it copies
+     * beyond the requested extent land in the new block's
+     * unspecified range, where B-008 promises nothing
+     * (INC-G003-01). Retiring a span object cannot fail
+     * observably (small_free_locked), so no rollback
+     * branch exists on this path. */
+    {
+        struct mimir_span_header *span = find_span_live_locked(ptr);
+        struct mimir_span_header *new_span = NULL;
+        size_t span_class;
 
-    if (!retire_locked(desc)) {
-        (void)retire_locked(new_desc);
+        if (span == NULL) {
+            /* Not a defined realloc (B-008 S4, invalid ptr):
+             * nothing allocated, unmapped, unlinked or
+             * counted on suspicion; NULL, no promise. */
+            (void)mimir_platform_global_unlock();
+            return NULL;
+        }
+        span_class = span->class_size;
+
+        if (new_size <= span_class) {
+            (void)mimir_platform_global_unlock();
+            return ptr;
+        }
+
+        new_ptr = alloc_any_locked(new_size, 0, &new_desc,
+                                   &new_span);
+        if (new_ptr == NULL) {
+            (void)mimir_platform_global_unlock();
+            return NULL;
+        }
+        memcpy(new_ptr, ptr, span_class);
+        small_free_locked(ptr);
         (void)mimir_platform_global_unlock();
-        return NULL;
+        return new_ptr;
     }
-    (void)mimir_platform_global_unlock();
-    return new_ptr;
 }
 
 void mimir_core_free(void *ptr)
@@ -697,6 +1275,15 @@ void mimir_core_free(void *ptr)
          * unlinked or counted on suspicion (S8.2 step 4,
          * F-09), and the call simply returns. No behaviour is
          * promised for such calls. */
+        /* G-003 two-registry free path (G-002 R-4): not a
+         * mapping block -- consult the span registry
+         * before taking the non-destructive course. A
+         * live span object is retired exactly once onto
+         * its span's free list (small_free_locked); any
+         * other pointer keeps the S8.3 posture below. */
+        if (find_span_live_locked(ptr) != NULL) {
+            small_free_locked(ptr);
+        }
         (void)mimir_platform_global_unlock();
         return;
     }

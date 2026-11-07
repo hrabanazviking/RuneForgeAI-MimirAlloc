@@ -615,3 +615,27 @@ test-g001: $(BUILD)/probe_g001
 	./$(BUILD)/probe_g001 libc
 
 .PHONY: test-g001
+
+# G-003: Phase 7 small-object path evidence test - the
+# test under tests/core/ (test_g003.c) exercises the
+# size-class span path of docs/PHASE_7_SIZE_CLASSES_G002.md
+# as implemented in src/core/mimir_core.c: R-1 routing via
+# the E-005 mapping counters and the G-003 span/object
+# counters (tests/core/mimir_small_g003.h), alignment,
+# pattern/non-overlap, bounded reuse, the two-registry
+# free path (R-4), calloc class-extent zeroing (R-2),
+# realloc cases (R-3 / B-008), and a G-001-shaped latency
+# leg. Standalone via `make test-g003`; NOT part of
+# `make test`, whose composition is unchanged. Recorded
+# run: tests/core/recorded_run_g003.txt; slice record:
+# docs/PHASE_7_SMALL_OBJECT_PATH_G003.md.
+$(BUILD)/test_g003.o: tests/core/test_g003.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_g003.c -o $@
+
+$(BUILD)/test_g003: $(LIBOBJS) $(BUILD)/test_g003.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_g003.o -o $@
+
+test-g003: $(BUILD)/test_g003
+	./$(BUILD)/test_g003
+
+.PHONY: test-g003
