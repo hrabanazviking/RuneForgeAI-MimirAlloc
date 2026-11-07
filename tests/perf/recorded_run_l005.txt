@@ -1,0 +1,290 @@
+L-005 recorded run - Phase 12 tokenizer + KV cache allocation profile
+Sat Nov  7 02:05:43 PM EST 2026
+2f2d8fe8800009a56c317ae32007de9af82487b4
+yrsa/mimiralloc-05
+aarch64
+4
+--- model identity ---
+-rw-r--r-- 1 pi pi 637699456 Oct 10 05:45 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+da3087fb14aede55fde6eb81a0e55e886810e43509ec82ecdc7aa5d62a03b556  /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+--- free/samtal/thermal before ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_before: 200
+temp=57.6'C
+throttled=0x0
+--- make test (gate) ---
+make_test_exit=0 CHECKS: 4590 run, 0 failed RESULT: PASS (full output /tmp/l005_maketest.txt at run time)
+--- run_l005.sh ---
+--- build probe_l005 ---
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 tests/perf/probe_l005.c src/api/mimir_alloc.c src/core/mimir_core.c src/platform/mimir_platform.c -o /tmp/probe_l005
+build exit=0
+ef4eeb6df7eb05bfde2440d54b98bbb5991ffd62a9ad88df3f58b3ffc7a8f42f  tests/perf/probe_l005.c
+666ae9d551e094762e3ed7cfd3a62bc016279ab28ccf847e5713df39618b11f1  /tmp/probe_l005
+--- probe rep 1: timeout 120 /tmp/probe_l005 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l005 - L-005 tokenizer + KV cache profile harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=4848 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1232 Pss=143 kB
+  rollup  Rss=1392 Pss=288 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF tensors=201 kv=23 file_bytes=637699456
+GATE kv_walk_complete: ok
+dims: layers=22 hidden=2048 ctx=2048
+GATE model_dims_parsed: ok
+tokenizer: model=llama vocab=32000 token_str_bytes=210919 scores=32000 types=32000
+GATE tokenizer_arrays_complete: ok
+SNAPSHOT S1 after mmap + tokenizer parse (views stay W)
+  W       Size=622768 Rss=1536 Pss=1536 kB
+  ANON    Size=4848 Rss=512 Pss=496 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3344 Pss=2176 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE parse_moves_no_allocator_counter: ok
+SNAPSHOT S2 after T-C1 (mimir_* tokenizer structures)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5536 Rss=1200 Pss=1184 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=4160 Pss=2992 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=704512 live_map_bytes=704512 live_span_bytes=0 live_small=0 live_mappings=4 cached=0 released=0 failures=0
+T-C1 total_requested=626919 checksum=33285
+GATE T_C1_counter_delta_equals_requested: ok
+SNAPSHOT S3 after T-C2 (malloc tokenizer structures)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=6016 Rss=1808 Pss=1792 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=4768 Pss=3600 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=704512 live_map_bytes=704512 live_span_bytes=0 live_small=0 live_mappings=4 cached=0 released=0 failures=0
+T-C2 checksum=33285
+GATE T_legs_checksums_equal: ok
+GATE T_C2_moves_no_C1_counter: ok
+SNAPSHOT S4 after tokenizer teardown
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5088 Rss=880 Pss=864 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3840 Pss=2672 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+GATE T_teardown_returns_to_baseline: ok
+KV shape (modelled from mimir_well.mojo KVCache:824 + PagedKVCache:962): layers=22 hidden=2048 ctx=2048 block=16 phys_blocks=64 phys_tokens=1024 pool_K_bytes=92274688 pool_V_bytes=92274688 meta_bytes=3256 total_bytes=184552632
+KV lifetime: prefill 256 tokens (16 blocks), decode 64 steps (20 blocks total of 64 physical / 128 logical)
+SNAPSHOT S5 K-C2 pools allocated (malloc, modelled shape)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185344 Rss=912 Pss=896 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3872 Pss=2704 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+GATE K_C2_moves_no_C1_counter: ok
+K-C2 touch checksums: prefill=1436160 decode=118272
+GATE K_C2_touch_live: ok
+SNAPSHOT S6 K-C2 after prefill+decode touches
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185344 Rss=57200 Pss=57184 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=60160 Pss=58992 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+K-C1 touch checksum (prefill+decode combined)=1554432
+GATE K_legs_touch_checksums_equal: ok
+SNAPSHOT S7 K-C1 pools live (mimir_*, modelled shape)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185376 Rss=57264 Pss=57248 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=60224 Pss=59056 kB (cross-check only)
+  C1 counters: requested=185179551 allocated=185204736 mapped=184614912 live_map_bytes=184614912 live_span_bytes=0 live_small=0 live_mappings=3 cached=0 released=704512 failures=0
+GATE K_C1_counter_delta_equals_shape_total: ok
+SNAPSHOT S8 after KV teardown
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5088 Rss=880 Pss=864 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3840 Pss=2672 kB (cross-check only)
+  C1 counters: requested=185179551 allocated=185204736 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=185319424 failures=0
+GATE K_teardown_returns_to_baseline: ok
+L005 RESULT: PASS (failures=0)
+rep 1 exit=0
+--- probe rep 2: timeout 120 /tmp/probe_l005 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l005 - L-005 tokenizer + KV cache profile harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=4848 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1232 Pss=143 kB
+  rollup  Rss=1392 Pss=288 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF tensors=201 kv=23 file_bytes=637699456
+GATE kv_walk_complete: ok
+dims: layers=22 hidden=2048 ctx=2048
+GATE model_dims_parsed: ok
+tokenizer: model=llama vocab=32000 token_str_bytes=210919 scores=32000 types=32000
+GATE tokenizer_arrays_complete: ok
+SNAPSHOT S1 after mmap + tokenizer parse (views stay W)
+  W       Size=622768 Rss=1536 Pss=1536 kB
+  ANON    Size=4848 Rss=512 Pss=496 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3344 Pss=2176 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE parse_moves_no_allocator_counter: ok
+SNAPSHOT S2 after T-C1 (mimir_* tokenizer structures)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5536 Rss=1200 Pss=1184 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=4160 Pss=2992 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=704512 live_map_bytes=704512 live_span_bytes=0 live_small=0 live_mappings=4 cached=0 released=0 failures=0
+T-C1 total_requested=626919 checksum=33285
+GATE T_C1_counter_delta_equals_requested: ok
+SNAPSHOT S3 after T-C2 (malloc tokenizer structures)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=6016 Rss=1808 Pss=1792 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=4768 Pss=3600 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=704512 live_map_bytes=704512 live_span_bytes=0 live_small=0 live_mappings=4 cached=0 released=0 failures=0
+T-C2 checksum=33285
+GATE T_legs_checksums_equal: ok
+GATE T_C2_moves_no_C1_counter: ok
+SNAPSHOT S4 after tokenizer teardown
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5088 Rss=880 Pss=864 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3840 Pss=2672 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+GATE T_teardown_returns_to_baseline: ok
+KV shape (modelled from mimir_well.mojo KVCache:824 + PagedKVCache:962): layers=22 hidden=2048 ctx=2048 block=16 phys_blocks=64 phys_tokens=1024 pool_K_bytes=92274688 pool_V_bytes=92274688 meta_bytes=3256 total_bytes=184552632
+KV lifetime: prefill 256 tokens (16 blocks), decode 64 steps (20 blocks total of 64 physical / 128 logical)
+SNAPSHOT S5 K-C2 pools allocated (malloc, modelled shape)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185344 Rss=912 Pss=896 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3872 Pss=2704 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+GATE K_C2_moves_no_C1_counter: ok
+K-C2 touch checksums: prefill=1436160 decode=118272
+GATE K_C2_touch_live: ok
+SNAPSHOT S6 K-C2 after prefill+decode touches
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185344 Rss=57200 Pss=57184 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=60160 Pss=58992 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+K-C1 touch checksum (prefill+decode combined)=1554432
+GATE K_legs_touch_checksums_equal: ok
+SNAPSHOT S7 K-C1 pools live (mimir_*, modelled shape)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185376 Rss=57264 Pss=57248 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=60224 Pss=59056 kB (cross-check only)
+  C1 counters: requested=185179551 allocated=185204736 mapped=184614912 live_map_bytes=184614912 live_span_bytes=0 live_small=0 live_mappings=3 cached=0 released=704512 failures=0
+GATE K_C1_counter_delta_equals_shape_total: ok
+SNAPSHOT S8 after KV teardown
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5088 Rss=880 Pss=864 kB
+  R(file) Size=1936 Rss=1296 Pss=143 kB
+  rollup  Rss=3840 Pss=2672 kB (cross-check only)
+  C1 counters: requested=185179551 allocated=185204736 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=185319424 failures=0
+GATE K_teardown_returns_to_baseline: ok
+L005 RESULT: PASS (failures=0)
+rep 2 exit=0
+--- probe rep 3: timeout 120 /tmp/probe_l005 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l005 - L-005 tokenizer + KV cache profile harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=4848 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1248 Pss=144 kB
+  rollup  Rss=1408 Pss=288 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF tensors=201 kv=23 file_bytes=637699456
+GATE kv_walk_complete: ok
+dims: layers=22 hidden=2048 ctx=2048
+GATE model_dims_parsed: ok
+tokenizer: model=llama vocab=32000 token_str_bytes=210919 scores=32000 types=32000
+GATE tokenizer_arrays_complete: ok
+SNAPSHOT S1 after mmap + tokenizer parse (views stay W)
+  W       Size=622768 Rss=1536 Pss=1536 kB
+  ANON    Size=4848 Rss=512 Pss=496 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=3360 Pss=2176 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE parse_moves_no_allocator_counter: ok
+SNAPSHOT S2 after T-C1 (mimir_* tokenizer structures)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5536 Rss=1200 Pss=1184 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=4176 Pss=2992 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=704512 live_map_bytes=704512 live_span_bytes=0 live_small=0 live_mappings=4 cached=0 released=0 failures=0
+T-C1 total_requested=626919 checksum=33285
+GATE T_C1_counter_delta_equals_requested: ok
+SNAPSHOT S3 after T-C2 (malloc tokenizer structures)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=6016 Rss=1808 Pss=1792 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=4784 Pss=3600 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=704512 live_map_bytes=704512 live_span_bytes=0 live_small=0 live_mappings=4 cached=0 released=0 failures=0
+T-C2 checksum=33285
+GATE T_legs_checksums_equal: ok
+GATE T_C2_moves_no_C1_counter: ok
+SNAPSHOT S4 after tokenizer teardown
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5088 Rss=880 Pss=864 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=3856 Pss=2672 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+GATE T_teardown_returns_to_baseline: ok
+KV shape (modelled from mimir_well.mojo KVCache:824 + PagedKVCache:962): layers=22 hidden=2048 ctx=2048 block=16 phys_blocks=64 phys_tokens=1024 pool_K_bytes=92274688 pool_V_bytes=92274688 meta_bytes=3256 total_bytes=184552632
+KV lifetime: prefill 256 tokens (16 blocks), decode 64 steps (20 blocks total of 64 physical / 128 logical)
+SNAPSHOT S5 K-C2 pools allocated (malloc, modelled shape)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185344 Rss=912 Pss=896 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=3888 Pss=2704 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+GATE K_C2_moves_no_C1_counter: ok
+K-C2 touch checksums: prefill=1436160 decode=118272
+GATE K_C2_touch_live: ok
+SNAPSHOT S6 K-C2 after prefill+decode touches
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185344 Rss=57200 Pss=57184 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=60176 Pss=58992 kB (cross-check only)
+  C1 counters: requested=626919 allocated=638976 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=704512 failures=0
+K-C1 touch checksum (prefill+decode combined)=1554432
+GATE K_legs_touch_checksums_equal: ok
+SNAPSHOT S7 K-C1 pools live (mimir_*, modelled shape)
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=185376 Rss=57264 Pss=57248 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=60240 Pss=59056 kB (cross-check only)
+  C1 counters: requested=185179551 allocated=185204736 mapped=184614912 live_map_bytes=184614912 live_span_bytes=0 live_small=0 live_mappings=3 cached=0 released=704512 failures=0
+GATE K_C1_counter_delta_equals_shape_total: ok
+SNAPSHOT S8 after KV teardown
+  W       Size=622768 Rss=1664 Pss=1664 kB
+  ANON    Size=5088 Rss=880 Pss=864 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=3856 Pss=2672 kB (cross-check only)
+  C1 counters: requested=185179551 allocated=185204736 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=185319424 failures=0
+GATE K_teardown_returns_to_baseline: ok
+L005 RESULT: PASS (failures=0)
+rep 3 exit=0
+--- Aesir component leg (L-003 workload, rebuilt) ---
+mojo: Mojo 1.1.0 (8189361e)
+mojo build exit=0
+4de99645298adfbe43e6856e8c1c123b1d3dc2a645f5434b3d22991bef64e15e  /tmp/l005_tmr
+--- Testing MimirWell Allocation Telemetry & Arena Recycling ---
+MimirWell allocation telemetry & arena recycling: PASS
+--- Testing Profiled Linear BPE Tokenizer Merge Performance ---
+Profiled linear BPE tokenizer merge performance: PASS
+component exit= 0
+component child_ru_maxrss_kib= 10960
+component wrapper exit=0
+--- run_l005 done ---
+run_l005_exit=0
+--- free/samtal/thermal after ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_after: 200
+temp=58.2'C
+throttled=0x0
