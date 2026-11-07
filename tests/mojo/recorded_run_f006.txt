@@ -1,0 +1,408 @@
+===================================================================
+F-006 RECORDED RUN - representative program repeated-compile
+comparison, same revision with and without the replacement
+Slice F-006 (Wave 6, Phase 6, tasks T4+T6), team-06.
+Worktree: /home/pi/mimiralloc-team-06 (purpleviking1, Raspberry Pi)
+===================================================================
+
+--- S0. Environment and base state ---
+$ date -Iseconds
+2026-11-06T22:26:32-05:00
+$ uname -a
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+$ git rev-parse HEAD
+63c2dc1f8970bdd0476e9fcfc9b99e51f5a9a86d
+$ git branch --show-current
+yrsa/mimiralloc-06
+$ git status --porcelain
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/mojo/recorded_run_f006.txt
+?? tests/mojo/run_f006_compare.sh
+$ cc --version | head -n 1
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+$ cat /usr/local/bin/mojo
+#!/bin/bash
+exec /home/pi/.pixi/bin/pixi run --manifest-path /home/pi/mojo-dev/pixi.toml mojo "$@"
+$ mojo --version
+Mojo 1.1.0 (8189361e)
+exit:0
+$ getconf PAGESIZE
+16384
+$ free -g
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+$ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/ (Samtal)
+200
+
+--- S1. Leg sources and the comparison shape ---
+$ sha256sum tests/mojo/test_f004.mojo tests/mojo/test_f005.mojo tests/mojo/f005_probe.c tests/mojo/run_f006_compare.sh
+bebbf4cfbd731838e91c963c2372029761c84b59768c101d986549f57e0f8f8b  tests/mojo/test_f004.mojo
+67f99568ec62fe29b0b110845b4557210bc19267c050142098befc355a1ac4db  tests/mojo/test_f005.mojo
+b02dd783609cd50dd42283acb3a950d3d162d2a6a001cfb8341d368f2d783501  tests/mojo/f005_probe.c
+8cd9f97f8b3e0da93885ffa309f858986638aac14028df51876cdf8c260eb193  tests/mojo/run_f006_compare.sh
+
+WITHOUT leg source: tests/mojo/test_f004.mojo - stdlib
+List[Int] growth (192 entries) + mutation + independently
+computed checksums; no mimir_* reference, no external_call,
+no -Xlinker. Its allocations are the Mojo runtime default
+allocator's (stdlib List storage).
+WITH leg source: tests/mojo/test_f005.mojo DYNAMIC leg -
+explicit mimir_malloc/calloc/realloc/free via Mojo FFI
+(B1), build/libmimiralloc.so placed on the link line via
+-Xlinker (B2), plus the test-only observer
+build/libf005probe.so (descriptor validation + mapped-bytes
+accounting; INC-F005-03: the observer is a second project
+DT_NEEDED entry and holds no allocator state). The program
+warms up and settles before baselining (INC-F005-01).
+The legs are DIFFERENT programs by design (F-004 Section 3:
+a B2-only build of the F-004 source would be presence, not
+servicing), so stdout is never byte-compared across legs;
+the comparison is verdict / exit-code / link-record level.
+Repetitions per leg: 5 builds + 5 runs.
+
+--- S2. Project libraries for the WITH leg ---
+$ sha256sum build/libmimiralloc.so build/libf005probe.so
+d7d2f9981bcbbaa4d54664746325b89df1da375922b46209c43970c92f4e7fe1  build/libmimiralloc.so
+45b6642207b2e4c6be0d97ef7a1ba39b7b33a6dbe661cf421c69a7ff052e19c9  build/libf005probe.so
+$ nm -D --defined-only build/libmimiralloc.so
+0000000000000988 T mimir_calloc
+0000000000000954 T mimir_free
+0000000000000924 T mimir_malloc
+00000000000009c0 T mimir_realloc
+
+--- S3. WITHOUT leg: 5 builds + 5 runs ---
+Exact build command per repetition (only -o name varies):
+  timeout 180 mojo build tests/mojo/test_f004.mojo -o build/test_f006_without_<n>
+
+--- WITHOUT ---
+--- repetition 1 of 5 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o build/test_f006_without_1
+build_exit:0 build_wall_ms:1149
+$ sha256sum build/test_f006_without_1
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_1
+$ ./build/test_f006_without_1
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0 run_wall_ms:6
+--- repetition 2 of 5 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o build/test_f006_without_2
+build_exit:0 build_wall_ms:1101
+$ sha256sum build/test_f006_without_2
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_2
+$ ./build/test_f006_without_2
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0 run_wall_ms:6
+--- repetition 3 of 5 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o build/test_f006_without_3
+build_exit:0 build_wall_ms:1319
+$ sha256sum build/test_f006_without_3
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_3
+$ ./build/test_f006_without_3
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0 run_wall_ms:15
+--- repetition 4 of 5 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o build/test_f006_without_4
+build_exit:0 build_wall_ms:1145
+$ sha256sum build/test_f006_without_4
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_4
+$ ./build/test_f006_without_4
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0 run_wall_ms:6
+--- repetition 5 of 5 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o build/test_f006_without_5
+build_exit:0 build_wall_ms:1090
+$ sha256sum build/test_f006_without_5
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_5
+$ ./build/test_f006_without_5
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0 run_wall_ms:8
+WITHOUT SUMMARY: builds_passed:5/5 runs_passed:5/5
+
+--- S4. WITH leg (B2+B1, dynamic): 5 builds + 5 runs ---
+Exact build command per repetition (only -o name varies):
+  timeout 180 mojo build -o build/test_f006_with_<n> tests/mojo/test_f005.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$ORIGIN'
+
+--- WITH ---
+--- repetition 1 of 5 ---
+$ timeout 180 mojo build -o build/test_f006_with_1 tests/mojo/test_f005.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$ORIGIN'
+build_exit:0 build_wall_ms:1377
+$ sha256sum build/test_f006_with_1
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_1
+$ ./build/test_f006_with_1
+F-005 dynamic leg (Mojo program linked against libmimiralloc.so only,
+plus the test-only libf005probe.so observer)
+  [ok] f005_page_size() > 0
+PAGE: 16384
+warmup pass 0 done
+warmup pass 1 done
+warmup pass 2 done
+MAPPED base= 2475163648 (quiescent baseline, INC-F005-01)
+  [ok] mapped base > 0
+  [ok] 4x mimir_malloc(64) non-null
+  [ok] validated == site_malloc (4)
+  [ok] mimir_malloc block pattern write/readback
+MAPPED after_mimir_malloc_x4= 2475294720  delta= 131072
+  [ok] mapped delta == 4 * page_round_up(page + 64)
+  [ok] 4x libc malloc(64) non-null
+MAPPED after_libc_malloc_x4= 2475294720  delta_vs_mimir= 0
+  [ok] libc allocations move no mapped bytes
+  [ok] mapped unchanged after libc frees
+  [ok] 2x mimir_calloc(16, 8) non-null
+  [ok] calloc extents arrive zeroed (128 bytes x2)
+  [ok] validated == site_malloc + site_calloc (6)
+MAPPED after_mimir_calloc_x2= 2475360256  delta= 65536
+  [ok] mapped delta == 2 * page_round_up(page + 128)
+  [ok] mimir_realloc(p0, 96) non-null
+  [ok] grown block descriptor records 96 bytes
+  [ok] realloc grow preserves first 64 bytes
+  [ok] mapped unchanged by realloc grow (publish + retire)
+MAPPED final= 2475163648  base= 2475163648
+  [ok] mapped returns exactly to baseline after all frees
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+run_exit:0 run_wall_ms:75
+--- repetition 2 of 5 ---
+$ timeout 180 mojo build -o build/test_f006_with_2 tests/mojo/test_f005.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$ORIGIN'
+build_exit:0 build_wall_ms:1357
+$ sha256sum build/test_f006_with_2
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_2
+$ ./build/test_f006_with_2
+F-005 dynamic leg (Mojo program linked against libmimiralloc.so only,
+plus the test-only libf005probe.so observer)
+  [ok] f005_page_size() > 0
+PAGE: 16384
+warmup pass 0 done
+warmup pass 1 done
+warmup pass 2 done
+MAPPED base= 2475163648 (quiescent baseline, INC-F005-01)
+  [ok] mapped base > 0
+  [ok] 4x mimir_malloc(64) non-null
+  [ok] validated == site_malloc (4)
+  [ok] mimir_malloc block pattern write/readback
+MAPPED after_mimir_malloc_x4= 2475294720  delta= 131072
+  [ok] mapped delta == 4 * page_round_up(page + 64)
+  [ok] 4x libc malloc(64) non-null
+MAPPED after_libc_malloc_x4= 2475294720  delta_vs_mimir= 0
+  [ok] libc allocations move no mapped bytes
+  [ok] mapped unchanged after libc frees
+  [ok] 2x mimir_calloc(16, 8) non-null
+  [ok] calloc extents arrive zeroed (128 bytes x2)
+  [ok] validated == site_malloc + site_calloc (6)
+MAPPED after_mimir_calloc_x2= 2475360256  delta= 65536
+  [ok] mapped delta == 2 * page_round_up(page + 128)
+  [ok] mimir_realloc(p0, 96) non-null
+  [ok] grown block descriptor records 96 bytes
+  [ok] realloc grow preserves first 64 bytes
+  [ok] mapped unchanged by realloc grow (publish + retire)
+MAPPED final= 2475163648  base= 2475163648
+  [ok] mapped returns exactly to baseline after all frees
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+run_exit:0 run_wall_ms:67
+--- repetition 3 of 5 ---
+$ timeout 180 mojo build -o build/test_f006_with_3 tests/mojo/test_f005.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$ORIGIN'
+build_exit:0 build_wall_ms:1443
+$ sha256sum build/test_f006_with_3
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_3
+$ ./build/test_f006_with_3
+F-005 dynamic leg (Mojo program linked against libmimiralloc.so only,
+plus the test-only libf005probe.so observer)
+  [ok] f005_page_size() > 0
+PAGE: 16384
+warmup pass 0 done
+warmup pass 1 done
+warmup pass 2 done
+MAPPED base= 2475163648 (quiescent baseline, INC-F005-01)
+  [ok] mapped base > 0
+  [ok] 4x mimir_malloc(64) non-null
+  [ok] validated == site_malloc (4)
+  [ok] mimir_malloc block pattern write/readback
+MAPPED after_mimir_malloc_x4= 2475294720  delta= 131072
+  [ok] mapped delta == 4 * page_round_up(page + 64)
+  [ok] 4x libc malloc(64) non-null
+MAPPED after_libc_malloc_x4= 2475294720  delta_vs_mimir= 0
+  [ok] libc allocations move no mapped bytes
+  [ok] mapped unchanged after libc frees
+  [ok] 2x mimir_calloc(16, 8) non-null
+  [ok] calloc extents arrive zeroed (128 bytes x2)
+  [ok] validated == site_malloc + site_calloc (6)
+MAPPED after_mimir_calloc_x2= 2475360256  delta= 65536
+  [ok] mapped delta == 2 * page_round_up(page + 128)
+  [ok] mimir_realloc(p0, 96) non-null
+  [ok] grown block descriptor records 96 bytes
+  [ok] realloc grow preserves first 64 bytes
+  [ok] mapped unchanged by realloc grow (publish + retire)
+MAPPED final= 2475163648  base= 2475163648
+  [ok] mapped returns exactly to baseline after all frees
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+run_exit:0 run_wall_ms:87
+--- repetition 4 of 5 ---
+$ timeout 180 mojo build -o build/test_f006_with_4 tests/mojo/test_f005.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$ORIGIN'
+build_exit:0 build_wall_ms:1372
+$ sha256sum build/test_f006_with_4
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_4
+$ ./build/test_f006_with_4
+F-005 dynamic leg (Mojo program linked against libmimiralloc.so only,
+plus the test-only libf005probe.so observer)
+  [ok] f005_page_size() > 0
+PAGE: 16384
+warmup pass 0 done
+warmup pass 1 done
+warmup pass 2 done
+MAPPED base= 2475163648 (quiescent baseline, INC-F005-01)
+  [ok] mapped base > 0
+  [ok] 4x mimir_malloc(64) non-null
+  [ok] validated == site_malloc (4)
+  [ok] mimir_malloc block pattern write/readback
+MAPPED after_mimir_malloc_x4= 2475294720  delta= 131072
+  [ok] mapped delta == 4 * page_round_up(page + 64)
+  [ok] 4x libc malloc(64) non-null
+MAPPED after_libc_malloc_x4= 2475294720  delta_vs_mimir= 0
+  [ok] libc allocations move no mapped bytes
+  [ok] mapped unchanged after libc frees
+  [ok] 2x mimir_calloc(16, 8) non-null
+  [ok] calloc extents arrive zeroed (128 bytes x2)
+  [ok] validated == site_malloc + site_calloc (6)
+MAPPED after_mimir_calloc_x2= 2475360256  delta= 65536
+  [ok] mapped delta == 2 * page_round_up(page + 128)
+  [ok] mimir_realloc(p0, 96) non-null
+  [ok] grown block descriptor records 96 bytes
+  [ok] realloc grow preserves first 64 bytes
+  [ok] mapped unchanged by realloc grow (publish + retire)
+MAPPED final= 2475163648  base= 2475163648
+  [ok] mapped returns exactly to baseline after all frees
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+run_exit:0 run_wall_ms:67
+--- repetition 5 of 5 ---
+$ timeout 180 mojo build -o build/test_f006_with_5 tests/mojo/test_f005.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker '$ORIGIN'
+build_exit:0 build_wall_ms:1342
+$ sha256sum build/test_f006_with_5
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_5
+$ ./build/test_f006_with_5
+F-005 dynamic leg (Mojo program linked against libmimiralloc.so only,
+plus the test-only libf005probe.so observer)
+  [ok] f005_page_size() > 0
+PAGE: 16384
+warmup pass 0 done
+warmup pass 1 done
+warmup pass 2 done
+MAPPED base= 2475163648 (quiescent baseline, INC-F005-01)
+  [ok] mapped base > 0
+  [ok] 4x mimir_malloc(64) non-null
+  [ok] validated == site_malloc (4)
+  [ok] mimir_malloc block pattern write/readback
+MAPPED after_mimir_malloc_x4= 2475294720  delta= 131072
+  [ok] mapped delta == 4 * page_round_up(page + 64)
+  [ok] 4x libc malloc(64) non-null
+MAPPED after_libc_malloc_x4= 2475294720  delta_vs_mimir= 0
+  [ok] libc allocations move no mapped bytes
+  [ok] mapped unchanged after libc frees
+  [ok] 2x mimir_calloc(16, 8) non-null
+  [ok] calloc extents arrive zeroed (128 bytes x2)
+  [ok] validated == site_malloc + site_calloc (6)
+MAPPED after_mimir_calloc_x2= 2475360256  delta= 65536
+  [ok] mapped delta == 2 * page_round_up(page + 128)
+  [ok] mimir_realloc(p0, 96) non-null
+  [ok] grown block descriptor records 96 bytes
+  [ok] realloc grow preserves first 64 bytes
+  [ok] mapped unchanged by realloc grow (publish + retire)
+MAPPED final= 2475163648  base= 2475163648
+  [ok] mapped returns exactly to baseline after all frees
+CHECKS: 18 run, 0 failed
+F-005 DYNAMIC LEG RESULT: PASS
+run_exit:0 run_wall_ms:87
+WITH SUMMARY: builds_passed:5/5 runs_passed:5/5
+
+--- S5. Binary identity across repetitions ---
+$ sha256sum build/test_f006_without_* build/test_f006_with_*
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_1
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_2
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_3
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_4
+197e68c2e4a82ac1ded8b396e2980d64bcd19aedff29c59dc2ed64387dc378d6  build/test_f006_without_5
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_1
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_2
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_3
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_4
+6a1df97f7c09c9ee288cfa4b4594ec2d92589957dabeda4014598be1497bdac2  build/test_f006_with_5
+$ distinct WITHOUT binary hashes:
+1
+$ distinct WITH binary hashes:
+1
+
+--- S6. Link records (repetition-1 binaries) ---
+$ file build/test_f006_without_1 build/test_f006_with_1
+build/test_f006_without_1: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=1cd78d763d151c6f6c5002303ee31e3a1a3f0127, for GNU/Linux 3.7.0, not stripped
+build/test_f006_with_1:    ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=a175b3e0e663947c55d956e77617d470ee67faa8, for GNU/Linux 3.7.0, not stripped
+$ readelf -d build/test_f006_without_1 | grep -E 'NEEDED|RUNPATH'
+ 0x0000000000000001 (NEEDED)             Shared library: [libKGENCompilerRTShared.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/home/pi/mojo-dev/.pixi/envs/default/lib]
+pipeline_exit:0 (0 = at least one NEEDED/RUNPATH line)
+$ readelf -d build/test_f006_with_1 | grep -E 'NEEDED|RUNPATH'
+ 0x0000000000000001 (NEEDED)             Shared library: [libKGENCompilerRTShared.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libf005probe.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/home/pi/mojo-dev/.pixi/envs/default/lib:$ORIGIN]
+pipeline_exit:0 (0 = at least one NEEDED/RUNPATH line)
+$ nm -D build/test_f006_without_1 | grep -i mimir (expect: no lines)
+grep_exit:1 (1 = no mimir symbol, as expected for WITHOUT)
+$ nm -D build/test_f006_with_1 | grep -E 'mimir|f005'
+                 U f005_descriptor_valid
+                 U f005_mapped_bytes
+                 U f005_page_size
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_realloc
+grep_exit:0
+$ ldd build/test_f006_with_1 | grep -E 'mimir|f005'
+	libmimiralloc.so => /home/pi/mimiralloc-team-06/build/libmimiralloc.so (0x00007fff05770000)
+	libf005probe.so => /home/pi/mimiralloc-team-06/build/libf005probe.so (0x00007fff05740000)
+grep_exit:0
+
+--- S7. WITH leg loader bindings (inspection run, not a repetition) ---
+$ LD_DEBUG=bindings ./build/test_f006_with_1 (stderr filtered to libmimiralloc.so binding lines)
+bindings_run_exit:0
+$ binding lines FROM the generated executable TO libmimiralloc.so (stderr log;
+   F-005 S6 shape: source must be the executable itself, so the library's own
+   bindings to libc, which also name libmimiralloc.so, are excluded):
+   1009836:	binding file ./build/test_f006_with_1 [0] to /home/pi/mimiralloc-team-06/build/libmimiralloc.so [0]: normal symbol `mimir_malloc'
+   1009836:	binding file ./build/test_f006_with_1 [0] to /home/pi/mimiralloc-team-06/build/libmimiralloc.so [0]: normal symbol `mimir_free'
+   1009836:	binding file ./build/test_f006_with_1 [0] to /home/pi/mimiralloc-team-06/build/libmimiralloc.so [0]: normal symbol `mimir_calloc'
+   1009836:	binding file ./build/test_f006_with_1 [0] to /home/pi/mimiralloc-team-06/build/libmimiralloc.so [0]: normal symbol `mimir_realloc'
+$ count of those binding lines:
+4
+$ program verdict line of the bindings run:
+F-005 DYNAMIC LEG RESULT: PASS
+
+--- S8. Post-run Pi state ---
+$ free -g
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+$ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/ (Samtal)
+200
+
+F-006 HARNESS RESULT: PASS (all builds and runs of both legs passed)
+=== End of F-006 recorded run ===

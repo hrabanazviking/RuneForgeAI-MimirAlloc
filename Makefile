@@ -550,3 +550,24 @@ test-f005: $(BUILD)/test_f005 $(BUILD)/test_f005_audit
 	./$(BUILD)/test_f005_audit
 
 .PHONY: test-f005
+
+# F-006: representative program repeated-compile comparison
+# (Phase 6, tasks T4+T6) - the harness under tests/mojo/
+# (run_f006_compare.sh) runs a bounded repeated series
+# (5 builds + 5 runs per leg) for the WITHOUT leg
+# (tests/mojo/test_f004.mojo, F-004 baseline, no boundary)
+# and the WITH leg (tests/mojo/test_f005.mojo dynamic leg,
+# the F-003 B2 boundary as proven binding-grade by F-005),
+# on this tree's revision, and prints the full record.
+# Standalone via `make test-f006`; NOT part of `make test`,
+# whose composition is unchanged, and `make test` does not
+# depend on Mojo being present - this target is (with
+# test-f003/test-f004-mojo/test-f005) one of the only ones
+# that invoke mojo, using the `mojo` found on PATH. The
+# recorded run is tests/mojo/recorded_run_f006.txt; the
+# slice record is
+# docs/PHASE_6_REPEATED_COMPILE_COMPARISON_F006.md.
+test-f006: $(BUILD)/libmimiralloc.so $(BUILD)/libf005probe.so
+	bash tests/mojo/run_f006_compare.sh
+
+.PHONY: test-f006
