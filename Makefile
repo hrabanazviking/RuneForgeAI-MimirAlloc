@@ -486,3 +486,25 @@ test-f003: $(BUILD)/test_f003
 	./$(BUILD)/test_f003
 
 .PHONY: test-f003
+
+# F-004: minimal Mojo program run (Phase 6, T3) - the
+# evidence program under tests/mojo/ (test_f004.mojo) is
+# built with `mojo build` and run natively via the
+# standalone target `make test-f004-mojo`. Mojo-guarded on
+# purpose: when no `mojo` is on PATH the target prints a
+# skip line and exits 0, so the C suite never depends on
+# Mojo. Standalone on purpose: it is NOT part of
+# `make test`, whose composition is unchanged. The WITH
+# (MimirAlloc-wired) leg is OWED to F-003's banked boundary
+# (see docs/PHASE_6_MINIMAL_MOJO_RUN_F004.md); this target
+# runs the WITHOUT baseline leg only. The recorded run is
+# tests/mojo/recorded_run_f004.txt.
+test-f004-mojo:
+	@if command -v mojo >/dev/null 2>&1; then \
+		mkdir -p $(BUILD); \
+		timeout 180 mojo build tests/mojo/test_f004.mojo -o $(BUILD)/test_f004_mojo && ./$(BUILD)/test_f004_mojo; \
+	else \
+		echo "test-f004-mojo: mojo not on PATH - SKIPPED (Mojo-guarded standalone target)"; \
+	fi
+
+.PHONY: test-f004-mojo

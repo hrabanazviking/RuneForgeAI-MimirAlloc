@@ -1,0 +1,150 @@
+F-004 recorded run - minimal Mojo program, WITHOUT and WITH status
+Date: 2026-11-06T21:28:22-05:00  (Fri Nov  6 09:28:22 PM EST 2026)
+Host: purpleviking1  user: pi
+uname: Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+pagesize: 16384
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+git HEAD: c6d367222759b0403a218f74255c937e06784345
+git branch: yrsa/mimiralloc-04
+worktree status (pre-run):
+?? build/
+?? hidden_files/
+?? tests/mojo/
+
+=== Toolchain (as used; wrapper, no re-resolution) ===
+$ cat /usr/local/bin/mojo
+#!/bin/bash
+exec /home/pi/.pixi/bin/pixi run --manifest-path /home/pi/mojo-dev/pixi.toml mojo "$@"
+$ mojo --version
+Mojo 1.1.0 (8189361e)
+exit:0
+
+=== Source under test ===
+$ sha256sum tests/mojo/test_f004.mojo
+bebbf4cfbd731838e91c963c2372029761c84b59768c101d986549f57e0f8f8b  tests/mojo/test_f004.mojo
+$ cat tests/mojo/test_f004.mojo
+# F-004 - minimal Mojo program, WITHOUT-half baseline (Phase 6, T3).
+#
+# A small, original, clean-room Mojo program. It is NOT a bare
+# hello-world: it builds a growable List[Int] buffer of known
+# contents (192 entries, forcing growth past the initial
+# capacity), mutates every entry in place, and verifies the
+# result against independently computed expected checksums.
+# The allocation it touches is the Mojo stdlib List's own
+# growable storage, allocated by the Mojo runtime's default
+# allocator - this WITHOUT leg uses no MimirAlloc symbol,
+# no -Xlinker wiring, and no external_call at all.
+#
+# Expected values (computed independently of Mojo, in
+# Python, from the same formulas):
+#   initial v_i = (i*7+3) % 256          for i in 0..<192
+#   mutated v_i = v_i*3 + 5
+#   count = 192, sum = 72096, weighted_sum = 7130112
+#     where weighted_sum = sum((i+1) * mutated_v_i)
+#
+# On full success it prints the F004 PASS line and returns
+# normally (exit 0). On any mismatch it prints FAIL lines
+# and raises, so the process exits non-zero.
+
+def main() raises:
+    var buf = List[Int]()
+    for i in range(192):
+        buf.append((i * 7 + 3) % 256)
+    if len(buf) != 192:
+        print("F004 count: FAIL len=", len(buf))
+        raise Error("F-004: wrong count after build")
+    print("F004 count: 192")
+
+    for i in range(192):
+        buf[i] = buf[i] * 3 + 5
+
+    var total = 0
+    var weighted = 0
+    for i in range(192):
+        total += buf[i]
+        weighted += (i + 1) * buf[i]
+
+    print("F004 checksum:", total)
+    print("F004 weighted:", weighted)
+    if total == 72096 and weighted == 7130112:
+        print("F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)")
+    else:
+        print("F004 RESULT: FAIL")
+        raise Error("F-004: checksum mismatch")
+
+=== WITHOUT half: mojo build + native run, 3 repetitions ===
+--- repetition 1 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o /tmp/f004/test_f004_1
+build_exit:0
+$ /tmp/f004/test_f004_1
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0
+--- repetition 2 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o /tmp/f004/test_f004_2
+build_exit:0
+$ /tmp/f004/test_f004_2
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0
+--- repetition 3 ---
+$ timeout 180 mojo build tests/mojo/test_f004.mojo -o /tmp/f004/test_f004_3
+build_exit:0
+$ /tmp/f004/test_f004_3
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+run_exit:0
+
+=== WITHOUT half: executable inspection (repetition 1 binary) ===
+$ file /tmp/f004/test_f004_1
+/tmp/f004/test_f004_1: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=1cd78d763d151c6f6c5002303ee31e3a1a3f0127, for GNU/Linux 3.7.0, not stripped
+$ readelf -d /tmp/f004/test_f004_1 | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libKGENCompilerRTShared.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+$ nm -D /tmp/f004/test_f004_1 | grep -i mimir (expect: no lines)
+grep_exit:1 (1 = no mimir symbol, as expected for WITHOUT)
+$ grep -c mimir tests/mojo/test_f004.mojo (source references; expect comments only check below)
+no lowercase mimir in source
+10:# allocator - this WITHOUT leg uses no MimirAlloc symbol,
+$ ldd /tmp/f004/test_f004_1
+	linux-vdso.so.1 (0x00007ffed66c8000)
+	libKGENCompilerRTShared.so => /home/pi/mojo-dev/.pixi/envs/default/lib/libKGENCompilerRTShared.so (0x00007ffed64f0000)
+	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x00007ffed6310000)
+	libm.so.6 => /lib/aarch64-linux-gnu/libm.so.6 (0x00007ffed6260000)
+	libstdc++.so.6 => /home/pi/mojo-dev/.pixi/envs/default/lib/libstdc++.so.6 (0x00007ffed5fc0000)
+	libMSupportGlobals.so => /home/pi/mojo-dev/.pixi/envs/default/lib/libMSupportGlobals.so (0x00007ffed5f70000)
+	libAsyncRTRuntimeGlobals.so => /home/pi/mojo-dev/.pixi/envs/default/lib/libAsyncRTRuntimeGlobals.so (0x00007ffed5430000)
+	libgcc_s.so.1 => /home/pi/mojo-dev/.pixi/envs/default/lib/libgcc_s.so.1 (0x00007ffed53f0000)
+	/lib/ld-linux-aarch64.so.1 (0x00007ffed6690000)
+	libdl.so.2 => /lib/aarch64-linux-gnu/libdl.so.2 (0x00007ffed53c0000)
+
+=== WITHOUT half: mojo run of the same source (1 repetition) ===
+$ timeout 180 mojo run tests/mojo/test_f004.mojo
+F004 count: 192
+F004 checksum: 72096
+F004 weighted: 7130112
+F004 RESULT: PASS (count=192 sum=72096 weighted=7130112)
+mojo_run_exit:0
+
+=== WITH half: F-003 banking status at the time of this run ===
+$ git -C /home/pi/mimiralloc-forge log --oneline -3
+c6d3672 F-002: Mojo toolchain readiness record - Mojo 1.1.0 PRESENT via pixi on this Pi and PROVEN running (version/run/build exit 0); modular CLI and ~/.modular absent, MAX data-only; acquisition road reconstructed from pixi.toml/pixi.lock (channel conda.modular.com/max, 50 pkgs, 231.1 MiB download, LicenseRef-Modular-Proprietary), install sequence marked NOT RUN reserved for Volmarr word; source-build road BLOCKED as observed (bazel failure in ~/mojo-build); Phase 6 runtime half NOT BLOCKED, exit half OWED (no MimirAlloc wiring, original failure tablet-only); INC-F002-01..10; README untouched; make test exit 0
+491ecf1 F-001: Phase 6 foundation plan - Mojo toolchain inventory PROVEN on Pi (Mojo 1.1.0 linux-aarch64 via pixi at /home/pi/mojo-dev, runs; MAX absent, modular CLI absent, pixi not on PATH, ~/.modular absent); original Phase 1 failing command NEVER recorded exactly (field-note prose account only, SM-X400 Android/Termux, Mojo 1.2.0/nightly TCMalloc MmapAligned 48-bit abort) - INC-F001-01; no boundary PROVEN-available against the namespaced 4-symbol surface (B2 -Xlinker flag PROVEN present, B1 explicit adoption documented-only, B3/B4/B7 require new surface, B5 allocator hook absent in banked sources, B6 compiler-internal BLOCKED); exit-evidence matrix F-002..F-009 with X1 BLOCKED on Pi via X4 blocker door; INC-F001-01..12; make test exit 0; README untouched
+211eb31 E-009: Phase 5 exit evidence packet - Phase 5 exit MET in Pi-native scope (exit X1-X4 MET 4/4; tasks MET 7 / PARTIAL 1 of 8, T7 rejection half contract-posture only); fresh run at ca77365: make test + all 8 standalone targets exit 0, nm -D exactly 4; carried-owed register O-01..O-18 (Phase 4 + Phase 3 exits still UNMET); INC-E009-01..07; README untouched
+$ ls /home/pi/mimiralloc-forge/docs/PHASE_6_BOUNDARY_WIRING_F003.md
+ls: cannot access '/home/pi/mimiralloc-forge/docs/PHASE_6_BOUNDARY_WIRING_F003.md': No such file or directory
+$ ls docs/PHASE_6_BOUNDARY_WIRING_F003.md (this worktree)
+ls: cannot access 'docs/PHASE_6_BOUNDARY_WIRING_F003.md': No such file or directory
+Reading: if the F-003 doc is absent and forge main is still at
+c6d3672 (F-002), F-003 is NOT banked; the WITH half is OWED-to-F-003
+with the join point defined in docs/PHASE_6_MINIMAL_MOJO_RUN_F004.md.
+
+=== End of recorded run ===
