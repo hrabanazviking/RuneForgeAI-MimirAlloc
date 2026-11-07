@@ -1018,3 +1018,32 @@ test-i005: $(BUILD)/test_i005
 	./$(BUILD)/test_i005
 
 .PHONY: test-i005
+
+# I-006: Phase 9 fragmentation and reclaim-overhead
+# measurement test - the test under tests/core/
+# (test_i006.c) measures fragmentation and reclaim
+# overhead against the definitions of
+# docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S6.2
+# (F-1..F-6), using the I-003 test-only trim surface
+# (tests/core/mimir_trim_i003.h): a stated fragmented
+# state across classes 64 / 256 / 1024, F-3 / F-1(b) /
+# F-2 figures and the R-EXT / R-INT ratios from measured
+# quantities only, cross-class unusability proof,
+# free-path / partial / full / no-op reclaim costs with
+# exact span and byte deltas (wall time reported as
+# timing-never-an-oracle), hit-vs-miss follow-on cost,
+# live blocks byte-identical across every reclaim step.
+# Standalone via `make test-i006`; NOT part of
+# `make test`, whose composition is unchanged. Recorded
+# run: tests/core/recorded_run_i006.txt; slice record:
+# docs/PHASE_9_FRAGMENTATION_AND_RECLAIM.md.
+$(BUILD)/test_i006.o: tests/core/test_i006.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h tests/core/mimir_drain_h001.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_i006.c -o $@
+
+$(BUILD)/test_i006: $(LIBOBJS) $(BUILD)/test_i006.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_i006.o -o $@
+
+test-i006: $(BUILD)/test_i006
+	./$(BUILD)/test_i006
+
+.PHONY: test-i006
