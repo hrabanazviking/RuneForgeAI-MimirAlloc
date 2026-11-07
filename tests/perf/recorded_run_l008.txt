@@ -1,0 +1,311 @@
+recorded_run_l008 - L-008 Phase 12 tuning evaluation + responsiveness
+date: 2026-11-07T14:43:20-05:00
+base: 03436f323293498df16fa1e049111b62ee8646d5
+host: purpleviking1 (Raspberry Pi, aarch64)
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+temp=57.6'C
+throttled=0x0
+samtal_before: 200 0.001034s
+make test: exit 0, CHECKS: 4590 run, 0 failed, RESULT: PASS (run this session, tail in keeper evidence)
+=== A/B sweep (run_l008.sh) ===
+--- build probe_l008 (debug flavour) ---
+--- build probe_l008_prod (production flavour) ---
+build exits=0
+53b92d49c1315bd0267a818e17cbaa203c959523db93baa81e03aa2dbaf69de6  tests/perf/probe_l008.c
+164e90db790f10278b23b91ed1fe6f0f30f6a86a1be47e702a9c1b4ddebe316c  /tmp/probe_l008
+84962880272a964ffefbad989cbe6775c65138541dcb315ab76e95cf69973175  /tmp/probe_l008_prod
+--- debug rep 1 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=1985886 iters 1894775 1921757 1974108 1985886 2059627 2121775 2252570
+BOUND 2 W2 median_ns=7761749 iters 7724100 7725248 7728452 7761749 7830841 7846803 8452729
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 1 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=1986016 iters 1830497 1912812 1972942 1986016 2058090 2151478 2242256
+BOUND 0 W2 median_ns=7939026 iters 7654730 7677823 7814174 7939026 8318692 8527895 9486191
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 1 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2061571 iters 1713849 1871164 2023016 2061571 2065330 2258960 2272478
+BOUND 16 W2 median_ns=7669267 iters 7645637 7665637 7667526 7669267 7677100 8005804 8260081
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 2 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=2040330 iters 1678239 1912941 1988479 2040330 2119034 2292015 2587867
+BOUND 0 W2 median_ns=7694360 iters 7639952 7653193 7657730 7694360 7869507 8021211 8214488
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 2 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2248626 iters 1920275 1996923 2142775 2248626 2295589 2331404 2359849
+BOUND 16 W2 median_ns=8031674 iters 7747471 7749304 7938230 8031674 8086599 8307618 8579117
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 2 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=2059293 iters 1993349 2003646 2021830 2059293 2088256 2179145 2471663
+BOUND 2 W2 median_ns=7689026 iters 7629693 7644766 7666934 7689026 7746082 7851026 8005562
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 3 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2182626 iters 1836405 2045849 2070163 2182626 2221256 2246034 2253294
+BOUND 16 W2 median_ns=7878211 iters 7781897 7818229 7829693 7878211 7888471 8055544 8226470
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 3 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=2112071 iters 1860886 2013479 2066682 2112071 2113571 2159386 2318663
+BOUND 2 W2 median_ns=7666971 iters 7656711 7657193 7660378 7666971 7718786 7747248 8391914
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 3 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=2059997 iters 1892479 1948294 1965794 2059997 2060848 2146274 2177960
+BOUND 0 W2 median_ns=7671119 iters 7647933 7648971 7663749 7671119 7833896 7984989 7986470
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 4 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=2133979 iters 1911386 2040756 2089016 2133979 2170071 2181182 2181219
+BOUND 2 W2 median_ns=7667526 iters 7650266 7652118 7663971 7667526 7791970 7911525 8292414
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 4 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=2352330 iters 1973127 2138608 2290997 2352330 2354941 2376052 2567700
+BOUND 0 W2 median_ns=7671711 iters 7640434 7642082 7667618 7671711 7828248 7871618 7941025
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 4 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2294089 iters 2212664 2245700 2267034 2294089 2451200 2488552 2491015
+BOUND 16 W2 median_ns=7704396 iters 7621989 7664026 7701063 7704396 7789896 7838081 8192396
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 5 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=2237071 iters 2122997 2148719 2151534 2237071 2244849 2253516 2475996
+BOUND 0 W2 median_ns=7830711 iters 7654119 7663026 7729582 7830711 8129340 8265969 11923057
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 5 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2565626 iters 2131997 2177200 2288701 2565626 5992213 6111917 9110080
+BOUND 16 W2 median_ns=8020692 iters 7772767 7778045 7898840 8020692 9500838 11674928 15712311
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- debug rep 5 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=2391515 iters 2325589 2336071 2373460 2391515 2474978 2521423 2574608
+BOUND 2 W2 median_ns=7800156 iters 7684952 7696082 7714582 7800156 7813526 8178007 8238322
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=1 bytes_mapped=32768 bytes_cached=16384
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 1 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=2523052 iters 2312682 2324571 2413830 2523052 2550978 2644867 2683459
+BOUND 2 W2 median_ns=3909235 iters 3861809 3888199 3903310 3909235 3920679 4129087 4390087
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=2 bytes_mapped=32768 bytes_cached=32768
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 1 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=2948736 iters 2609886 2641866 2764088 2948736 2999718 3211088 3787347
+BOUND 0 W2 median_ns=5814880 iters 5588400 5696825 5772196 5814880 5948880 6023195 7344156
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=0 empty_spans=0 bytes_mapped=0 bytes_cached=0
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 1 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2646533 iters 2244700 2344700 2637996 2646533 2777348 2838292 2842385
+BOUND 16 W2 median_ns=3930754 iters 3886661 3897124 3909458 3930754 3957587 4276439 4291216
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=2 bytes_mapped=32768 bytes_cached=32768
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 2 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=2162405 iters 2025941 2079830 2090127 2162405 2270719 2610330 3012255
+BOUND 0 W2 median_ns=6321806 iters 5631937 5864659 6209306 6321806 6544102 9107858 9445024
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=0 empty_spans=0 bytes_mapped=0 bytes_cached=0
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 2 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2316960 iters 1796016 2234756 2238145 2316960 2340737 2397311 2463904
+BOUND 16 W2 median_ns=3967735 iters 3898457 3910253 3912717 3967735 4091883 4228679 4502734
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=2 bytes_mapped=32768 bytes_cached=32768
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 2 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=2317330 iters 2187034 2312922 2316071 2317330 2533997 2545441 2683589
+BOUND 2 W2 median_ns=4080198 iters 3890013 3901272 4068809 4080198 4206457 4488531 4645715
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=2 bytes_mapped=32768 bytes_cached=32768
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 3 bound 16 ---
+probe_l008 bound=16 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 16 W1 median_ns=2403182 iters 2178145 2240163 2371164 2403182 2452996 4161883 5362881
+BOUND 16 W2 median_ns=4046031 iters 3862494 3872809 3890568 4046031 4057105 4232494 4241365
+GATE stats_snapshot: ok
+BOUND 16 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=2 bytes_mapped=32768 bytes_cached=32768
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 3 bound 2 ---
+probe_l008 bound=2 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 2 W1 median_ns=2353108 iters 2015553 2031831 2265237 2353108 2359534 2375460 2443219
+BOUND 2 W2 median_ns=4024494 iters 3852809 3879513 3936847 4024494 4062513 4133327 4273124
+GATE stats_snapshot: ok
+BOUND 2 after-teardown: live_small=0 live_mappings=0 live_span_bytes=32768 empty_spans=2 bytes_mapped=32768 bytes_cached=32768
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+--- prod rep 3 bound 0 ---
+probe_l008 bound=0 (one fresh process per leg)
+GATE set_retention: ok
+GATE get_retention_matches: ok
+GATE w1_warmup_allocs: ok
+GATE w2_warmup_allocs: ok
+BOUND 0 W1 median_ns=2218960 iters 2061182 2084830 2210182 2218960 2237126 2311756 2350145
+BOUND 0 W2 median_ns=5923177 iters 5518029 5546158 5552103 5923177 6123991 6288565 6767175
+GATE stats_snapshot: ok
+BOUND 0 after-teardown: live_small=0 live_mappings=0 live_span_bytes=0 empty_spans=0 bytes_mapped=0 bytes_cached=0
+GATE teardown_live_zero: ok
+L008 RESULT: PASS (failures=0)
+samtal samples=154 non200=0 mean_s=0.0018 max_s=0.0113
+--- run_l008 done rc=0 ---
+sweep_exit=0
+samtal_after: 200 0.003718s
+temp=60.4'C
+throttled=0x0
