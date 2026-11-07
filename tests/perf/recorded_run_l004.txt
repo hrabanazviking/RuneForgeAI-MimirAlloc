@@ -1,0 +1,218 @@
+L-004 recorded run - Phase 12 model-loading + GGUF metadata allocation tracking
+Sat Nov  7 01:49:55 PM EST 2026
+62cbb6fbcb239a2af6122dca4e5db706911cb7d0
+yrsa/mimiralloc-04
+aarch64
+4
+CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2
+# -DMIMIR_DEBUG=1 and directs ALL objects to build-debug/,
+--- model identity (L-002 S5.1) ---
+-rw-r--r-- 1 pi pi 637699456 Oct 10 05:45 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+da3087fb14aede55fde6eb81a0e55e886810e43509ec82ecdc7aa5d62a03b556  /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+--- free before ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_before: 200
+temp=58.2'C
+throttled=0x0
+--- make test (gate) ---
+make_test_exit=0 CHECKS: 4590 run, 0 failed RESULT: PASS (full output /tmp/l004_maketest.txt at run time; tail lines re-verified below)
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+--- run_l004.sh ---
+--- build probe_l004 ---
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 tests/perf/probe_l004.c src/api/mimir_alloc.c src/core/mimir_core.c src/platform/mimir_platform.c -o /tmp/probe_l004
+build exit=0
+78ffa3012263d118b07d382d148d2d23e66c800b5b106c3f16e52c27e33fdc22  tests/perf/probe_l004.c
+71d8c8cbcfb8d3035677b1c9b99b0e14aee2a62f3fc25d8df6a17eacd67d50ea  /tmp/probe_l004
+--- probe rep 1: timeout 120 /tmp/probe_l004 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l004 - L-004 load + metadata tracking harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline (pre-load)
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3040 Rss=112 Pss=96 kB
+  R(file) Size=1936 Rss=1248 Pss=143 kB
+  rollup  Rss=1392 Pss=271 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF version=3 tensors=201 kv=23 file_bytes=637699456
+GATE kv_count_sane: ok
+SNAPSHOT S1 after mmap (W Size jumps, residency ~0)
+  W       Size=622768 Rss=64 Pss=64 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=1520 Pss=336 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE W_size_equals_file_at_S1: ok
+GATE mmap_moves_no_allocator_counter: ok
+GATE metadata_kv_walk_complete: ok
+metadata: architecture=llama name=tinyllama_tinyllama-1.1b-chat-v1.0 alignment=32
+GATE tensor_info_walk_complete: ok
+metadata_end=1709436 data_start=1709440
+touch sink=1262904 (policy: full 32 MiB head, 256 KiB stride beyond)
+SNAPSHOT S2 after metadata walk + weight touch
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=181744 Pss=180560 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE metadata_view_and_touch_move_no_counter: ok
+SNAPSHOT S3 after C1 step (mimir_* metadata records)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=4160 Rss=1264 Pss=1248 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=182864 Pss=181680 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=1146880 live_map_bytes=1097728 live_span_bytes=49152 live_small=23 live_mappings=2 cached=0 released=0 failures=0
+GATE C1_counter_delta_equals_harness_requested_sum: ok
+SNAPSHOT S4 after C2 step (stdlib metadata records)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=5200 Rss=2288 Pss=2272 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=183888 Pss=182704 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=1146880 live_map_bytes=1097728 live_span_bytes=49152 live_small=23 live_mappings=2 cached=0 released=0 failures=0
+GATE C2_step_moves_no_C1_counter: ok
+SNAPSHOT S6 after teardown
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3088 Rss=192 Pss=176 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=1504 Pss=320 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=49152 live_map_bytes=0 live_span_bytes=49152 live_small=0 live_mappings=0 cached=0 released=1097728 failures=0
+GATE W_returns_to_zero: ok
+GATE C1_live_returns_to_baseline: ok
+teardown: bytes_released delta=1097728 (retained cached bytes at S6=0, G-005 posture, reported not gated)
+L004 RESULT: PASS (failures=0)
+rep 1 exit=0
+--- probe rep 2: timeout 120 /tmp/probe_l004 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l004 - L-004 load + metadata tracking harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline (pre-load)
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3040 Rss=128 Pss=112 kB
+  R(file) Size=1936 Rss=1248 Pss=143 kB
+  rollup  Rss=1392 Pss=271 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF version=3 tensors=201 kv=23 file_bytes=637699456
+GATE kv_count_sane: ok
+SNAPSHOT S1 after mmap (W Size jumps, residency ~0)
+  W       Size=622768 Rss=64 Pss=64 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=1520 Pss=336 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE W_size_equals_file_at_S1: ok
+GATE mmap_moves_no_allocator_counter: ok
+GATE metadata_kv_walk_complete: ok
+metadata: architecture=llama name=tinyllama_tinyllama-1.1b-chat-v1.0 alignment=32
+GATE tensor_info_walk_complete: ok
+metadata_end=1709436 data_start=1709440
+touch sink=1262904 (policy: full 32 MiB head, 256 KiB stride beyond)
+SNAPSHOT S2 after metadata walk + weight touch
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=181744 Pss=180560 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE metadata_view_and_touch_move_no_counter: ok
+SNAPSHOT S3 after C1 step (mimir_* metadata records)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=4160 Rss=1264 Pss=1248 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=182864 Pss=181680 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=1146880 live_map_bytes=1097728 live_span_bytes=49152 live_small=23 live_mappings=2 cached=0 released=0 failures=0
+GATE C1_counter_delta_equals_harness_requested_sum: ok
+SNAPSHOT S4 after C2 step (stdlib metadata records)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=5200 Rss=2288 Pss=2272 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=183888 Pss=182704 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=1146880 live_map_bytes=1097728 live_span_bytes=49152 live_small=23 live_mappings=2 cached=0 released=0 failures=0
+GATE C2_step_moves_no_C1_counter: ok
+SNAPSHOT S6 after teardown
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3088 Rss=192 Pss=176 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=1504 Pss=320 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=49152 live_map_bytes=0 live_span_bytes=49152 live_small=0 live_mappings=0 cached=0 released=1097728 failures=0
+GATE W_returns_to_zero: ok
+GATE C1_live_returns_to_baseline: ok
+teardown: bytes_released delta=1097728 (retained cached bytes at S6=0, G-005 posture, reported not gated)
+L004 RESULT: PASS (failures=0)
+rep 2 exit=0
+--- probe rep 3: timeout 120 /tmp/probe_l004 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l004 - L-004 load + metadata tracking harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline (pre-load)
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3040 Rss=128 Pss=112 kB
+  R(file) Size=1936 Rss=1248 Pss=143 kB
+  rollup  Rss=1392 Pss=271 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF version=3 tensors=201 kv=23 file_bytes=637699456
+GATE kv_count_sane: ok
+SNAPSHOT S1 after mmap (W Size jumps, residency ~0)
+  W       Size=622768 Rss=64 Pss=64 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=1520 Pss=336 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE W_size_equals_file_at_S1: ok
+GATE mmap_moves_no_allocator_counter: ok
+GATE metadata_kv_walk_complete: ok
+metadata: architecture=llama name=tinyllama_tinyllama-1.1b-chat-v1.0 alignment=32
+GATE tensor_info_walk_complete: ok
+metadata_end=1709436 data_start=1709440
+touch sink=1262904 (policy: full 32 MiB head, 256 KiB stride beyond)
+SNAPSHOT S2 after metadata walk + weight touch
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=181744 Pss=180560 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE metadata_view_and_touch_move_no_counter: ok
+SNAPSHOT S3 after C1 step (mimir_* metadata records)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=4160 Rss=1264 Pss=1248 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=182864 Pss=181680 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=1146880 live_map_bytes=1097728 live_span_bytes=49152 live_small=23 live_mappings=2 cached=0 released=0 failures=0
+GATE C1_counter_delta_equals_harness_requested_sum: ok
+SNAPSHOT S4 after C2 step (stdlib metadata records)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=5200 Rss=2288 Pss=2272 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=183888 Pss=182704 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=1146880 live_map_bytes=1097728 live_span_bytes=49152 live_small=23 live_mappings=2 cached=0 released=0 failures=0
+GATE C2_step_moves_no_C1_counter: ok
+SNAPSHOT S6 after teardown
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3088 Rss=192 Pss=176 kB
+  R(file) Size=1936 Rss=1312 Pss=144 kB
+  rollup  Rss=1504 Pss=320 kB (cross-check only)
+  C1 counters: requested=1050618 allocated=1065696 mapped=49152 live_map_bytes=0 live_span_bytes=49152 live_small=0 live_mappings=0 cached=0 released=1097728 failures=0
+GATE W_returns_to_zero: ok
+GATE C1_live_returns_to_baseline: ok
+teardown: bytes_released delta=1097728 (retained cached bytes at S6=0, G-005 posture, reported not gated)
+L004 RESULT: PASS (failures=0)
+rep 3 exit=0
+--- Aesir component leg (L-003 workload, rebuilt) ---
+mojo: Mojo 1.1.0 (8189361e)
+mojo build exit=0
+4de99645298adfbe43e6856e8c1c123b1d3dc2a645f5434b3d22991bef64e15e  /tmp/l004_tmr
+--- Testing MimirWell Allocation Telemetry & Arena Recycling ---
+MimirWell allocation telemetry & arena recycling: PASS
+--- Testing Profiled Linear BPE Tokenizer Merge Performance ---
+Profiled linear BPE tokenizer merge performance: PASS
+component exit= 0
+component child_ru_maxrss_kib= 10960
+component wrapper exit=0
+--- run_l004 done ---
+--- after ---
+samtal_after: 200
+temp=59.8'C
+throttled=0x0
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
