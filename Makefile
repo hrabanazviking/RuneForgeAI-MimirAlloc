@@ -41,7 +41,21 @@
 
 CC      = cc
 CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
+# J-004 debug flavour (docs/PHASE_10_FOUNDATION_PLAN.md S5.1;
+# docs/PHASE_10_DEBUG_REDZONES.md): `make DEBUG=1` adds
+# -DMIMIR_DEBUG=1 and directs ALL objects to build-debug/,
+# so a debug object can never be linked into a production
+# artifact by stale-file accident. Default (no DEBUG) is
+# production, byte-for-byte the banked build: BUILD=build
+# and CFLAGS unchanged. No runtime flag exists in either
+# flavour. `make DEBUG=1 test-debug` runs the full suite
+# plus test-j004 under the debug build.
+ifeq ($(DEBUG),1)
+BUILD   = build-debug
+CFLAGS += -DMIMIR_DEBUG=1
+else
 BUILD   = build
+endif
 
 LIBOBJS = $(BUILD)/mimir_alloc.o $(BUILD)/mimir_core.o \
           $(BUILD)/mimir_platform.o
@@ -1161,3 +1175,45 @@ test-j003: $(BUILD)/test_j003
 	./$(BUILD)/test_j003
 
 .PHONY: test-j003
+
+# J-004: Phase 10 debug-only red zones + canaries evidence
+# test - the test under tests/core/ (test_j004.c) verifies
+# the debug flavour of docs/PHASE_10_DEBUG_REDZONES.md:
+# in disposable child processes it overwrites a post-zone
+# and a pre-zone by a stated amount and proves detection
+# fires (SIGABRT + the fixed fd-2 record), proves the
+# realloc leg, the on-demand verify-all leg, counter
+# semantics unchanged (J-002 snapshot), debug span
+# capacities at the exact layout arithmetic, and a bench
+# leg (timing-never-an-oracle). Run via
+# `make DEBUG=1 test-j004` (objects in build-debug/);
+# `make DEBUG=1 test-debug` runs the whole `make test`
+# suite plus this test under the debug build. In a
+# production build the binary runs only the flavour leg
+# (production capacities, no debug entry point) and the
+# committed recorded run is the DEBUG=1 one. Standalone;
+# NOT part of `make test`, whose composition is unchanged.
+# Recorded run: tests/core/recorded_run_j004.txt; slice
+# record: docs/PHASE_10_DEBUG_REDZONES.md.
+$(BUILD)/test_j004.o: tests/core/test_j004.c include/mimir_alloc.h tests/core/mimir_debug_j004.h tests/core/mimir_stats_j002.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_j004.c -o $@
+
+$(BUILD)/test_j004: $(LIBOBJS) $(BUILD)/test_j004.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_j004.o -o $@
+
+test-j004: $(BUILD)/test_j004
+	./$(BUILD)/test_j004
+
+# test-debug runs every `make test` binary plus test-j004
+# under the current flavour's build dir and REPORTS each
+# binary's exit status without masking any of them (the
+# loop's own exit is the echo's). Grading of the debug
+# flavour lives in tests/core/recorded_run_j004.txt and
+# docs/PHASE_10_DEBUG_REDZONES.md INC-J004-02: three banked
+# checks encode production layout arithmetic exactly and
+# diverge under debug BY DESIGN (plan S5.2); every other
+# check must pass and no run may abort.
+test-debug: $(BUILD)/test_smoke $(BUILD)/test_core $(BUILD)/test_b007 $(BUILD)/test_c005 $(BUILD)/test_c006 $(BUILD)/test_c007 $(BUILD)/test_c008 $(BUILD)/test_d004 $(BUILD)/test_j004
+	@for t in test_smoke test_core test_b007 test_c005 test_c006 test_c007 test_c008 test_d004 test_j004; do ./$(BUILD)/$$t >/dev/null 2>&1; echo "test-debug $(BUILD)/$$t exit=$$?"; done
+
+.PHONY: test-j004 test-debug

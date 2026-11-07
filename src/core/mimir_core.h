@@ -175,4 +175,17 @@ struct mimir_stats {
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
 
+#ifdef MIMIR_DEBUG
+/* J-004 on-demand red-zone verification (debug builds only;
+ * docs/PHASE_10_DEBUG_REDZONES.md): walks every span under
+ * the global lock, revalidates span headers and the guards
+ * of every live small object; returns the count of corrupted
+ * units (0 = clean) or -1 on lock failure. Absent entirely
+ * from production builds. Internal only, INC-E001-07 shape
+ * (b): re-declared for tests in
+ * tests/core/mimir_debug_j004.h; bound local in the shared
+ * library (nm -D stays exactly 4 in both flavours). */
+int mimir_core_debug_verify_all(void);
+#endif
+
 #endif /* MIMIR_CORE_H */

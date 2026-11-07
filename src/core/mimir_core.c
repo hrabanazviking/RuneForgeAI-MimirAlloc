@@ -140,6 +140,17 @@
 #include <string.h>
 #include <threads.h>
 
+#ifdef MIMIR_DEBUG
+/* J-004 debug-only reporting channel (see the J-004 block
+ * below): write(2) + abort() are named HERE, in debug
+ * builds only, because no L6 reporting primitive exists
+ * yet -- J-007 owns the production reporting channel and
+ * lifting this into L6 is recorded as INC-J004-03.
+ * Production builds do not include these headers at all. */
+#include <stdlib.h>
+#include <unistd.h>
+#endif
+
 #include "../platform/mimir_platform.h"
 
 /* Descriptor state values (B-006 S7.3: state is LIVE or
@@ -681,6 +692,121 @@ _Static_assert(offsetof(struct mimir_span_header, live_count) == 80,
 _Static_assert(offsetof(struct mimir_span_header, carve_count) == 88,
                "span carve_count offset (G-003 assignment)");
 
+/*
+ * J-004 debug-only red zones + canaries (Phase 10 plan S5.2;
+ * slice record docs/PHASE_10_DEBUG_REDZONES.md). Compiled
+ * ONLY under MIMIR_DEBUG (make DEBUG=1, build-debug/); a
+ * production build contains none of this code at all (S5.1:
+ * no runtime flag, distinction by directory and macro).
+ *
+ * Debug small-slot layout (span object area, from offset 96):
+ *   [ 16 B pre-zone ][ user extent: class_size B ][ 16 B post-zone ]
+ * repeated at a stride of class_size + 32. Both zones are
+ * filled with the pattern byte 0xA5 at publication, checked
+ * on free and on realloc, and re-checked on demand by
+ * mimir_core_debug_verify_all(). The pre-zone of slot 0 sits
+ * immediately after the 96-byte span header (offset 96), so
+ * the header-adjacent guard is the metadata-adjacent canary
+ * the layout permits; verify_all additionally revalidates
+ * every span header (magic/state/base/class) as the
+ * metadata canary check. User pointers stay 16-byte aligned:
+ * page base + 96 + 16 + k*(class+32), every term a multiple
+ * of 16. J-002 counter semantics are untouched: requested /
+ * allocated still count the admitted size / class extent;
+ * only span CAPACITY changes, reported as overhead (S5.2).
+ * The mapping (large) path carries NO red zones in this
+ * slice -- scoped out, INC-J004-01.
+ *
+ * Detection posture (plan S9.2: fail clearly, never pretend
+ * to repair): on a guard mismatch the allocator writes one
+ * fixed-format line to fd 2 from a fixed static buffer via
+ * write(2) -- no allocation, no stdio, no lock recursion
+ * (the global lock is already held; write(2) never calls
+ * back) -- then abort()s: a defined stop, in the calling
+ * thread, with the corrupt block NOT freed, NOT reused and
+ * NOT repaired. This pre-figures J-007's reporting contract
+ * (allocation-free, recursion-proof) as far as J-001 S5
+ * defines it; J-007 owns the production channel.
+ */
+#ifdef MIMIR_DEBUG
+#define MIMIR_DBG_GUARD_SIZE ((size_t)16)
+#define MIMIR_DBG_PATTERN 0xA5
+
+static size_t mimir_dbg_stride(size_t class_size)
+{
+    return class_size + 2 * MIMIR_DBG_GUARD_SIZE;
+}
+
+static void mimir_dbg_fill(void *obj, size_t class_size)
+{
+    memset((unsigned char *)obj - MIMIR_DBG_GUARD_SIZE,
+           MIMIR_DBG_PATTERN, MIMIR_DBG_GUARD_SIZE);
+    memset((unsigned char *)obj + class_size,
+           MIMIR_DBG_PATTERN, MIMIR_DBG_GUARD_SIZE);
+}
+
+static int mimir_dbg_intact(const void *obj, size_t class_size)
+{
+    const unsigned char *pre =
+        (const unsigned char *)obj - MIMIR_DBG_GUARD_SIZE;
+    const unsigned char *post =
+        (const unsigned char *)obj + class_size;
+    size_t i;
+
+    for (i = 0; i < MIMIR_DBG_GUARD_SIZE; i++) {
+        if (pre[i] != MIMIR_DBG_PATTERN ||
+            post[i] != MIMIR_DBG_PATTERN) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* One fixed-format line, fixed static storage, write(2)
+ * only; then the defined stop. Never returns. */
+static _Noreturn void mimir_dbg_report_abort(const char *where,
+                                             const void *obj)
+{
+    static const char head[] =
+        "MIMIR_DEBUG J-004 CORRUPTION red-zone mismatch at ";
+    static const char mid[] = " obj=0x";
+    static char buf[160];
+    static const char hexd[] = "0123456789abcdef";
+    uintptr_t v = (uintptr_t)obj;
+    size_t n = 0;
+    size_t i;
+    int shift;
+
+    for (i = 0; head[i] != '\0' && n < sizeof buf; i++) {
+        buf[n++] = head[i];
+    }
+    for (i = 0; where[i] != '\0' && n < sizeof buf; i++) {
+        buf[n++] = where[i];
+    }
+    for (i = 0; mid[i] != '\0' && n < sizeof buf; i++) {
+        buf[n++] = mid[i];
+    }
+    for (shift = (int)(sizeof(uintptr_t) * 8) - 4;
+         shift >= 0 && n < sizeof buf; shift -= 4) {
+        buf[n++] = hexd[(v >> shift) & 0xF];
+    }
+    if (n < sizeof buf) {
+        buf[n++] = '\n';
+    }
+    (void)!write(2, buf, n);
+    abort();
+}
+
+static void mimir_dbg_check_or_abort(const void *obj,
+                                     size_t class_size,
+                                     const char *where)
+{
+    if (!mimir_dbg_intact(obj, class_size)) {
+        mimir_dbg_report_abort(where, obj);
+    }
+}
+#endif /* MIMIR_DEBUG */
+
 /* Span registry anchors and counters: fixed static storage
  * below L1, exactly as the mapping registry's are (B-006
  * S7.2 / S8.1). A span header is on this list if and only
@@ -718,8 +844,16 @@ static size_t class_index_for(size_t size)
  * header's own recorded mapping length. */
 static size_t span_capacity(const struct mimir_span_header *span)
 {
+#ifdef MIMIR_DEBUG
+    /* J-004: debug slots occupy stride (class + 32 guard
+     * bytes), so a debug span holds fewer objects -- the
+     * capacity overhead reported in the slice doc. */
+    return (span->mapping_length - MIMIR_SPAN_HEADER_SIZE) /
+           mimir_dbg_stride(span->class_size);
+#else
     return (span->mapping_length - MIMIR_SPAN_HEADER_SIZE) /
            span->class_size;
+#endif
 }
 
 static void span_registry_insert(struct mimir_span_header *span)
@@ -935,10 +1069,23 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
             size_t index;
             void *node;
 
+#ifdef MIMIR_DEBUG
+            /* J-004: user extents start one guard in, at
+             * the debug stride. */
+            if (offset < MIMIR_DBG_GUARD_SIZE) {
+                return NULL; /* in slot 0 pre-zone */
+            }
+            offset -= MIMIR_DBG_GUARD_SIZE;
+            if (offset % mimir_dbg_stride(span->class_size) != 0) {
+                return NULL; /* interior: not an object start */
+            }
+            index = offset / mimir_dbg_stride(span->class_size);
+#else
             if (offset % span->class_size != 0) {
                 return NULL; /* interior: not an object start */
             }
             index = offset / span->class_size;
+#endif
             if (index >= span->carve_count) {
                 return NULL; /* uncarved tail area */
             }
@@ -1000,12 +1147,28 @@ static void *small_alloc_locked(size_t size, int zero_user,
     if (span->free_head != NULL) {
         obj = span->free_head;
         span->free_head = *(void **)obj;
+#ifdef MIMIR_DEBUG
+        /* J-004: a reused slot's guards were allocator-owned
+         * while the slot was free; verify before refilling. */
+        mimir_dbg_check_or_abort(obj, class_size, "alloc-reuse");
+#endif
     } else {
+#ifdef MIMIR_DEBUG
+        obj = (void *)((unsigned char *)span->mapping_base +
+                       MIMIR_SPAN_HEADER_SIZE +
+                       MIMIR_DBG_GUARD_SIZE +
+                       span->carve_count *
+                           mimir_dbg_stride(class_size));
+#else
         obj = (void *)((unsigned char *)span->mapping_base +
                        MIMIR_SPAN_HEADER_SIZE +
                        span->carve_count * class_size);
+#endif
         span->carve_count += 1;
     }
+#ifdef MIMIR_DEBUG
+    mimir_dbg_fill(obj, class_size);
+#endif
 
     if (zero_user) {
         memset(obj, 0, class_size);
@@ -1045,6 +1208,12 @@ static void small_free_locked(void *ptr)
     if (span == NULL) {
         return;
     }
+#ifdef MIMIR_DEBUG
+    /* J-004: verify BEFORE the free-list link overwrites the
+     * user extent's first 8 bytes; on mismatch the block is
+     * NOT freed (report + defined stop inside). */
+    mimir_dbg_check_or_abort(ptr, span->class_size, "free");
+#endif
     *(void **)ptr = span->free_head;
     span->free_head = ptr;
     span->live_count -= 1;
@@ -1058,6 +1227,70 @@ static void small_free_locked(void *ptr)
         (void)span_release_locked(span);
     }
 }
+
+#ifdef MIMIR_DEBUG
+/*
+ * J-004 on-demand verification (plan S5.2: canaries verified
+ * at retire AND on demand). Walks every registered span
+ * under the one global lock: a span whose header fails
+ * span_header_is_live counts as one metadata corruption
+ * (its object area is not trusted or walked); every carved
+ * slot not on its span's free list has both guards checked.
+ * Returns the number of corrupted units found (0 = clean).
+ * Reports nothing and never aborts: the caller decides;
+ * the free/realloc paths keep the abort posture. On lock
+ * failure returns -1 (the G-007 getter posture). Internal
+ * only, INC-E001-07 shape (b) via mimir_core.h under
+ * MIMIR_DEBUG + tests/core/mimir_debug_j004.h.
+ */
+int mimir_core_debug_verify_all(void)
+{
+    struct mimir_span_header *span;
+    int bad = 0;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return -1;
+    }
+    span = mimir_span_head;
+    while (span != NULL) {
+        size_t idx;
+        size_t cap;
+
+        if (!span_header_is_live(span)) {
+            bad += 1;
+            span = span->list_next;
+            continue;
+        }
+        cap = span_capacity(span);
+        if (cap > span->carve_count) {
+            cap = span->carve_count;
+        }
+        for (idx = 0; idx < cap; idx++) {
+            void *obj = (void *)(
+                (unsigned char *)span->mapping_base +
+                MIMIR_SPAN_HEADER_SIZE + MIMIR_DBG_GUARD_SIZE +
+                idx * mimir_dbg_stride(span->class_size));
+            void *node = span->free_head;
+            int on_free = 0;
+
+            while (node != NULL) {
+                if (node == obj) {
+                    on_free = 1;
+                    break;
+                }
+                node = *(void **)node;
+            }
+            if (!on_free &&
+                !mimir_dbg_intact(obj, span->class_size)) {
+                bad += 1;
+            }
+        }
+        span = span->list_next;
+    }
+    (void)mimir_platform_global_unlock();
+    return bad;
+}
+#endif /* MIMIR_DEBUG */
 
 /*
  * G-007 tuning surface (docs/PHASE_7_TUNING_PARAMETERS_G007.md).
@@ -1746,6 +1979,13 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         }
         span_class = span->class_size;
 
+#ifdef MIMIR_DEBUG
+        /* J-004: realloc verifies the old block's guards
+         * before ANY case (stay, shrink or move); on
+         * mismatch the original is left exactly as found
+         * and the defined stop fires inside. */
+        mimir_dbg_check_or_abort(ptr, span_class, "realloc");
+#endif
         if (new_size <= span_class) {
             (void)mimir_platform_global_unlock();
             return ptr;
