@@ -16,6 +16,80 @@
 
 ---
 
+## 🧭 Current engineering status | 7 November 2026
+
+> **Research release 0.1.0 exists. Stable/production release: NOT APPROVED.**
+> The project has progressed substantially beyond the documentation-only launch description preserved later in this README. The source code, public header, build targets, local test evidence, benchmarking, and versioned release procedure now exist. **Phase 13 is complete as a wave of work, but its stable-release exit is PARTIAL / NOT MET.** This is a dated evidence snapshot based on the [M-009 Phase 13 exit packet](docs/PHASE_13_EXIT_EVIDENCE.md) and repository state at [commit 776ca8c](https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/commit/776ca8cc4424cb26375145622bf23b9ba48330ac).
+
+| Area | Status on 7 November 2026 | Evidence / important boundary |
+|---|---|---|
+| Allocator implementation | **Implemented; experimental** | Native C allocator in [src/core](src/core), namespaced API in [src/api](src/api), platform layer in [src/platform](src/platform), and [public header](include/mimir_alloc.h). |
+| Public interface | **Four exported namespaced functions** | mimir_malloc, mimir_free, mimir_calloc, mimir_realloc. No general-purpose malloc/free interposition or ABI-stability guarantee. |
+| ARM64 Linux correctness | **VERIFIED-RUN, narrow scope** | Raspberry Pi running Debian 12 / glibc 2.36 / AArch64 / 16 KiB pages. Latest recorded full suite: **4,590 checks; 0 failed**. This does not mean production-ready. |
+| 0.1.0 research release | **Versioned build/release procedure implemented** | VERSION, versioned shared library, SONAME libmimiralloc.so.0, static archive, install target, checksum file, SBOM and [reproducible-build instructions](docs/REPRODUCIBLE_BUILD.md). Artifacts were staged and verified for the documented experiment; prebuilt binaries and tarballs are **not committed** to this repository. |
+| Fuzzing / repeated load | **Recorded evidence with caveats** | Seeded fuzz harness logged **168,384 checks / 0 failed**, and M-009 reproduced PASS. Ten-cycle soak recorded **159,476 operations**, flat reported RSS (1,392 kB) and six passing dlopen/dlclose cycles. Fuzz specification mismatch remains PARTIAL. |
+| Performance | **Measured; not competitive yet** | [Phase 11](docs/PHASE_11_EXIT_EVIDENCE.md) reports MimirAlloc **roughly 5×–65× slower than glibc on the measured workloads**. No speedup claim is made. |
+| Android / Termux / SM-X400 | **Not verified** | Device field notes and plans exist, but no MimirAlloc NDK/device run or Termux execution has been recorded. |
+| Mojo and Project A.E.S.I.R. | **Investigation and boundary demonstrations; end-to-end goal unmet** | The original tablet Mojo failure has not been literally reproduced/fixed, and there is no evidence that the A.E.S.I.R. engine is actually allocating through MimirAlloc. The required Qwen3 comparison is owed. |
+| Phase 13 exit criteria | **11 MET / 6 PARTIAL / 3 OWED / 0 UNMET (20 total)** | The [final exit review](docs/PHASE_13_EXIT_EVIDENCE.md) explicitly rejects a stable-release claim and carries **14 outstanding item groups** forward. |
+
+### ⚒️ What has actually landed
+
+- **Real allocator and build structure:** namespaced memory operations, core/platform components, a public C header, Makefile targets, linkage checks, ABI inspection, multithread and failure-path tests. Implemented behavior is bounded by the [contracts](docs/contracts.md) and header rather than assumptions about drop-in libc compatibility.
+- **A release identity, not a maturity claim:** version **0.1.0** and SONAME **libmimiralloc.so.0** are implemented. [M-007](docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md) describes the experimental versioned shared/static artifacts, install decisions, checksum verification, and two clean byte-identical builds **on the same Raspberry Pi toolchain**. Cross-machine reproducibility, release signing, and stable ABI are not claimed.
+- **A substantial verification trail:** [recorded M-009 test output](tests/abi/recorded_run_m009.txt), [fuzzing evidence](docs/PHASE_13_FUZZING_M004.md), [soak evidence](docs/PHASE_13_SOAK_M005.md), [target matrix](docs/SUPPORTED_TARGETS.md), [SBOM](docs/SBOM.md), [security instructions](SECURITY.md), and [known limitations](docs/LIMITATIONS_AND_KNOWN_DEFECTS.md). The numbers above report committed *test logs*, not a fresh independent execution by this README updater.
+- **A guarded boundary to A.E.S.I.R.:** Phase 12 documents tokenizer, GGUF, KV-cache, prefill/decode and teardown research or harness measurements and explicit-adoption wiring. These are **not** evidence of a fully integrated A.E.S.I.R. inference run or a Qwen3-1.7B Q4_K_M comparison. See [Phase 12 exit](docs/PHASE_12_EXIT_EVIDENCE.md).
+- **Security and portability work:** code review, warning gates, target audit, fuzzing, repeated-use probes, disclosure paperwork and a public defect register were added during Phase 13. Completing a work wave is not equivalent to passing every acceptance gate.
+
+### 🗓️ Most recent project events (7 November 2026)
+
+1. **M-004 / M-005:** Added seeded model-based fuzzing and repeated-cycle soak tests. Recorded PASS results are retained, alongside deviations in test depth or the later-updated assignment.
+2. **M-006:** Refreshed [SUPPORTED_TARGETS.md](docs/SUPPORTED_TARGETS.md) against actual runs. Only the 16 KiB-page AArch64/glibc Raspberry Pi target is **VERIFIED-RUN**. x86-64 has a **PARTIAL-RUN** freestanding/emulated probe, not a hosted suite; musl is **BLOCKED** by missing tooling; Android and Termux runs are **OWED**.
+3. **[M-007](https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/commit/6e066cec073979904fbe2acddf0045ad1844a5b5):** Landed VERSION 0.1.0, SONAME/versioned library and install rules, checksummed artifact manifest and reproducible-build instructions for the experimental release.
+4. **[M-008](https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/commit/83125d680004b449370e5619bf5287141375395b):** Added SBOM, supported-platform disclosure, security-reporting instructions and a limitations/defects register. Some M-008 document judgments predate M-006/M-007 being integrated and need reconciliation.
+5. **[M-009](https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/commit/776ca8cc4424cb26375145622bf23b9ba48330ac):** Closed Wave 13 with a fresh **4,590/0** suite run, a four-symbol export check and fuzz PASS. The separate legacy **test-g008** check remains **214 checks / 1 failure** from a known stale expectation after the H-001 unload fix. M-009 graded stable-release exit **NOT MET**, recorded **6 PARTIAL and 3 OWED** criteria, and listed the remaining work without hiding the failure.
+
+### 🧪 Present verification boundary
+
+| Target | Evidence grade | What is still missing |
+|---|---|---|
+| AArch64 Linux + glibc, **16 KiB** pages, Raspberry Pi | **VERIFIED-RUN** | Broader target coverage and production hardening |
+| AArch64 Linux + glibc, **4 KiB** pages | **OWED; design analogy only** | Full native run on a 4 KiB-page host |
+| x86-64 Linux + glibc | **PARTIAL-RUN** | Hosted allocator suite on x86-64; existing probe is not equivalent |
+| AArch64 Linux + musl | **BLOCKED** | Appropriate musl toolchain/sysroot and subsequent tests |
+| Android/bionic, Termux, proot, SM-X400 tablet | **OWED / analogy only** | Distinct physical-device builds, runs, logs, pressure and responsiveness results |
+| A.E.S.I.R. + Qwen3-1.7B Q4_K_M | **OWED** | Available model, runnable aarch64 A.E.S.I.R. engine, genuine allocator-use proof and controlled comparison |
+
+For exact per-platform distinctions, **[SUPPORTED_TARGETS.md](docs/SUPPORTED_TARGETS.md) is the most recently reconciled authority**. The older [SUPPORTED_PLATFORMS.md](docs/SUPPORTED_PLATFORMS.md) still has grades that predate M-006 and is due for refresh.
+
+### 🔧 Building and reproducing the *experimental* state
+
+These are repository targets documented for the tested Raspberry Pi environment, **not** universal installation promises. Use the [engineering evidence](docs/PHASE_13_EXIT_EVIDENCE.md) and [reproducible-build guide](docs/REPRODUCIBLE_BUILD.md) to verify prerequisites and inspect failures.
+
+~~~bash
+make clean && make test          # M-009 recorded: 4590 checks, 0 failed
+make lib                         # namespaced shared library
+make test-fuzz-m004              # recorded seeded fuzz harness
+make lib-versioned static-lib    # research-release library artifacts
+~~~
+
+The standalone **make test-g008** probe is *not green*: it intentionally remains a recorded **214/1** evidence-policy regression until its stale check is reconciled. Do not treat a passing aggregate suite as proof that every standalone or target-specific gate passes. No repository-hosted binary package or blanket drop-in replacement is promised.
+
+### 🛡️ Blocking defects and next gates
+
+1. **Fix or formally rule on the lock/unlock reporting gap** (INC-M002-01/02, Invariant 9). The recorded safety path does not return overlapping allocations, but certain synchronization failures are not observably reported. This is a named obstacle to a production claim.
+2. **Reconcile old tests and documentation:** decide how to repoint the stale g008 check; reconcile the Phase 13 public defects/platform documents with the later M-006/M-007 changes; refresh the obsolete baseline inventory and historical README/engineering-guide claims. The original historical writing is retained below in this additive update.
+3. **Close platform evidence gaps:** perform the full hosted x86-64 suite; test native Android/bionic and Termux separately on real hardware; capture a native **4 KiB-page** run. Any package installation explicitly reserved for the project owner requires that separate decision.
+4. **Complete the original mission's proof:** recover the exact Mojo-on-tablet failure and retry it; prove A.E.S.I.R. *actually* uses MimirAlloc; make the Qwen3 model and runnable engine available, then execute Phase 12's gated apples-to-apples comparison.
+5. **Advance performance and release quality:** profile and improve the measured glibc deficit without weakening correctness, address extended warning/fuzz-spec gaps, enable the private security-reporting channel if approved, and regrade all acceptance criteria before any stability claim.
+
+**Source of truth:** [Phase 13 exit packet](docs/PHASE_13_EXIT_EVIDENCE.md) · [Phase 13 issue/limitation register](docs/LIMITATIONS_AND_KNOWN_DEFECTS.md) · [supported-target matrix](docs/SUPPORTED_TARGETS.md) · [reproducible release](docs/REPRODUCIBLE_BUILD.md) · [full roadmap](docs/MimirAlloc_Research_and_Development_Roadmap.md).
+
+> **Historical-text notice:** Everything after this dated section remains preserved from the project's earlier planning-era README. Older claims that the repository has no allocator, build commands, tests or release are **superseded** by the evidence-backed update above, but were deliberately not removed or rewritten to honor the additive-edit request.
+
+---
+
+
 > **Project status — the forge is just being lit.** This repository currently contains documentation, artwork, and an MIT license. The allocator, installation package, benchmarks, Android support, and Mojo integration are **planned**, not implemented or verified yet. There is no build or install command for MimirAlloc at this stage.
 
 ---
