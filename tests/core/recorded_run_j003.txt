@@ -1,0 +1,2165 @@
+MimirAlloc J-003 recorded run - Phase 10 statistics BALANCE PROOF
+Sat Nov  7 07:32:51 AM EST 2026
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+PAGESIZE=16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+1aab76258ccc8af8e29bb482c674484c47d8f117 J-002 (Phase 10): statistics counters implementation - ONE locked snapshot (mimir_core_stats_snapshot, INC-E001-07 shape (b), test-only header tests/core/mimir_stats_j002.h, nm -D exactly 4); counters in I-002 vocabulary: bytes_requested/bytes_allocated cumulative at the two publication points, bytes_cached=Q-RETAINED and bytes_mapped=Q-MAPPED from the snapshot registry walk, bytes_released=Q-RELEASED at retire/span-release successes, peak_mapped=Q-PEAKMAPPED sampled at publications only, alloc_failures=Q-FAILED-OS with posture NULLs (U-09/U-12) counted separately in alloc_posture_nulls, per-class span occupancy; cross_thread_frees PARTIAL (mapping path only, owner thrd_t in reserve page past the 96-byte descriptor - first placement in descriptor reserved broke B-007 C1.4/test_b007 and was fixed in-slice, INC-J002-01); lock_contention ABSENT with reason (INC-J002-02); test_j002 550 checks / 0 failures incl. I-004-shim failure leg and 100-snapshot invariant sweep under churn; make test 4590/0; i003 72/0, i004 248/0, i005 PASS, i006 120/0, i007 63/0, i008 PASS; README and public header byte-identical; INC-J002-01..06 incl. J-001 reconciliation choices
+yrsa/mimiralloc-03
+ M Makefile
+?? build/
+?? docs/PHASE_10_BALANCE_PROOF.md
+?? hidden_files/
+?? tests/core/recorded_run_j003.txt
+?? tests/core/test_j003.c
+Samtal_before: 200
+=== make test-j003 ===
+./build/test_j003
+test_j003: Phase 10 statistics BALANCE PROOF (J-003)
+  [ok] page size discovered via sysconf
+  page size = 16384 bytes
+  retention bound = 2 spans/class
+  [ok] retention bound readable
+Leg 0: baseline -- every live quantity zero, cumulative counters at process start
+  [ok] leg0 mapped 0 (got 0, want 0)
+  [ok] leg0 live mappings 0 (got 0, want 0)
+  [ok] leg0 live spans 0 (got 0, want 0)
+  [ok] leg0 live small 0 (got 0, want 0)
+  [ok] leg0 R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg0 R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg0 R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg0 R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg0 R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg0 R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg0 R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg0 R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg0 R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg0 R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg0 R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg0 R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg0 R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg0 R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg0 R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg0 R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg0 R7 cached within retention bound
+  [ok] leg0 R8 peak >= mapped
+  [ok] leg0 R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg0 cum bytes_requested == script (got 0, want 0)
+  [ok] leg0 cum bytes_allocated == script (got 0, want 0)
+  [ok] leg0 cum bytes_released == script (got 0, want 0)
+  [ok] leg0 cum alloc_failures == script (got 0, want 0)
+  [ok] leg0 cum posture nulls == script (got 0, want 0)
+  [ok] leg0 cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg0 D-LOCK ABSENT marker pair intact
+  [ok] leg0 live tracked counts agree
+Leg 1: mixed small/large churn with calloc and realloc, identities at every quiescent point
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 100 alloc
+  [ok] leg1 small 1000 alloc
+  [ok] leg1 small 1000 alloc
+  [ok] leg1 small 1000 alloc
+  [ok] leg1 small 1000 alloc
+  [ok] leg1 small 1000 alloc
+  [ok] leg1 large alloc
+  [ok] leg1 large alloc
+  [ok] leg1 large alloc
+  [ok] leg1 large alloc
+  [ok] leg1 large alloc
+  [ok] leg1a full mix live R1 pub-retired == live_mappings (got 5, want 5)
+  [ok] leg1a full mix live R2 span pub-retired == live_spans (got 2, want 2)
+  [ok] leg1a full mix live R2 class spans sum == live_spans (got 2, want 2)
+  [ok] leg1a full mix live R3 small alloc-free == live_small (got 15, want 15)
+  [ok] leg1a full mix live R3/R10 class live sum == live_small (got 15, want 15)
+  [ok] leg1a full mix live R4 mapped == mapping+span bytes (got 196608, want 196608)
+  [ok] leg1a full mix live R4 mapped == I-003 Q-MAPPED (got 196608, want 196608)
+  [ok] leg1a full mix live R5 large walk: bytes == usable + mappings*P (got 163840, want 163840)
+  [ok] leg1a full mix live R5 span walk: span bytes == spans*P (got 32768, want 32768)
+  [ok] leg1a full mix live R5 small walk: charged == script charged (got 6240, want 6240)
+  [ok] leg1a full mix live R5 D-ALLOC-LIVE derived == script live granted (got 88160, want 88160)
+  [ok] leg1a full mix live R5 overhead == reserve pages + span slack (got 108448, want 108448)
+  [ok] leg1a full mix live R6 ACQ - REL == MAPPED (got 196608, want 196608)
+  [ok] leg1a full mix live R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg1a full mix live R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg1a full mix live R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg1a full mix live R7 cached within retention bound
+  [ok] leg1a full mix live R8 peak >= mapped
+  [ok] leg1a full mix live R10 capacity == per-span capacities summed (got 160, want 160)
+  [ok] leg1a full mix live cum bytes_requested == script (got 23000, want 23000)
+  [ok] leg1a full mix live cum bytes_allocated == script (got 88160, want 88160)
+  [ok] leg1a full mix live cum bytes_released == script (got 0, want 0)
+  [ok] leg1a full mix live cum alloc_failures == script (got 0, want 0)
+  [ok] leg1a full mix live cum posture nulls == script (got 0, want 0)
+  [ok] leg1a full mix live cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg1a full mix live D-LOCK ABSENT marker pair intact
+  [ok] leg1a full mix live live tracked counts agree
+  [ok] leg1b partial frees R1 pub-retired == live_mappings (got 3, want 3)
+  [ok] leg1b partial frees R2 span pub-retired == live_spans (got 2, want 2)
+  [ok] leg1b partial frees R2 class spans sum == live_spans (got 2, want 2)
+  [ok] leg1b partial frees R3 small alloc-free == live_small (got 10, want 10)
+  [ok] leg1b partial frees R3/R10 class live sum == live_small (got 10, want 10)
+  [ok] leg1b partial frees R4 mapped == mapping+span bytes (got 131072, want 131072)
+  [ok] leg1b partial frees R4 mapped == I-003 Q-MAPPED (got 131072, want 131072)
+  [ok] leg1b partial frees R5 large walk: bytes == usable + mappings*P (got 98304, want 98304)
+  [ok] leg1b partial frees R5 span walk: span bytes == spans*P (got 32768, want 32768)
+  [ok] leg1b partial frees R5 small walk: charged == script charged (got 5680, want 5680)
+  [ok] leg1b partial frees R5 D-ALLOC-LIVE derived == script live granted (got 54832, want 54832)
+  [ok] leg1b partial frees R5 overhead == reserve pages + span slack (got 76240, want 76240)
+  [ok] leg1b partial frees R6 ACQ - REL == MAPPED (got 131072, want 131072)
+  [ok] leg1b partial frees R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg1b partial frees R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg1b partial frees R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg1b partial frees R7 cached within retention bound
+  [ok] leg1b partial frees R8 peak >= mapped
+  [ok] leg1b partial frees R10 capacity == per-span capacities summed (got 160, want 160)
+  [ok] leg1b partial frees cum bytes_requested == script (got 23000, want 23000)
+  [ok] leg1b partial frees cum bytes_allocated == script (got 88160, want 88160)
+  [ok] leg1b partial frees cum bytes_released == script (got 65536, want 65536)
+  [ok] leg1b partial frees cum alloc_failures == script (got 0, want 0)
+  [ok] leg1b partial frees cum posture nulls == script (got 0, want 0)
+  [ok] leg1b partial frees cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg1b partial frees D-LOCK ABSENT marker pair intact
+  [ok] leg1b partial frees live tracked counts agree
+  [ok] leg1 calloc alloc
+  [ok] leg1 calloc alloc
+  [ok] leg1 calloc alloc
+  [ok] leg1c calloc live R1 pub-retired == live_mappings (got 3, want 3)
+  [ok] leg1c calloc live R2 span pub-retired == live_spans (got 3, want 3)
+  [ok] leg1c calloc live R2 class spans sum == live_spans (got 3, want 3)
+  [ok] leg1c calloc live R3 small alloc-free == live_small (got 13, want 13)
+  [ok] leg1c calloc live R3/R10 class live sum == live_small (got 13, want 13)
+  [ok] leg1c calloc live R4 mapped == mapping+span bytes (got 147456, want 147456)
+  [ok] leg1c calloc live R4 mapped == I-003 Q-MAPPED (got 147456, want 147456)
+  [ok] leg1c calloc live R5 large walk: bytes == usable + mappings*P (got 98304, want 98304)
+  [ok] leg1c calloc live R5 span walk: span bytes == spans*P (got 49152, want 49152)
+  [ok] leg1c calloc live R5 small walk: charged == script charged (got 6352, want 6352)
+  [ok] leg1c calloc live R5 D-ALLOC-LIVE derived == script live granted (got 55504, want 55504)
+  [ok] leg1c calloc live R5 overhead == reserve pages + span slack (got 91952, want 91952)
+  [ok] leg1c calloc live R6 ACQ - REL == MAPPED (got 147456, want 147456)
+  [ok] leg1c calloc live R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg1c calloc live R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg1c calloc live R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg1c calloc live R7 cached within retention bound
+  [ok] leg1c calloc live R8 peak >= mapped
+  [ok] leg1c calloc live R10 capacity == per-span capacities summed (got 232, want 232)
+  [ok] leg1c calloc live cum bytes_requested == script (got 23600, want 23600)
+  [ok] leg1c calloc live cum bytes_allocated == script (got 88832, want 88832)
+  [ok] leg1c calloc live cum bytes_released == script (got 65536, want 65536)
+  [ok] leg1c calloc live cum alloc_failures == script (got 0, want 0)
+  [ok] leg1c calloc live cum posture nulls == script (got 0, want 0)
+  [ok] leg1c calloc live cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg1c calloc live D-LOCK ABSENT marker pair intact
+  [ok] leg1c calloc live live tracked counts agree
+  [ok] leg1 same-class realloc stays
+  [ok] leg1d staying realloc moves nothing R1 pub-retired == live_mappings (got 3, want 3)
+  [ok] leg1d staying realloc moves nothing R2 span pub-retired == live_spans (got 3, want 3)
+  [ok] leg1d staying realloc moves nothing R2 class spans sum == live_spans (got 3, want 3)
+  [ok] leg1d staying realloc moves nothing R3 small alloc-free == live_small (got 13, want 13)
+  [ok] leg1d staying realloc moves nothing R3/R10 class live sum == live_small (got 13, want 13)
+  [ok] leg1d staying realloc moves nothing R4 mapped == mapping+span bytes (got 147456, want 147456)
+  [ok] leg1d staying realloc moves nothing R4 mapped == I-003 Q-MAPPED (got 147456, want 147456)
+  [ok] leg1d staying realloc moves nothing R5 large walk: bytes == usable + mappings*P (got 98304, want 98304)
+  [ok] leg1d staying realloc moves nothing R5 span walk: span bytes == spans*P (got 49152, want 49152)
+  [ok] leg1d staying realloc moves nothing R5 small walk: charged == script charged (got 6352, want 6352)
+  [ok] leg1d staying realloc moves nothing R5 D-ALLOC-LIVE derived == script live granted (got 55504, want 55504)
+  [ok] leg1d staying realloc moves nothing R5 overhead == reserve pages + span slack (got 91952, want 91952)
+  [ok] leg1d staying realloc moves nothing R6 ACQ - REL == MAPPED (got 147456, want 147456)
+  [ok] leg1d staying realloc moves nothing R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg1d staying realloc moves nothing R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg1d staying realloc moves nothing R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg1d staying realloc moves nothing R7 cached within retention bound
+  [ok] leg1d staying realloc moves nothing R8 peak >= mapped
+  [ok] leg1d staying realloc moves nothing R10 capacity == per-span capacities summed (got 232, want 232)
+  [ok] leg1d staying realloc moves nothing cum bytes_requested == script (got 23600, want 23600)
+  [ok] leg1d staying realloc moves nothing cum bytes_allocated == script (got 88832, want 88832)
+  [ok] leg1d staying realloc moves nothing cum bytes_released == script (got 65536, want 65536)
+  [ok] leg1d staying realloc moves nothing cum alloc_failures == script (got 0, want 0)
+  [ok] leg1d staying realloc moves nothing cum posture nulls == script (got 0, want 0)
+  [ok] leg1d staying realloc moves nothing cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg1d staying realloc moves nothing D-LOCK ABSENT marker pair intact
+  [ok] leg1d staying realloc moves nothing live tracked counts agree
+  [ok] leg1 cross-class realloc moves
+  [ok] leg1e cross-class realloc reconciles R1 pub-retired == live_mappings (got 3, want 3)
+  [ok] leg1e cross-class realloc reconciles R2 span pub-retired == live_spans (got 3, want 3)
+  [ok] leg1e cross-class realloc reconciles R2 class spans sum == live_spans (got 3, want 3)
+  [ok] leg1e cross-class realloc reconciles R3 small alloc-free == live_small (got 13, want 13)
+  [ok] leg1e cross-class realloc reconciles R3/R10 class live sum == live_small (got 13, want 13)
+  [ok] leg1e cross-class realloc reconciles R4 mapped == mapping+span bytes (got 147456, want 147456)
+  [ok] leg1e cross-class realloc reconciles R4 mapped == I-003 Q-MAPPED (got 147456, want 147456)
+  [ok] leg1e cross-class realloc reconciles R5 large walk: bytes == usable + mappings*P (got 98304, want 98304)
+  [ok] leg1e cross-class realloc reconciles R5 span walk: span bytes == spans*P (got 49152, want 49152)
+  [ok] leg1e cross-class realloc reconciles R5 small walk: charged == script charged (got 6464, want 6464)
+  [ok] leg1e cross-class realloc reconciles R5 D-ALLOC-LIVE derived == script live granted (got 55616, want 55616)
+  [ok] leg1e cross-class realloc reconciles R5 overhead == reserve pages + span slack (got 91840, want 91840)
+  [ok] leg1e cross-class realloc reconciles R6 ACQ - REL == MAPPED (got 147456, want 147456)
+  [ok] leg1e cross-class realloc reconciles R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg1e cross-class realloc reconciles R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg1e cross-class realloc reconciles R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg1e cross-class realloc reconciles R7 cached within retention bound
+  [ok] leg1e cross-class realloc reconciles R8 peak >= mapped
+  [ok] leg1e cross-class realloc reconciles R10 capacity == per-span capacities summed (got 232, want 232)
+  [ok] leg1e cross-class realloc reconciles cum bytes_requested == script (got 23800, want 23800)
+  [ok] leg1e cross-class realloc reconciles cum bytes_allocated == script (got 89056, want 89056)
+  [ok] leg1e cross-class realloc reconciles cum bytes_released == script (got 65536, want 65536)
+  [ok] leg1e cross-class realloc reconciles cum alloc_failures == script (got 0, want 0)
+  [ok] leg1e cross-class realloc reconciles cum posture nulls == script (got 0, want 0)
+  [ok] leg1e cross-class realloc reconciles cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg1e cross-class realloc reconciles D-LOCK ABSENT marker pair intact
+  [ok] leg1e cross-class realloc reconciles live tracked counts agree
+  [ok] leg1 grow-by-move realloc moves
+  [ok] leg1f grow-by-move reconciles R1 pub-retired == live_mappings (got 4, want 4)
+  [ok] leg1f grow-by-move reconciles R2 span pub-retired == live_spans (got 3, want 3)
+  [ok] leg1f grow-by-move reconciles R2 class spans sum == live_spans (got 3, want 3)
+  [ok] leg1f grow-by-move reconciles R3 small alloc-free == live_small (got 12, want 12)
+  [ok] leg1f grow-by-move reconciles R3/R10 class live sum == live_small (got 12, want 12)
+  [ok] leg1f grow-by-move reconciles R4 mapped == mapping+span bytes (got 180224, want 180224)
+  [ok] leg1f grow-by-move reconciles R4 mapped == I-003 Q-MAPPED (got 180224, want 180224)
+  [ok] leg1f grow-by-move reconciles R5 large walk: bytes == usable + mappings*P (got 131072, want 131072)
+  [ok] leg1f grow-by-move reconciles R5 span walk: span bytes == spans*P (got 49152, want 49152)
+  [ok] leg1f grow-by-move reconciles R5 small walk: charged == script charged (got 6240, want 6240)
+  [ok] leg1f grow-by-move reconciles R5 D-ALLOC-LIVE derived == script live granted (got 71776, want 71776)
+  [ok] leg1f grow-by-move reconciles R5 overhead == reserve pages + span slack (got 108448, want 108448)
+  [ok] leg1f grow-by-move reconciles R6 ACQ - REL == MAPPED (got 180224, want 180224)
+  [ok] leg1f grow-by-move reconciles R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg1f grow-by-move reconciles R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg1f grow-by-move reconciles R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg1f grow-by-move reconciles R7 cached within retention bound
+  [ok] leg1f grow-by-move reconciles R8 peak >= mapped
+  [ok] leg1f grow-by-move reconciles R10 capacity == per-span capacities summed (got 232, want 232)
+  [ok] leg1f grow-by-move reconciles cum bytes_requested == script (got 26800, want 26800)
+  [ok] leg1f grow-by-move reconciles cum bytes_allocated == script (got 105440, want 105440)
+  [ok] leg1f grow-by-move reconciles cum bytes_released == script (got 65536, want 65536)
+  [ok] leg1f grow-by-move reconciles cum alloc_failures == script (got 0, want 0)
+  [ok] leg1f grow-by-move reconciles cum posture nulls == script (got 0, want 0)
+  [ok] leg1f grow-by-move reconciles cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg1f grow-by-move reconciles D-LOCK ABSENT marker pair intact
+  [ok] leg1f grow-by-move reconciles live tracked counts agree
+  [ok] leg1z R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg1z R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg1z R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg1z R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg1z R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg1z R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg1z R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg1z R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg1z R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg1z R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg1z R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg1z R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg1z R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg1z R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg1z R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg1z R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg1z R7 cached within retention bound
+  [ok] leg1z R8 peak >= mapped
+  [ok] leg1z R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg1z cum bytes_requested == script (got 26800, want 26800)
+  [ok] leg1z cum bytes_allocated == script (got 105440, want 105440)
+  [ok] leg1z cum bytes_released == script (got 245760, want 245760)
+  [ok] leg1z cum alloc_failures == script (got 0, want 0)
+  [ok] leg1z cum posture nulls == script (got 0, want 0)
+  [ok] leg1z cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg1z D-LOCK ABSENT marker pair intact
+  [ok] leg1z live tracked counts agree
+  [ok] leg1z R12 live_mappings == 0 (got 0, want 0)
+  [ok] leg1z R12 live_spans == 0 (got 0, want 0)
+  [ok] leg1z R12 live_small == 0 (got 0, want 0)
+  [ok] leg1z R12 mapped == 0 (got 0, want 0)
+  [ok] leg1z R12 cached == 0 (got 0, want 0)
+  [ok] leg1z R12 ACQ == REL (released == all published bytes) (got 245760, want 245760)
+  [ok] leg1z R12 R1 difference == 0
+  [ok] leg1z R12 R2 difference == 0
+  [ok] leg1z R12 R3 difference == 0
+Leg 2: R9 call accounting per entry point (calls == successes + failures + posture NULLs)
+  [ok] leg2 malloc successes
+  [ok] leg2 malloc(0) posture
+  [ok] leg2 malloc injected failure
+  [ok] leg2 malloc oversize failure
+  [ok] R9 malloc failure delta == scripted 2 (got 2, want 2)
+  [ok] R9 malloc posture delta == scripted 1 (got 1, want 1)
+  [ok] R9 malloc audit calls == 7 == 4+2+1 (got 7, want 7)
+  [ok] leg2 calloc successes
+  [ok] leg2 calloc zero-factor posture
+  [ok] leg2 calloc overflow failure
+  [ok] R9 calloc failure delta == scripted 1 (got 1, want 1)
+  [ok] R9 calloc posture delta == scripted 1 (got 1, want 1)
+  [ok] R9 calloc audit calls == 4 == 2+1+1 (got 4, want 4)
+  [ok] leg2 realloc(NULL) publishes
+  [ok] leg2 realloc same-class stays
+  [ok] leg2 realloc grow publishes
+  [ok] leg2 realloc(ptr,0) posture, original kept
+  [ok] leg2 realloc-fail anchor alloc
+  [ok] leg2 realloc grow construction failure
+  [ok] leg2 failed realloc preserves original
+  [ok] R9 realloc failure delta == scripted 1 (got 1, want 1)
+  [ok] R9 realloc posture delta == scripted 1 (got 1, want 1)
+  [ok] R9 realloc audit calls == 5 == 3+1+1 (got 5, want 5)
+  [ok] leg2z R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg2z R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg2z R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg2z R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg2z R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg2z R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg2z R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg2z R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg2z R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg2z R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg2z R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg2z R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg2z R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg2z R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg2z R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg2z R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg2z R7 cached within retention bound
+  [ok] leg2z R8 peak >= mapped
+  [ok] leg2z R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg2z cum bytes_requested == script (got 34416, want 34416)
+  [ok] leg2z cum bytes_allocated == script (got 139872, want 139872)
+  [ok] leg2z cum bytes_released == script (got 376832, want 376832)
+  [ok] leg2z cum alloc_failures == script (got 4, want 4)
+  [ok] leg2z cum posture nulls == script (got 3, want 3)
+  [ok] leg2z cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg2z D-LOCK ABSENT marker pair intact
+  [ok] leg2z live tracked counts agree
+  [ok] leg2z R12 live_mappings == 0 (got 0, want 0)
+  [ok] leg2z R12 live_spans == 0 (got 0, want 0)
+  [ok] leg2z R12 live_small == 0 (got 0, want 0)
+  [ok] leg2z R12 mapped == 0 (got 0, want 0)
+  [ok] leg2z R12 cached == 0 (got 0, want 0)
+  [ok] leg2z R12 ACQ == REL (released == all published bytes) (got 376832, want 376832)
+  [ok] leg2z R12 R1 difference == 0
+  [ok] leg2z R12 R2 difference == 0
+  [ok] leg2z R12 R3 difference == 0
+Leg 3: fault injection via the I-004 --wrap shim -- D-FAIL-OS vs shim counts stated exactly
+  [ok] leg3 anchor alloc
+  [ok] leg3a anchor live R1 pub-retired == live_mappings (got 1, want 1)
+  [ok] leg3a anchor live R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg3a anchor live R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg3a anchor live R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg3a anchor live R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg3a anchor live R4 mapped == mapping+span bytes (got 32768, want 32768)
+  [ok] leg3a anchor live R4 mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] leg3a anchor live R5 large walk: bytes == usable + mappings*P (got 32768, want 32768)
+  [ok] leg3a anchor live R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg3a anchor live R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg3a anchor live R5 D-ALLOC-LIVE derived == script live granted (got 16384, want 16384)
+  [ok] leg3a anchor live R5 overhead == reserve pages + span slack (got 16384, want 16384)
+  [ok] leg3a anchor live R6 ACQ - REL == MAPPED (got 32768, want 32768)
+  [ok] leg3a anchor live R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg3a anchor live R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg3a anchor live R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg3a anchor live R7 cached within retention bound
+  [ok] leg3a anchor live R8 peak >= mapped
+  [ok] leg3a anchor live R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg3a anchor live cum bytes_requested == script (got 39416, want 39416)
+  [ok] leg3a anchor live cum bytes_allocated == script (got 156256, want 156256)
+  [ok] leg3a anchor live cum bytes_released == script (got 376832, want 376832)
+  [ok] leg3a anchor live cum alloc_failures == script (got 4, want 4)
+  [ok] leg3a anchor live cum posture nulls == script (got 3, want 3)
+  [ok] leg3a anchor live cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg3a anchor live D-LOCK ABSENT marker pair intact
+  [ok] leg3a anchor live live tracked counts agree
+  [ok] leg3 injected acquire failure NULL
+  [ok] leg3 injected page-size failure NULL
+  [ok] leg3 page-size failure attempted no mapping (got 19, want 19)
+  [ok] leg3 injected lock failure NULL
+  [ok] leg3 calloc overflow NULL (never reaches L6)
+  [ok] leg3 oversize NULL (never reaches L6)
+  [ok] leg3 D-FAIL-OS delta == 5 caller-visible (got 5, want 5)
+  [ok] leg3 shim injected == 3 (acquire+pagesize+lock) (got 3, want 3)
+  [ok] leg3 exact difference: 2 pre-admission failures counted by D-FAIL-OS, never reaching the shim
+  [ok] leg3 no real acquire failure occurred (got 0, want 0)
+  [ok] leg3b failures moved nothing else R1 pub-retired == live_mappings (got 1, want 1)
+  [ok] leg3b failures moved nothing else R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg3b failures moved nothing else R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg3b failures moved nothing else R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg3b failures moved nothing else R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg3b failures moved nothing else R4 mapped == mapping+span bytes (got 32768, want 32768)
+  [ok] leg3b failures moved nothing else R4 mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] leg3b failures moved nothing else R5 large walk: bytes == usable + mappings*P (got 32768, want 32768)
+  [ok] leg3b failures moved nothing else R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg3b failures moved nothing else R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg3b failures moved nothing else R5 D-ALLOC-LIVE derived == script live granted (got 16384, want 16384)
+  [ok] leg3b failures moved nothing else R5 overhead == reserve pages + span slack (got 16384, want 16384)
+  [ok] leg3b failures moved nothing else R6 ACQ - REL == MAPPED (got 32768, want 32768)
+  [ok] leg3b failures moved nothing else R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg3b failures moved nothing else R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg3b failures moved nothing else R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg3b failures moved nothing else R7 cached within retention bound
+  [ok] leg3b failures moved nothing else R8 peak >= mapped
+  [ok] leg3b failures moved nothing else R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg3b failures moved nothing else cum bytes_requested == script (got 39416, want 39416)
+  [ok] leg3b failures moved nothing else cum bytes_allocated == script (got 156256, want 156256)
+  [ok] leg3b failures moved nothing else cum bytes_released == script (got 376832, want 376832)
+  [ok] leg3b failures moved nothing else cum alloc_failures == script (got 9, want 9)
+  [ok] leg3b failures moved nothing else cum posture nulls == script (got 3, want 3)
+  [ok] leg3b failures moved nothing else cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg3b failures moved nothing else D-LOCK ABSENT marker pair intact
+  [ok] leg3b failures moved nothing else live tracked counts agree
+  [ok] leg3 exactly one injected release failure (got 1, want 1)
+  [ok] leg3 rolled-back free leaves block live (R1) (got 1, want 1)
+  [ok] leg3c rollback reconciles with block live R1 pub-retired == live_mappings (got 1, want 1)
+  [ok] leg3c rollback reconciles with block live R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R4 mapped == mapping+span bytes (got 32768, want 32768)
+  [ok] leg3c rollback reconciles with block live R4 mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] leg3c rollback reconciles with block live R5 large walk: bytes == usable + mappings*P (got 32768, want 32768)
+  [ok] leg3c rollback reconciles with block live R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R5 D-ALLOC-LIVE derived == script live granted (got 16384, want 16384)
+  [ok] leg3c rollback reconciles with block live R5 overhead == reserve pages + span slack (got 16384, want 16384)
+  [ok] leg3c rollback reconciles with block live R6 ACQ - REL == MAPPED (got 32768, want 32768)
+  [ok] leg3c rollback reconciles with block live R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live R7 cached within retention bound
+  [ok] leg3c rollback reconciles with block live R8 peak >= mapped
+  [ok] leg3c rollback reconciles with block live R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live cum bytes_requested == script (got 39416, want 39416)
+  [ok] leg3c rollback reconciles with block live cum bytes_allocated == script (got 156256, want 156256)
+  [ok] leg3c rollback reconciles with block live cum bytes_released == script (got 376832, want 376832)
+  [ok] leg3c rollback reconciles with block live cum alloc_failures == script (got 9, want 9)
+  [ok] leg3c rollback reconciles with block live cum posture nulls == script (got 3, want 3)
+  [ok] leg3c rollback reconciles with block live cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg3c rollback reconciles with block live D-LOCK ABSENT marker pair intact
+  [ok] leg3c rollback reconciles with block live live tracked counts agree
+  [ok] leg3d release succeeds on retry R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg3d release succeeds on retry R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg3d release succeeds on retry R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg3d release succeeds on retry R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg3d release succeeds on retry R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg3d release succeeds on retry R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg3d release succeeds on retry R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg3d release succeeds on retry R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg3d release succeeds on retry R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg3d release succeeds on retry R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg3d release succeeds on retry R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg3d release succeeds on retry R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg3d release succeeds on retry R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg3d release succeeds on retry R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg3d release succeeds on retry R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg3d release succeeds on retry R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg3d release succeeds on retry R7 cached within retention bound
+  [ok] leg3d release succeeds on retry R8 peak >= mapped
+  [ok] leg3d release succeeds on retry R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg3d release succeeds on retry cum bytes_requested == script (got 39416, want 39416)
+  [ok] leg3d release succeeds on retry cum bytes_allocated == script (got 156256, want 156256)
+  [ok] leg3d release succeeds on retry cum bytes_released == script (got 409600, want 409600)
+  [ok] leg3d release succeeds on retry cum alloc_failures == script (got 9, want 9)
+  [ok] leg3d release succeeds on retry cum posture nulls == script (got 3, want 3)
+  [ok] leg3d release succeeds on retry cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg3d release succeeds on retry D-LOCK ABSENT marker pair intact
+  [ok] leg3d release succeeds on retry live tracked counts agree
+  [ok] leg3z R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg3z R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg3z R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg3z R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg3z R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg3z R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg3z R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg3z R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg3z R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg3z R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg3z R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg3z R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg3z R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg3z R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg3z R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg3z R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg3z R7 cached within retention bound
+  [ok] leg3z R8 peak >= mapped
+  [ok] leg3z R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg3z cum bytes_requested == script (got 39416, want 39416)
+  [ok] leg3z cum bytes_allocated == script (got 156256, want 156256)
+  [ok] leg3z cum bytes_released == script (got 409600, want 409600)
+  [ok] leg3z cum alloc_failures == script (got 9, want 9)
+  [ok] leg3z cum posture nulls == script (got 3, want 3)
+  [ok] leg3z cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg3z D-LOCK ABSENT marker pair intact
+  [ok] leg3z live tracked counts agree
+  [ok] leg3z R12 live_mappings == 0 (got 0, want 0)
+  [ok] leg3z R12 live_spans == 0 (got 0, want 0)
+  [ok] leg3z R12 live_small == 0 (got 0, want 0)
+  [ok] leg3z R12 mapped == 0 (got 0, want 0)
+  [ok] leg3z R12 cached == 0 (got 0, want 0)
+  [ok] leg3z R12 ACQ == REL (released == all published bytes) (got 409600, want 409600)
+  [ok] leg3z R12 R1 difference == 0
+  [ok] leg3z R12 R2 difference == 0
+  [ok] leg3z R12 R3 difference == 0
+Leg 4: trim cycles (I-003 shape) -- R7 at every step of the retained-span drain
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 class alloc
+  [ok] leg4 exactly 2 spans per class x 3 classes (got 6, want 6)
+  [ok] leg4a six spans live across three classes R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg4a six spans live across three classes R2 span pub-retired == live_spans (got 6, want 6)
+  [ok] leg4a six spans live across three classes R2 class spans sum == live_spans (got 6, want 6)
+  [ok] leg4a six spans live across three classes R3 small alloc-free == live_small (got 1099, want 1099)
+  [ok] leg4a six spans live across three classes R3/R10 class live sum == live_small (got 1099, want 1099)
+  [ok] leg4a six spans live across three classes R4 mapped == mapping+span bytes (got 98304, want 98304)
+  [ok] leg4a six spans live across three classes R4 mapped == I-003 Q-MAPPED (got 98304, want 98304)
+  [ok] leg4a six spans live across three classes R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg4a six spans live across three classes R5 span walk: span bytes == spans*P (got 98304, want 98304)
+  [ok] leg4a six spans live across three classes R5 small walk: charged == script charged (got 49072, want 49072)
+  [ok] leg4a six spans live across three classes R5 D-ALLOC-LIVE derived == script live granted (got 49072, want 49072)
+  [ok] leg4a six spans live across three classes R5 overhead == reserve pages + span slack (got 49232, want 49232)
+  [ok] leg4a six spans live across three classes R6 ACQ - REL == MAPPED (got 98304, want 98304)
+  [ok] leg4a six spans live across three classes R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg4a six spans live across three classes R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg4a six spans live across three classes R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg4a six spans live across three classes R7 cached within retention bound
+  [ok] leg4a six spans live across three classes R8 peak >= mapped
+  [ok] leg4a six spans live across three classes R10 capacity == per-span capacities summed (got 2192, want 2192)
+  [ok] leg4a six spans live across three classes cum bytes_requested == script (got 88488, want 88488)
+  [ok] leg4a six spans live across three classes cum bytes_allocated == script (got 205328, want 205328)
+  [ok] leg4a six spans live across three classes cum bytes_released == script (got 409600, want 409600)
+  [ok] leg4a six spans live across three classes cum alloc_failures == script (got 9, want 9)
+  [ok] leg4a six spans live across three classes cum posture nulls == script (got 3, want 3)
+  [ok] leg4a six spans live across three classes cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg4a six spans live across three classes D-LOCK ABSENT marker pair intact
+  [ok] leg4a six spans live across three classes live tracked counts agree
+  [ok] leg4 all six emptied spans retained (bound 2/class) (got 98304, want 98304)
+  [ok] leg4b retained R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg4b retained R2 span pub-retired == live_spans (got 6, want 6)
+  [ok] leg4b retained R2 class spans sum == live_spans (got 6, want 6)
+  [ok] leg4b retained R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg4b retained R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg4b retained R4 mapped == mapping+span bytes (got 98304, want 98304)
+  [ok] leg4b retained R4 mapped == I-003 Q-MAPPED (got 98304, want 98304)
+  [ok] leg4b retained R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg4b retained R5 span walk: span bytes == spans*P (got 98304, want 98304)
+  [ok] leg4b retained R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg4b retained R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg4b retained R5 overhead == reserve pages + span slack (got 98304, want 98304)
+  [ok] leg4b retained R6 ACQ - REL == MAPPED (got 98304, want 98304)
+  [ok] leg4b retained R7 cached == empty spans * P (got 98304, want 98304)
+  [ok] leg4b retained R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 98304, want 98304)
+  [ok] leg4b retained R7 cached == I-003 Q-RETAINED (got 98304, want 98304)
+  [ok] leg4b retained R7 cached within retention bound
+  [ok] leg4b retained R8 peak >= mapped
+  [ok] leg4b retained R10 capacity == per-span capacities summed (got 2192, want 2192)
+  [ok] leg4b retained cum bytes_requested == script (got 88488, want 88488)
+  [ok] leg4b retained cum bytes_allocated == script (got 205328, want 205328)
+  [ok] leg4b retained cum bytes_released == script (got 409600, want 409600)
+  [ok] leg4b retained cum alloc_failures == script (got 9, want 9)
+  [ok] leg4b retained cum posture nulls == script (got 3, want 3)
+  [ok] leg4b retained cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg4b retained D-LOCK ABSENT marker pair intact
+  [ok] leg4b retained live tracked counts agree
+  [ok] leg4 partial trim releases exactly 2 spans
+  [ok] leg4 cached == 4 pages after partial trim (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg4c partial trim reconciles R2 span pub-retired == live_spans (got 4, want 4)
+  [ok] leg4c partial trim reconciles R2 class spans sum == live_spans (got 4, want 4)
+  [ok] leg4c partial trim reconciles R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg4c partial trim reconciles R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg4c partial trim reconciles R4 mapped == mapping+span bytes (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R4 mapped == I-003 Q-MAPPED (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg4c partial trim reconciles R5 span walk: span bytes == spans*P (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg4c partial trim reconciles R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg4c partial trim reconciles R5 overhead == reserve pages + span slack (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R6 ACQ - REL == MAPPED (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R7 cached == empty spans * P (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R7 cached == I-003 Q-RETAINED (got 65536, want 65536)
+  [ok] leg4c partial trim reconciles R7 cached within retention bound
+  [ok] leg4c partial trim reconciles R8 peak >= mapped
+  [ok] leg4c partial trim reconciles R10 capacity == per-span capacities summed (got 1111, want 1111)
+  [ok] leg4c partial trim reconciles cum bytes_requested == script (got 88488, want 88488)
+  [ok] leg4c partial trim reconciles cum bytes_allocated == script (got 205328, want 205328)
+  [ok] leg4c partial trim reconciles cum bytes_released == script (got 442368, want 442368)
+  [ok] leg4c partial trim reconciles cum alloc_failures == script (got 9, want 9)
+  [ok] leg4c partial trim reconciles cum posture nulls == script (got 3, want 3)
+  [ok] leg4c partial trim reconciles cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg4c partial trim reconciles D-LOCK ABSENT marker pair intact
+  [ok] leg4c partial trim reconciles live tracked counts agree
+  [ok] leg4 full trim releases the remaining 4 spans
+  [ok] leg4d full trim reconciles R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg4d full trim reconciles R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg4d full trim reconciles R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg4d full trim reconciles R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg4d full trim reconciles R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg4d full trim reconciles R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg4d full trim reconciles R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg4d full trim reconciles R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg4d full trim reconciles R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg4d full trim reconciles R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg4d full trim reconciles R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg4d full trim reconciles R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg4d full trim reconciles R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg4d full trim reconciles R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg4d full trim reconciles R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg4d full trim reconciles R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg4d full trim reconciles R7 cached within retention bound
+  [ok] leg4d full trim reconciles R8 peak >= mapped
+  [ok] leg4d full trim reconciles R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg4d full trim reconciles cum bytes_requested == script (got 88488, want 88488)
+  [ok] leg4d full trim reconciles cum bytes_allocated == script (got 205328, want 205328)
+  [ok] leg4d full trim reconciles cum bytes_released == script (got 507904, want 507904)
+  [ok] leg4d full trim reconciles cum alloc_failures == script (got 9, want 9)
+  [ok] leg4d full trim reconciles cum posture nulls == script (got 3, want 3)
+  [ok] leg4d full trim reconciles cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg4d full trim reconciles D-LOCK ABSENT marker pair intact
+  [ok] leg4d full trim reconciles live tracked counts agree
+  [ok] leg4z R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg4z R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg4z R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg4z R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg4z R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg4z R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg4z R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg4z R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg4z R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg4z R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg4z R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg4z R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg4z R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg4z R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg4z R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg4z R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg4z R7 cached within retention bound
+  [ok] leg4z R8 peak >= mapped
+  [ok] leg4z R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg4z cum bytes_requested == script (got 88488, want 88488)
+  [ok] leg4z cum bytes_allocated == script (got 205328, want 205328)
+  [ok] leg4z cum bytes_released == script (got 507904, want 507904)
+  [ok] leg4z cum alloc_failures == script (got 9, want 9)
+  [ok] leg4z cum posture nulls == script (got 3, want 3)
+  [ok] leg4z cum cross_thread_frees == script (R11) (got 0, want 0)
+  [ok] leg4z D-LOCK ABSENT marker pair intact
+  [ok] leg4z live tracked counts agree
+  [ok] leg4z R12 live_mappings == 0 (got 0, want 0)
+  [ok] leg4z R12 live_spans == 0 (got 0, want 0)
+  [ok] leg4z R12 live_small == 0 (got 0, want 0)
+  [ok] leg4z R12 mapped == 0 (got 0, want 0)
+  [ok] leg4z R12 cached == 0 (got 0, want 0)
+  [ok] leg4z R12 ACQ == REL (released == all published bytes) (got 507904, want 507904)
+  [ok] leg4z R12 R1 difference == 0
+  [ok] leg4z R12 R2 difference == 0
+  [ok] leg4z R12 R3 difference == 0
+Leg 5: cross-thread frees (R11) -- Tier 1 exact, the disclosed transfer-retire narrowing asserted AS documented, Tier 2 contribution 0 by choice
+  [ok] leg5 xt1 alloc
+  [ok] leg5 xt1 worker created
+  [ok] leg5 xt1 joined
+  [ok] leg5 xt1 cross-thread free counted once R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once R7 cached within retention bound
+  [ok] leg5 xt1 cross-thread free counted once R8 peak >= mapped
+  [ok] leg5 xt1 cross-thread free counted once R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg5 xt1 cross-thread free counted once cum bytes_requested == script (got 93488, want 93488)
+  [ok] leg5 xt1 cross-thread free counted once cum bytes_allocated == script (got 221712, want 221712)
+  [ok] leg5 xt1 cross-thread free counted once cum bytes_released == script (got 540672, want 540672)
+  [ok] leg5 xt1 cross-thread free counted once cum alloc_failures == script (got 9, want 9)
+  [ok] leg5 xt1 cross-thread free counted once cum posture nulls == script (got 3, want 3)
+  [ok] leg5 xt1 cross-thread free counted once cum cross_thread_frees == script (R11) (got 1, want 1)
+  [ok] leg5 xt1 cross-thread free counted once D-LOCK ABSENT marker pair intact
+  [ok] leg5 xt1 cross-thread free counted once live tracked counts agree
+  [ok] leg5 xt2 worker created
+  [ok] leg5 xt2 joined
+  [ok] leg5 xt2 worker alloc non-NULL
+  [ok] leg5 xt2 worker-alloc main-free counted R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted R7 cached within retention bound
+  [ok] leg5 xt2 worker-alloc main-free counted R8 peak >= mapped
+  [ok] leg5 xt2 worker-alloc main-free counted R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg5 xt2 worker-alloc main-free counted cum bytes_requested == script (got 98488, want 98488)
+  [ok] leg5 xt2 worker-alloc main-free counted cum bytes_allocated == script (got 238096, want 238096)
+  [ok] leg5 xt2 worker-alloc main-free counted cum bytes_released == script (got 573440, want 573440)
+  [ok] leg5 xt2 worker-alloc main-free counted cum alloc_failures == script (got 9, want 9)
+  [ok] leg5 xt2 worker-alloc main-free counted cum posture nulls == script (got 3, want 3)
+  [ok] leg5 xt2 worker-alloc main-free counted cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg5 xt2 worker-alloc main-free counted D-LOCK ABSENT marker pair intact
+  [ok] leg5 xt2 worker-alloc main-free counted live tracked counts agree
+  [ok] leg5 xt3 alloc
+  [ok] leg5 xt3 worker created
+  [ok] leg5 xt3 joined
+  [ok] leg5 xt3 grow-by-move happened in the worker
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R7 cached within retention bound
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R8 peak >= mapped
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact cum bytes_requested == script (got 112488, want 112488)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact cum bytes_allocated == script (got 270864, want 270864)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact cum bytes_released == script (got 638976, want 638976)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact cum alloc_failures == script (got 9, want 9)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact cum posture nulls == script (got 3, want 3)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact D-LOCK ABSENT marker pair intact
+  [ok] leg5 xt3 narrowing: transfer-retire uncounted, ledger still exact live tracked counts agree
+  [ok] leg5 xt4 small alloc
+  [ok] leg5 xt4 worker created
+  [ok] leg5 xt4 joined
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R2 span pub-retired == live_spans (got 1, want 1)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R2 class spans sum == live_spans (got 1, want 1)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R4 mapped == mapping+span bytes (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R4 mapped == I-003 Q-MAPPED (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R5 span walk: span bytes == spans*P (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R5 overhead == reserve pages + span slack (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R6 ACQ - REL == MAPPED (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R7 cached == empty spans * P (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R7 cached == I-003 Q-RETAINED (got 16384, want 16384)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R7 cached within retention bound
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R8 peak >= mapped
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) R10 capacity == per-span capacities summed (got 254, want 254)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) cum bytes_requested == script (got 112552, want 112552)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) cum bytes_allocated == script (got 270928, want 270928)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) cum bytes_released == script (got 638976, want 638976)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) cum alloc_failures == script (got 9, want 9)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) cum posture nulls == script (got 3, want 3)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) D-LOCK ABSENT marker pair intact
+  [ok] leg5 xt4 small cross-thread free contributes 0 (PARTIAL, INC-J002-01) live tracked counts agree
+  [ok] leg5 R11 total == the two Tier-1 frees exactly (got 2, want 2)
+  [ok] leg5z R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg5z R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg5z R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg5z R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg5z R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg5z R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg5z R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg5z R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg5z R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg5z R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg5z R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg5z R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg5z R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg5z R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg5z R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg5z R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg5z R7 cached within retention bound
+  [ok] leg5z R8 peak >= mapped
+  [ok] leg5z R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg5z cum bytes_requested == script (got 112552, want 112552)
+  [ok] leg5z cum bytes_allocated == script (got 270928, want 270928)
+  [ok] leg5z cum bytes_released == script (got 655360, want 655360)
+  [ok] leg5z cum alloc_failures == script (got 9, want 9)
+  [ok] leg5z cum posture nulls == script (got 3, want 3)
+  [ok] leg5z cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg5z D-LOCK ABSENT marker pair intact
+  [ok] leg5z live tracked counts agree
+  [ok] leg5z R12 live_mappings == 0 (got 0, want 0)
+  [ok] leg5z R12 live_spans == 0 (got 0, want 0)
+  [ok] leg5z R12 live_small == 0 (got 0, want 0)
+  [ok] leg5z R12 mapped == 0 (got 0, want 0)
+  [ok] leg5z R12 cached == 0 (got 0, want 0)
+  [ok] leg5z R12 ACQ == REL (released == all published bytes) (got 655360, want 655360)
+  [ok] leg5z R12 R1 difference == 0
+  [ok] leg5z R12 R2 difference == 0
+  [ok] leg5z R12 R3 difference == 0
+Leg 6: R8 peak discipline -- exact high-water, untouched by free/trim-only sequences, retained at mapped == 0
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 peak-driving alloc
+  [ok] leg6 drove mapped past prior peak + 6 pages
+  [ok] leg6 R8 peak == mapped at the high-water instant (got 294912, want 294912)
+  high-water locked at 294912 bytes
+  [ok] leg6 free-only sequence leaves peak exact R1 pub-retired == live_mappings (got 8, want 8)
+  [ok] leg6 free-only sequence leaves peak exact R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R4 mapped == mapping+span bytes (got 262144, want 262144)
+  [ok] leg6 free-only sequence leaves peak exact R4 mapped == I-003 Q-MAPPED (got 262144, want 262144)
+  [ok] leg6 free-only sequence leaves peak exact R5 large walk: bytes == usable + mappings*P (got 262144, want 262144)
+  [ok] leg6 free-only sequence leaves peak exact R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R5 D-ALLOC-LIVE derived == script live granted (got 131072, want 131072)
+  [ok] leg6 free-only sequence leaves peak exact R5 overhead == reserve pages + span slack (got 131072, want 131072)
+  [ok] leg6 free-only sequence leaves peak exact R6 ACQ - REL == MAPPED (got 262144, want 262144)
+  [ok] leg6 free-only sequence leaves peak exact R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact R7 cached within retention bound
+  [ok] leg6 free-only sequence leaves peak exact R8 peak >= mapped
+  [ok] leg6 free-only sequence leaves peak exact R8 peak == locked high-water (got 294912, want 294912)
+  [ok] leg6 free-only sequence leaves peak exact R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg6 free-only sequence leaves peak exact cum bytes_requested == script (got 157552, want 157552)
+  [ok] leg6 free-only sequence leaves peak exact cum bytes_allocated == script (got 418384, want 418384)
+  [ok] leg6 free-only sequence leaves peak exact cum bytes_released == script (got 688128, want 688128)
+  [ok] leg6 free-only sequence leaves peak exact cum alloc_failures == script (got 9, want 9)
+  [ok] leg6 free-only sequence leaves peak exact cum posture nulls == script (got 3, want 3)
+  [ok] leg6 free-only sequence leaves peak exact cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg6 free-only sequence leaves peak exact D-LOCK ABSENT marker pair intact
+  [ok] leg6 free-only sequence leaves peak exact live tracked counts agree
+  [ok] leg6 trim-sequence small alloc
+  [ok] leg6 trim-only sequence leaves peak exact R1 pub-retired == live_mappings (got 8, want 8)
+  [ok] leg6 trim-only sequence leaves peak exact R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R4 mapped == mapping+span bytes (got 262144, want 262144)
+  [ok] leg6 trim-only sequence leaves peak exact R4 mapped == I-003 Q-MAPPED (got 262144, want 262144)
+  [ok] leg6 trim-only sequence leaves peak exact R5 large walk: bytes == usable + mappings*P (got 262144, want 262144)
+  [ok] leg6 trim-only sequence leaves peak exact R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R5 D-ALLOC-LIVE derived == script live granted (got 131072, want 131072)
+  [ok] leg6 trim-only sequence leaves peak exact R5 overhead == reserve pages + span slack (got 131072, want 131072)
+  [ok] leg6 trim-only sequence leaves peak exact R6 ACQ - REL == MAPPED (got 262144, want 262144)
+  [ok] leg6 trim-only sequence leaves peak exact R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact R7 cached within retention bound
+  [ok] leg6 trim-only sequence leaves peak exact R8 peak >= mapped
+  [ok] leg6 trim-only sequence leaves peak exact R8 peak == locked high-water (got 294912, want 294912)
+  [ok] leg6 trim-only sequence leaves peak exact R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg6 trim-only sequence leaves peak exact cum bytes_requested == script (got 157616, want 157616)
+  [ok] leg6 trim-only sequence leaves peak exact cum bytes_allocated == script (got 418448, want 418448)
+  [ok] leg6 trim-only sequence leaves peak exact cum bytes_released == script (got 704512, want 704512)
+  [ok] leg6 trim-only sequence leaves peak exact cum alloc_failures == script (got 9, want 9)
+  [ok] leg6 trim-only sequence leaves peak exact cum posture nulls == script (got 3, want 3)
+  [ok] leg6 trim-only sequence leaves peak exact cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg6 trim-only sequence leaves peak exact D-LOCK ABSENT marker pair intact
+  [ok] leg6 trim-only sequence leaves peak exact live tracked counts agree
+  [ok] leg6 mapped back to 0 (got 0, want 0)
+  [ok] leg6 R8 peak retains high-water exactly at 0 (got 294912, want 294912)
+  [ok] leg6z R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg6z R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg6z R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg6z R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg6z R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg6z R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg6z R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg6z R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg6z R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg6z R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg6z R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg6z R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg6z R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg6z R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg6z R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg6z R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg6z R7 cached within retention bound
+  [ok] leg6z R8 peak >= mapped
+  [ok] leg6z R8 peak == locked high-water (got 294912, want 294912)
+  [ok] leg6z R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg6z cum bytes_requested == script (got 157616, want 157616)
+  [ok] leg6z cum bytes_allocated == script (got 418448, want 418448)
+  [ok] leg6z cum bytes_released == script (got 966656, want 966656)
+  [ok] leg6z cum alloc_failures == script (got 9, want 9)
+  [ok] leg6z cum posture nulls == script (got 3, want 3)
+  [ok] leg6z cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg6z D-LOCK ABSENT marker pair intact
+  [ok] leg6z live tracked counts agree
+  [ok] leg6z R12 live_mappings == 0 (got 0, want 0)
+  [ok] leg6z R12 live_spans == 0 (got 0, want 0)
+  [ok] leg6z R12 live_small == 0 (got 0, want 0)
+  [ok] leg6z R12 mapped == 0 (got 0, want 0)
+  [ok] leg6z R12 cached == 0 (got 0, want 0)
+  [ok] leg6z R12 ACQ == REL (released == all published bytes) (got 966656, want 966656)
+  [ok] leg6z R12 R1 difference == 0
+  [ok] leg6z R12 R2 difference == 0
+  [ok] leg6z R12 R3 difference == 0
+Leg 7: I-008-style RLIMIT_AS pressure cycle in a forked child -- identities under real backing failure, in deltas
+  [ok] leg7 pre-fork R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg7 pre-fork R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg7 pre-fork R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg7 pre-fork R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg7 pre-fork R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg7 pre-fork R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg7 pre-fork R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg7 pre-fork R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg7 pre-fork R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg7 pre-fork R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg7 pre-fork R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg7 pre-fork R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg7 pre-fork R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg7 pre-fork R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg7 pre-fork R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg7 pre-fork R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg7 pre-fork R7 cached within retention bound
+  [ok] leg7 pre-fork R8 peak >= mapped
+  [ok] leg7 pre-fork R8 peak == locked high-water (got 294912, want 294912)
+  [ok] leg7 pre-fork R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg7 pre-fork cum bytes_requested == script (got 157616, want 157616)
+  [ok] leg7 pre-fork cum bytes_allocated == script (got 418448, want 418448)
+  [ok] leg7 pre-fork cum bytes_released == script (got 966656, want 966656)
+  [ok] leg7 pre-fork cum alloc_failures == script (got 9, want 9)
+  [ok] leg7 pre-fork cum posture nulls == script (got 3, want 3)
+  [ok] leg7 pre-fork cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg7 pre-fork D-LOCK ABSENT marker pair intact
+  [ok] leg7 pre-fork live tracked counts agree
+  [ok] leg7 pre-fork R12 live_mappings == 0 (got 0, want 0)
+  [ok] leg7 pre-fork R12 live_spans == 0 (got 0, want 0)
+  [ok] leg7 pre-fork R12 live_small == 0 (got 0, want 0)
+  [ok] leg7 pre-fork R12 mapped == 0 (got 0, want 0)
+  [ok] leg7 pre-fork R12 cached == 0 (got 0, want 0)
+  [ok] leg7 pre-fork R12 ACQ == REL (released == all published bytes) (got 966656, want 966656)
+  [ok] leg7 pre-fork R12 R1 difference == 0
+  [ok] leg7 pre-fork R12 R2 difference == 0
+  [ok] leg7 pre-fork R12 R3 difference == 0
+  child: larges=47 failures_delta=2 mapped_end=0 bad=0
+  [ok] leg7 fork succeeded
+  [ok] leg7 child identities held under pressure (exit 0)
+  [ok] leg7 parent state untouched by child R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] leg7 parent state untouched by child R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] leg7 parent state untouched by child R2 class spans sum == live_spans (got 0, want 0)
+  [ok] leg7 parent state untouched by child R3 small alloc-free == live_small (got 0, want 0)
+  [ok] leg7 parent state untouched by child R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] leg7 parent state untouched by child R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] leg7 parent state untouched by child R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg7 parent state untouched by child R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] leg7 parent state untouched by child R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] leg7 parent state untouched by child R5 small walk: charged == script charged (got 0, want 0)
+  [ok] leg7 parent state untouched by child R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] leg7 parent state untouched by child R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] leg7 parent state untouched by child R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] leg7 parent state untouched by child R7 cached == empty spans * P (got 0, want 0)
+  [ok] leg7 parent state untouched by child R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] leg7 parent state untouched by child R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg7 parent state untouched by child R7 cached within retention bound
+  [ok] leg7 parent state untouched by child R8 peak >= mapped
+  [ok] leg7 parent state untouched by child R8 peak == locked high-water (got 294912, want 294912)
+  [ok] leg7 parent state untouched by child R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] leg7 parent state untouched by child cum bytes_requested == script (got 157616, want 157616)
+  [ok] leg7 parent state untouched by child cum bytes_allocated == script (got 418448, want 418448)
+  [ok] leg7 parent state untouched by child cum bytes_released == script (got 966656, want 966656)
+  [ok] leg7 parent state untouched by child cum alloc_failures == script (got 9, want 9)
+  [ok] leg7 parent state untouched by child cum posture nulls == script (got 3, want 3)
+  [ok] leg7 parent state untouched by child cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] leg7 parent state untouched by child D-LOCK ABSENT marker pair intact
+  [ok] leg7 parent state untouched by child live tracked counts agree
+Final: full-cycle closure over the whole run
+  [ok] final R1 pub-retired == live_mappings (got 0, want 0)
+  [ok] final R2 span pub-retired == live_spans (got 0, want 0)
+  [ok] final R2 class spans sum == live_spans (got 0, want 0)
+  [ok] final R3 small alloc-free == live_small (got 0, want 0)
+  [ok] final R3/R10 class live sum == live_small (got 0, want 0)
+  [ok] final R4 mapped == mapping+span bytes (got 0, want 0)
+  [ok] final R4 mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] final R5 large walk: bytes == usable + mappings*P (got 0, want 0)
+  [ok] final R5 span walk: span bytes == spans*P (got 0, want 0)
+  [ok] final R5 small walk: charged == script charged (got 0, want 0)
+  [ok] final R5 D-ALLOC-LIVE derived == script live granted (got 0, want 0)
+  [ok] final R5 overhead == reserve pages + span slack (got 0, want 0)
+  [ok] final R6 ACQ - REL == MAPPED (got 0, want 0)
+  [ok] final R7 cached == empty spans * P (got 0, want 0)
+  [ok] final R7 cached == mapped - (live-carrying spans*P + mapping bytes) (got 0, want 0)
+  [ok] final R7 cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] final R7 cached within retention bound
+  [ok] final R8 peak >= mapped
+  [ok] final R8 peak == locked high-water (got 294912, want 294912)
+  [ok] final R10 capacity == per-span capacities summed (got 0, want 0)
+  [ok] final cum bytes_requested == script (got 157616, want 157616)
+  [ok] final cum bytes_allocated == script (got 418448, want 418448)
+  [ok] final cum bytes_released == script (got 966656, want 966656)
+  [ok] final cum alloc_failures == script (got 9, want 9)
+  [ok] final cum posture nulls == script (got 3, want 3)
+  [ok] final cum cross_thread_frees == script (R11) (got 2, want 2)
+  [ok] final D-LOCK ABSENT marker pair intact
+  [ok] final live tracked counts agree
+  [ok] final R12 live_mappings == 0 (got 0, want 0)
+  [ok] final R12 live_spans == 0 (got 0, want 0)
+  [ok] final R12 live_small == 0 (got 0, want 0)
+  [ok] final R12 mapped == 0 (got 0, want 0)
+  [ok] final R12 cached == 0 (got 0, want 0)
+  [ok] final R12 ACQ == REL (released == all published bytes) (got 966656, want 966656)
+  [ok] final R12 R1 difference == 0
+  [ok] final R12 R2 difference == 0
+  [ok] final R12 R3 difference == 0
+  [ok] final peak == Leg 6 high-water (no later leg exceeded it) (got 294912, want 294912)
+IDENTITY VERDICTS (as asserted by this test; doc/PHASE_10_BALANCE_PROOF.md carries the grades)
+  R1  PROVEN
+  R2  PROVEN
+  R3  PROVEN
+  R4  PROVEN
+  R5  PROVEN (D-ALLOC-LIVE derived per the J-002 banking reconciliation)
+  R6  PROVEN (D-ACQ-CUM derived from the publication counters)
+  R7  PROVEN
+  R8  PROVEN
+  R9  PROVEN (malloc/calloc/realloc lines, Leg 2)
+  R10 PROVEN for live/total/empty/capacity aggregates; free-slots clause NOT-PROVABLE (carved count is not a named field)
+  R11 PROVEN Tier 1; transfer-retire PROVEN-AS-DOCUMENTED-NARROWING; Tier 2 exact count NOT-PROVABLE by recorded choice (b)
+  R12 PROVEN (incl. under RLIMIT_AS pressure, Leg 7)
+  D-LOCK NOT-PROVABLE (ABSENT, INC-J002-02; marker pair asserted 0/0 in every snapshot)
+  D-FAIL-BUDGET NOT-PROVABLE (0-by-absence, INC-I001-14; no counter exists to assert)
+checks: 2155, failures: 0
+RESULT: PASS
+test-j003 exit: 0
+=== verification tail ===
+--- make test ---
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+--- make test-j002 ---
+checks: 550, failures: 0
+RESULT: PASS
+--- make test-i008 ---
+RESULT: PASS (10 checks, 0 failures)
+--- nm -D --defined-only build/libmimiralloc.so ---
+0000000000000a48 T mimir_calloc
+0000000000000a14 T mimir_free
+00000000000009e4 T mimir_malloc
+0000000000000a80 T mimir_realloc
+count: 4
+--- byte identity vs base 1aab76258ccc8af8e29bb482c674484c47d8f117 ---
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  -
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+Samtal_after: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13

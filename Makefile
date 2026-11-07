@@ -1129,3 +1129,35 @@ test-j002: $(BUILD)/test_j002
 	./$(BUILD)/test_j002
 
 .PHONY: test-j002
+
+# J-003: Phase 10 statistics BALANCE PROOF -- the test
+# under tests/core/ (test_j003.c) proves the J-001
+# contract identities R1-R12 (docs/
+# PHASE_10_FOUNDATION_PLAN.md S4.4) EXACTLY at quiescent
+# points against the J-002 locked snapshot, across
+# workloads: small/large churn with calloc/realloc,
+# per-entry-point call accounting (R9), a fault leg
+# through the I-004 --wrap shim (incl. a rolled-back
+# release), I-003-shape trim cycles, cross-thread frees
+# incl. the disclosed realloc transfer-retire narrowing
+# asserted as documented, an exact peak high-water leg,
+# and an I-008-style RLIMIT_AS pressure cycle in a
+# forked child. Identities that cannot be asserted
+# exactly (D-LOCK, D-FAIL-BUDGET, R10 free-slots,
+# Tier-2 cross-thread) are recorded NOT-PROVABLE in the
+# slice doc, never silently skipped. The I-004 shim
+# object is linked ONLY into this binary, exactly as in
+# test-j002. Standalone via `make test-j003`; NOT part
+# of `make test`, whose composition is unchanged.
+# Recorded run: tests/core/recorded_run_j003.txt;
+# slice record: docs/PHASE_10_BALANCE_PROOF.md.
+$(BUILD)/test_j003.o: tests/core/test_j003.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_trim_i003.h tests/core/mimir_drain_h001.h tests/core/mimir_small_g003.h tests/core/mimir_fault_i004.h tests/core/mimir_tune_g007.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_j003.c -o $@
+
+$(BUILD)/test_j003: $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/test_j003.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/test_j003.o -Wl,--wrap=mimir_platform_map_acquire -Wl,--wrap=mimir_platform_map_release -Wl,--wrap=mimir_platform_global_lock -Wl,--wrap=mimir_platform_page_size -o $@
+
+test-j003: $(BUILD)/test_j003
+	./$(BUILD)/test_j003
+
+.PHONY: test-j003
