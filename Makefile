@@ -881,3 +881,27 @@ test-h005: $(BUILD)/test_h005
 	./$(BUILD)/test_h005
 
 .PHONY: test-h005
+
+# H-006: Phase 8 thread cancellation + teardown evidence
+# test - tests/core/test_h006.c exercises cancellation
+# between allocator calls, cancellation with consumer
+# cleanup handlers that free allocator blocks, teardown
+# shapes (leftovers freed cross-thread, churn, H-001
+# drain) and fork probes in disposable child processes
+# (quiescent fork, fork+exec, mid-churn fork and async
+# cancellation under parent timeouts), plus a dlclose
+# teardown leg against the .so. Standalone via
+# `make test-h006`; NOT part of `make test`, whose
+# composition is unchanged. No src/ change. Recorded run:
+# tests/core/recorded_run_h006.txt; slice record:
+# docs/PHASE_8_CANCELLATION_TEARDOWN_H006.md.
+$(BUILD)/test_h006.o: tests/core/test_h006.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/core/mimir_drain_h001.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_h006.c -o $@
+
+$(BUILD)/test_h006: $(LIBOBJS) $(BUILD)/libmimiralloc.so $(BUILD)/test_h006.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_h006.o -o $@ -ldl
+
+test-h006: $(BUILD)/test_h006
+	./$(BUILD)/test_h006 $(BUILD)/libmimiralloc.so
+
+.PHONY: test-h006
