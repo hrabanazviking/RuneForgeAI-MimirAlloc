@@ -1,0 +1,278 @@
+===================================================================
+L-003 RECORDED RUN - Aesir boundary wiring (Wave 12, Phase 12)
+Slice L-003 (team-03), EXPLICIT ADOPTION ONLY scope
+Worktree: /home/pi/mimiralloc-team-03 (purpleviking1, Raspberry Pi)
+===================================================================
+--- S0. Environment and base state ---
+2026-11-07T13:29:38-05:00
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+b18244741ee8e457ac9d87a3a2c4b1b4458b69b2
+yrsa/mimiralloc-03
+?? build/
+?? hidden_files/
+?? tests/mojo/recorded_run_l003.txt
+?? tests/mojo/test_l003.mojo
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+#!/bin/bash
+exec /home/pi/.pixi/bin/pixi run --manifest-path /home/pi/mojo-dev/pixi.toml mojo "$@"
+Mojo 1.1.0 (8189361e)
+mojo-version-exit:0
+16384
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+Samtal http code: 200
+--- S1. Established findings re-verified (L-001/L-002) ---
+[all aesir_main binaries are x86-64 on this aarch64 host]
+/home/pi/c2/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+/home/pi/c9base/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+/home/pi/c7f1/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+/home/pi/c9work/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+/home/pi/c10work/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+/home/pi/c3/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+/home/pi/mimisbrunnr_c8/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+/home/pi/aesir-finish-line/aesir_engine/aesir_main: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=833a8ec2136a83afdc56f721a9dab3198f4c6481, for GNU/Linux 3.2.0, not stripped
+[model.gguf stubs in checkouts]
+24 /home/pi/c2/aesir_engine/model.gguf
+24 /home/pi/c9base/aesir_engine/model.gguf
+24 /home/pi/c10work/aesir_engine/model.gguf
+24 /home/pi/aesir-finish-line/aesir_engine/model.gguf
+[Qwen3-1.7B search: no GGUF found]
+/home/pi/c2/aesir_engine/tests/test_qwen3_profile.mojo
+/home/pi/c2/scripts/verify_qwen3_k_quants.sh
+[real GGUF models on the Pi]
+total 622764
+-rw-r--r-- 1 pi pi        15 Oct 10 05:45 download.log
+-rw-r--r-- 1 pi pi 637699456 Oct 10 05:45 tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+[Aesir pixi platforms vs mojo-dev platforms]
+platforms = ["linux-64"]
+platforms = ["linux-aarch64"]
+[prebuilt aesir_main run attempt, bounded]
+[[31mBOX64[0m] Error: Loading needed libs in elf ./aesir_main
+aesir_main-run-exit:255
+--- S2. Aesir actual allocation boundary, source evidence (/home/pi/c2/aesir_engine) ---
+[B-a stdlib alloc import, core/mimir_well.mojo line 8]
+from std.memory.alloc import alloc, dealloc, Layout
+[B-a MimirWell pool creation + bump allocate, lines 1353-1386]
+struct MimirWell:
+    """
+    MimirWell: Pre-allocates a contiguous block of VRAM/RAM (The Waters of Wisdom).
+    Strictly forbids dynamic allocation during inference to maintain the purity and speed of the living system.
+    """
+
+    var base_ptr: Pointer[Scalar[f16], MutUntrackedOrigin]
+    var capacity: Int
+    var offset: Int
+    var npu_backends: List[NPUBackendType]
+
+    def __init__(out self, size_in_bytes: Int) raises:
+        if size_in_bytes <= 0:
+            raise Error("MimirWell: pool size must be positive")
+        # Calculate number of f16 elements
+        self.capacity = size_in_bytes // 2
+        var allocation = alloc(Layout[Scalar[f16]](count=self.capacity))
+        self.base_ptr = allocation^.unsafe_leak()
+        self.offset = 0
+        self.npu_backends = List[NPUBackendType]()
+        unsafe_memset_zero(self.base_ptr, self.capacity)
+
+    def allocate(
+        mut self, elements: Int
+    ) raises -> Pointer[Scalar[f16], MutUntrackedOrigin]:
+        if elements <= 0:
+            raise Error("MimirWell: allocation count must be positive")
+        if self.offset + elements > self.capacity:
+            raise Error("MimirWell: memory pool exhausted")
+
+        var ptr = self.base_ptr.unsafe_offset(self.offset)
+        self.offset += elements
+        return ptr
+
+[B-a direct stdlib alloc sites in MimirWell file]
+1054:        var k_allocation = alloc(Layout[Scalar[f16]](count=elements))
+1055:        var v_allocation = alloc(Layout[Scalar[f16]](count=elements))
+1129:        var k_allocation = alloc(Layout[Scalar[f16]](count=elements))
+1130:        var v_allocation = alloc(Layout[Scalar[f16]](count=elements))
+1369:        var allocation = alloc(Layout[Scalar[f16]](count=self.capacity))
+[B-a alloc(Layout count, whole c2 aesir_engine tree]
+37
+[B-b GGUF weights mmap, loader/gguf.mojo]
+398:    def _open_and_map(mut self) raises:
+424:        var mapped_address = external_call["mmap", Int](
+538:            var destination = pool.allocate(element_count)
+686:    def _cleanup(mut self):
+689:                _ = external_call["munmap", Int32](self.mmap_ptr, self.file_size)
+        var mapped_address = external_call["mmap", Int](
+            Int(0), self.file_size, Int32(1), Int32(1), self.fd, Int64(0)
+        )
+        if mapped_address == -1:
+            raise Error("Failed to mmap GGUF model")
+        self.mmap_ptr = Pointer[Int8, MutUntrackedOrigin](
+            unsafe_from_address=mapped_address
+        )
+        self.is_mapped = True
+[B-c MimirWell consumers: carve call sites]
+/home/pi/c2/aesir_engine/core/mimir_well.mojo:606:        self.ptr = well.allocate(elements)
+/home/pi/c2/aesir_engine/core/mimir_well.mojo:680:        self.ptr = well.allocate(elements)
+/home/pi/c2/aesir_engine/core/mimir_well.mojo:856:        var k_ptr = well.allocate(total_elements)
+/home/pi/c2/aesir_engine/core/mimir_well.mojo:857:        var v_ptr = well.allocate(total_elements)
+/home/pi/c2/aesir_engine/core/mimir_well.mojo:1464:        var ptr = well.allocate(max_docs * dim)
+/home/pi/c2/aesir_engine/core/mimir_well.mojo:1476:        var ptr = well.allocate(max_docs * dim)
+/home/pi/c2/aesir_engine/core/mimir_well.mojo:1800:            var ptr = well.allocate(T.rows * shard_cols)
+/home/pi/c2/aesir_engine/core/inference.mojo:257:                var residual = well.allocate(x.size)
+/home/pi/c2/aesir_engine/core/inference.mojo:271:                var q_ptr = well.allocate(x.rows * q_cols)
+/home/pi/c2/aesir_engine/core/inference.mojo:272:                var k_ptr = well.allocate(x.rows * k_cols)
+/home/pi/c2/aesir_engine/core/inference.mojo:273:                var v_ptr = well.allocate(x.rows * v_cols)
+/home/pi/c2/aesir_engine/core/inference.mojo:332:                var attn_out_ptr = well.allocate(x.rows * q.cols)
+/home/pi/c2/aesir_engine/core/inference.mojo:378:                var up_ptr = well.allocate(up_cols * x.rows)
+/home/pi/c2/aesir_engine/core/inference.mojo:381:                var gate_ptr = well.allocate(gate_cols * x.rows)
+/home/pi/c2/aesir_engine/core/inference.mojo:401:                var ffn_out_ptr = well.allocate(x.rows * ffn_out_cols)
+[B-d no MimirAlloc anywhere in Aesir source]
+0
+[B-e inference_memory.mojo is accounting only: no alloc import]
+--- S3. Bounded aarch64 road 1: small Aesir component builds and runs ---
+$ cd /home/pi/c2/aesir_engine
+$ timeout 120 mojo build tests/test_memory_refinements.mojo -o /tmp/l003_aesir_memref
+build-exit:0
+/tmp/l003_aesir_memref: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=e501ac89324ce899f0f2c943df82f620c35c06dc, for GNU/Linux 3.7.0, not stripped
+$ timeout 30 /tmp/l003_aesir_memref
+--- Testing MimirWell Allocation Telemetry & Arena Recycling ---
+MimirWell allocation telemetry & arena recycling: PASS
+--- Testing Profiled Linear BPE Tokenizer Merge Performance ---
+Profiled linear BPE tokenizer merge performance: PASS
+run-exit:0
+--- S4. Bounded aarch64 road 2: full engine build attempt ---
+$ timeout 180 mojo build main.mojo -o /tmp/l003_aesir_main_arm
+build-exit:1
+error-line-count:
+30
+distinct-error-kinds:
+     16 package 'collections' does not contain 'InlineArray'
+      6 unable to locate module 'max'
+      6 'gpu' does not refer to a nested package
+      1 use of unknown declaration 'InlineArray'
+      1 failed to parse the provided Mojo source module
+first-25-log-lines:
+Imported from /home/pi/c2/aesir_engine/main.mojo:6:
+/home/pi/c2/aesir_engine/cli/interrupts.mojo:2:29: error: package 'collections' does not contain 'InlineArray'
+from std.collections import InlineArray
+                            ^
+Imported from /home/pi/c2/aesir_engine/main.mojo:5:
+Imported from /home/pi/c2/aesir_engine/cli/commands.mojo:16:
+/home/pi/c2/aesir_engine/server/keyfiles.mojo:2:29: error: package 'collections' does not contain 'InlineArray'
+from std.collections import InlineArray
+                            ^
+Imported from /home/pi/c2/aesir_engine/main.mojo:5:
+Imported from /home/pi/c2/aesir_engine/cli/commands.mojo:21:
+Imported from /home/pi/c2/aesir_engine/cli/doctor.mojo:3:
+Imported from /home/pi/c2/aesir_engine/aesir.mojo:19:
+/home/pi/c2/aesir_engine/core/gemma4_cuda.mojo:2:6: error: unable to locate module 'max'
+from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
+     ^
+Imported from /home/pi/c2/aesir_engine/main.mojo:5:
+Imported from /home/pi/c2/aesir_engine/cli/commands.mojo:21:
+Imported from /home/pi/c2/aesir_engine/cli/doctor.mojo:3:
+Imported from /home/pi/c2/aesir_engine/aesir.mojo:19:
+/home/pi/c2/aesir_engine/core/gemma4_cuda.mojo:2:10: error: 'gpu' does not refer to a nested package
+from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
+         ^
+Imported from /home/pi/c2/aesir_engine/main.mojo:5:
+Imported from /home/pi/c2/aesir_engine/cli/commands.mojo:21:
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Samtal http code after builds: 200
+--- S5. L-003 probe: build libraries ---
+make: Nothing to be done for 'lib'.
+make-lib-exit:0
+probe-lib-exit:0
+-rwxr-xr-x 1 pi pi 70056 Nov  7 13:31 build/libf005probe.so
+-rwxr-xr-x 1 pi pi 75312 Nov  7 10:58 build/libmimiralloc.so
+--- S6. L-003 probe build (B2 link, exact command) ---
+$ mojo build -o build/test_l003 tests/mojo/test_l003.mojo -Xlinker -Lbuild -Xlinker -lmimiralloc -Xlinker -lf005probe -Xlinker -rpath -Xlinker $ORIGIN
+build-exit:0
+build/test_l003: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=184ce22d2bb0680e7124fd1f3b30300d59a13094, for GNU/Linux 3.7.0, not stripped
+--- S7. Control build: same source, f005probe linked, MimirAlloc link omitted ---
+/usr/bin/ld: /tmp/mojo_archive-31cf2ec.a: in function `main':
+test_l003.mojo:(.text+0x870): undefined reference to `mimir_malloc'
+/usr/bin/ld: test_l003.mojo:(.text+0x878): undefined reference to `mimir_free'
+/usr/bin/ld: test_l003.mojo:(.text+0x9d0): undefined reference to `mimir_malloc'
+/usr/bin/ld: test_l003.mojo:(.text+0xbd0): undefined reference to `mimir_free'
+/usr/bin/ld: test_l003.mojo:(.text+0xc34): undefined reference to `mimir_malloc'
+/usr/bin/ld: test_l003.mojo:(.text+0xd9c): undefined reference to `mimir_calloc'
+/usr/bin/ld: test_l003.mojo:(.text+0xf0c): undefined reference to `mimir_realloc'
+/usr/bin/ld: test_l003.mojo:(.text+0x1010): undefined reference to `mimir_free'
+/usr/bin/ld: test_l003.mojo:(.text+0x1018): undefined reference to `mimir_free'
+collect2: error: ld returned 1 exit status
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: error: failed to link executable
+control-build-exit:1-expected
+--- S8. L-003 probe run ---
+$ ./build/test_l003
+L-003 Aesir boundary wiring probe
+PART A: Aesir MimirWell idiom arena (stdlib-serviced)
+  [ok] A1 capacity_bytes == 8192
+  [ok] A2 first carve at pool base
+  [ok] A3 second carve at byte offset 256
+  [ok] A4 carved slices hold disjoint patterns
+  [ok] A5 allocated_bytes == 384
+  [ok] A6 over-capacity carve raises (pool exhausted)
+  [ok] A7 reset recycles arena to base
+PART A done (arena serviced by Mojo stdlib allocator, not MimirAlloc)
+PART B: explicit mimir_* adoption (B1+B2, binding grade)
+  [ok] B1 f005_page_size() > 0
+PAGE: 16384
+MAPPED base= 2475180032 (quiescent baseline, INC-F005-01 discipline)
+  [ok] B2 mapped base > 0
+  [ok] B3 mimir_malloc(8192) non-null
+  [ok] B4 large block serving descriptor validates (mapping form)
+MAPPED after_big= 2475212800  delta= 32768
+  [ok] B5 mapped delta == page_round_up(page + 8192) exactly
+  [ok] B6 mapped total returns to baseline after large free
+  [ok] B7 mimir_malloc(64) non-null
+  [ok] B8 small block serving descriptor validates (span form)
+  [ok] B9 malloc block pattern write/readback
+  [ok] B10 mimir_calloc(16, 4) non-null
+  [ok] B11 calloc extent arrives zeroed
+  [ok] B12 calloc block serving descriptor validates
+  [ok] B13 mimir_realloc(p, 256) non-null
+  [ok] B14 realloc grow preserves first 64 bytes
+  [ok] B15 all mimir_free calls returned normally
+MAPPED final= 2475196416  base= 2475180032
+CHECKS: 22 run, 0 failed
+L-003 RESULT: PASS
+run-exit:0
+--- S9. ELF evidence ---
+ 0x0000000000000001 (NEEDED)             Shared library: [libKGENCompilerRTShared.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libf005probe.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/home/pi/mojo-dev/.pixi/envs/default/lib:$ORIGIN]
+--- S10. LD_DEBUG=bindings evidence (E-004 shape) ---
+ld-run-exit:0
+L-003 RESULT: PASS
+binding-lines-to-libmimiralloc:
+      1 mimir_calloc
+      1 mimir_free
+      1 mimir_malloc
+      1 mimir_realloc
+total-mimir-binding-lines:
+4
+--- S11. make test (composition unchanged by this slice) ---
+make-test-exit:0
+7
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+PHASE B distinct live pointers: ok (64 recorded)
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+--- S12. Closing state ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Samtal http code at close: 200
+?? build/
+?? hidden_files/
+?? tests/mojo/recorded_run_l003.txt
+?? tests/mojo/test_l003.mojo
+=== END OF L-003 RECORDED RUN ===
