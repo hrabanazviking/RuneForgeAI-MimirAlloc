@@ -1,0 +1,185 @@
+K-005 recorded run - locality + metadata placement
+date: 2026-11-07T11:45:44-05:00
+head: e04dd8b8b98ef3d204d3ce612bea3775ea642790 branch: yrsa/mimiralloc-05
+kernel: 6.12.112-v8-16k-hailo+ page: 16384 cc: cc (Debian 12.2.0-14+deb12u1) 12.2.0
+governor: ondemand temp_mC: 58950
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+samtal_before_after: 200 / 200 (checked)
+build: LIBOBJS shipped CFLAGS (no -O, -O0) + harness -O2 (bench_k002 precedent); K-004 -O2 NOT in this base
+perf: /usr/bin/perf present, perf_event_paranoid=2, user counters permitted
+--- timing raw (7 fresh processes, all workloads per process) ---
+mimir,seq64,819200,1418442,1,16276538888593903616,20
+mimir,rand64,819200,1662423,2,16276538888593903616,15
+mimir,seq1024,204800,822369,4,8680820740575863808,69
+mimir,rand1024,204800,814480,3,8680820740575863808,67
+mimir,mixed_allocorder,409600,1239590,3,17361641481151727616,70
+mimir,mixed_grouped,409600,1798294,4,17361641481151727616,70
+mimir,churn64,100000,281373695,2813,110000,0
+mimir,churn8192,5000,31158678,6231,5500,10000
+mimir,seq64,819200,2956921,3,16276538888593903616,20
+mimir,rand64,819200,1693183,2,16276538888593903616,15
+mimir,seq1024,204800,907536,4,8680820740575863808,69
+mimir,rand1024,204800,968295,4,8680820740575863808,67
+mimir,mixed_allocorder,409600,1473572,3,17361641481151727616,70
+mimir,mixed_grouped,409600,1979405,4,17361641481151727616,70
+mimir,churn64,100000,284985134,2849,110000,0
+mimir,churn8192,5000,32138788,6427,5500,10000
+mimir,seq64,819200,1534516,1,16276538888593903616,20
+mimir,rand64,819200,2029256,2,16276538888593903616,15
+mimir,seq1024,204800,1051443,5,8680820740575863808,69
+mimir,rand1024,204800,1344979,6,8680820740575863808,67
+mimir,mixed_allocorder,409600,1729775,4,17361641481151727616,70
+mimir,mixed_grouped,409600,2550886,6,17361641481151727616,70
+mimir,churn64,100000,285171337,2851,110000,0
+mimir,churn8192,5000,31098993,6219,5500,10000
+mimir,seq64,819200,1658331,2,16276538888593903616,20
+mimir,rand64,819200,1678146,2,16276538888593903616,15
+mimir,seq1024,204800,907610,4,8680820740575863808,69
+mimir,rand1024,204800,863758,4,8680820740575863808,67
+mimir,mixed_allocorder,409600,1208350,2,17361641481151727616,70
+mimir,mixed_grouped,409600,1956238,4,17361641481151727616,70
+mimir,churn64,100000,290605515,2906,110000,0
+mimir,churn8192,5000,32360843,6472,5500,10000
+mimir,seq64,819200,1566553,1,16276538888593903616,20
+mimir,rand64,819200,1982924,2,16276538888593903616,15
+mimir,seq1024,204800,884795,4,8680820740575863808,69
+mimir,rand1024,204800,907481,4,8680820740575863808,67
+mimir,mixed_allocorder,409600,1225294,2,17361641481151727616,70
+mimir,mixed_grouped,409600,1850016,4,17361641481151727616,70
+mimir,churn64,100000,284770523,2847,110000,0
+mimir,churn8192,5000,31490548,6298,5500,10000
+mimir,seq64,819200,1415053,1,16276538888593903616,20
+mimir,rand64,819200,1676479,2,16276538888593903616,15
+mimir,seq1024,204800,829888,4,8680820740575863808,69
+mimir,rand1024,204800,821517,4,8680820740575863808,67
+mimir,mixed_allocorder,409600,1287999,3,17361641481151727616,70
+mimir,mixed_grouped,409600,1809830,4,17361641481151727616,70
+mimir,churn64,100000,287474333,2874,110000,0
+mimir,churn8192,5000,30911364,6182,5500,10000
+mimir,seq64,819200,1439757,1,16276538888593903616,20
+mimir,rand64,819200,1670072,2,16276538888593903616,15
+mimir,seq1024,204800,866962,4,8680820740575863808,69
+mimir,rand1024,204800,788295,3,8680820740575863808,67
+mimir,mixed_allocorder,409600,1202332,2,17361641481151727616,70
+mimir,mixed_grouped,409600,1765016,4,17361641481151727616,70
+mimir,churn64,100000,293135826,2931,110000,0
+mimir,churn8192,5000,31165770,6233,5500,10000
+--- summary ---
+churn64: n=7 ns/access median=2851.71 min=2813.74 max=2931.36 all=[2813.74, 2847.71, 2849.85, 2851.71, 2874.74, 2906.06, 2931.36] ck=['110000'] build_minflt_median=0
+churn8192: n=7 ns/access median=6233.15 min=6182.27 max=6472.17 all=[6182.27, 6219.8, 6231.74, 6233.15, 6298.11, 6427.76, 6472.17] ck=['5500'] build_minflt_median=10000
+mixed_allocorder: n=7 ns/access median=3.03 min=2.94 max=4.22 all=[2.94, 2.95, 2.99, 3.03, 3.14, 3.6, 4.22] ck=['17361641481151727616'] build_minflt_median=70
+mixed_grouped: n=7 ns/access median=4.52 min=4.31 max=6.23 all=[4.31, 4.39, 4.42, 4.52, 4.78, 4.83, 6.23] ck=['17361641481151727616'] build_minflt_median=70
+rand1024: n=7 ns/access median=4.22 min=3.85 max=6.57 all=[3.85, 3.98, 4.01, 4.22, 4.43, 4.73, 6.57] ck=['8680820740575863808'] build_minflt_median=67
+rand64: n=7 ns/access median=2.05 min=2.03 max=2.48 all=[2.03, 2.04, 2.05, 2.05, 2.07, 2.42, 2.48] ck=['16276538888593903616'] build_minflt_median=15
+seq1024: n=7 ns/access median=4.32 min=4.02 max=5.13 all=[4.02, 4.05, 4.23, 4.32, 4.43, 4.43, 5.13] ck=['8680820740575863808'] build_minflt_median=69
+seq64: n=7 ns/access median=1.87 min=1.73 max=3.61 all=[1.73, 1.73, 1.76, 1.87, 1.91, 2.02, 3.61] ck=['16276538888593903616'] build_minflt_median=20
+--- perf stat raw (3 reps per access workload, whole-process counters) ---
+perf workload=seq64 rep=1
+21108131,,cycles:u,9226351,100.00,,
+310795,,cache-misses:u,9226351,100.00,1.24,of all cache refs
+25132440,,cache-references:u,9226351,100.00,,
+25132440,,dTLB-loads,9226351,100.00,,
+868,,dTLB-load-misses,9226351,100.00,0.00,of all dTLB cache accesses
+perf workload=seq64 rep=2
+20976031,,cycles:u,9166537,100.00,,
+328349,,cache-misses:u,9166537,100.00,1.31,of all cache refs
+25127412,,cache-references:u,9166537,100.00,,
+25127412,,dTLB-loads,9166537,100.00,,
+782,,dTLB-load-misses,9166537,100.00,0.00,of all dTLB cache accesses
+perf workload=seq64 rep=3
+21041285,,cycles:u,9197296,100.00,,
+311052,,cache-misses:u,9197296,100.00,1.24,of all cache refs
+25128990,,cache-references:u,9197296,100.00,,
+25128990,,dTLB-loads,9197296,100.00,,
+807,,dTLB-load-misses,9197296,100.00,0.00,of all dTLB cache accesses
+perf workload=rand64 rep=1
+22867379,,cycles:u,9994593,100.00,,
+1267502,,cache-misses:u,9994593,100.00,5.04,of all cache refs
+25146778,,cache-references:u,9994593,100.00,,
+25146778,,dTLB-loads,9994593,100.00,,
+814,,dTLB-load-misses,9994593,100.00,0.00,of all dTLB cache accesses
+perf workload=rand64 rep=2
+22229834,,cycles:u,9766778,100.00,,
+1264589,,cache-misses:u,9766778,100.00,5.03,of all cache refs
+25145049,,cache-references:u,9766778,100.00,,
+25145049,,dTLB-loads,9766778,100.00,,
+766,,dTLB-load-misses,9766778,100.00,0.00,of all dTLB cache accesses
+perf workload=rand64 rep=3
+21951302,,cycles:u,9716499,100.00,,
+1264229,,cache-misses:u,9716499,100.00,5.03,of all cache refs
+25146198,,cache-references:u,9716499,100.00,,
+25146198,,dTLB-loads,9716499,100.00,,
+909,,dTLB-load-misses,9716499,100.00,0.00,of all dTLB cache accesses
+perf workload=seq1024 rep=1
+8329659,,cycles:u,4146371,100.00,,
+377272,,cache-misses:u,4146371,100.00,6.01,of all cache refs
+6282569,,cache-references:u,4146371,100.00,,
+6282569,,dTLB-loads,4146371,100.00,,
+64108,,dTLB-load-misses,4146371,100.00,1.02,of all dTLB cache accesses
+perf workload=seq1024 rep=2
+8761737,,cycles:u,4424241,100.00,,
+377452,,cache-misses:u,4424241,100.00,6.01,of all cache refs
+6284571,,cache-references:u,4424241,100.00,,
+6284571,,dTLB-loads,4424241,100.00,,
+64108,,dTLB-load-misses,4424241,100.00,1.02,of all dTLB cache accesses
+perf workload=seq1024 rep=3
+8591242,,cycles:u,4305796,100.00,,
+377168,,cache-misses:u,4305796,100.00,6.00,of all cache refs
+6281588,,cache-references:u,4305796,100.00,,
+6281588,,dTLB-loads,4305796,100.00,,
+64666,,dTLB-load-misses,4305796,100.00,1.03,of all dTLB cache accesses
+perf workload=rand1024 rep=1
+8312867,,cycles:u,4432003,100.00,,
+385275,,cache-misses:u,4432003,100.00,6.13,of all cache refs
+6287406,,cache-references:u,4432003,100.00,,
+6287406,,dTLB-loads,4432003,100.00,,
+120257,,dTLB-load-misses,4432003,100.00,1.91,of all dTLB cache accesses
+perf workload=rand1024 rep=2
+8434630,,cycles:u,4263813,100.00,,
+385412,,cache-misses:u,4263813,100.00,6.13,of all cache refs
+6282758,,cache-references:u,4263813,100.00,,
+6282758,,dTLB-loads,4263813,100.00,,
+120289,,dTLB-load-misses,4263813,100.00,1.91,of all dTLB cache accesses
+perf workload=rand1024 rep=3
+8241521,,cycles:u,4138408,100.00,,
+384959,,cache-misses:u,4138408,100.00,6.13,of all cache refs
+6283629,,cache-references:u,4138408,100.00,,
+6283629,,dTLB-loads,4138408,100.00,,
+119916,,dTLB-load-misses,4138408,100.00,1.91,of all dTLB cache accesses
+perf workload=mixed_allocorder rep=1
+19073687,,cycles:u,8868870,100.00,,
+590606,,cache-misses:u,8868870,100.00,3.55,of all cache refs
+16622137,,cache-references:u,8868870,100.00,,
+16622137,,dTLB-loads,8868870,100.00,,
+127145,,dTLB-load-misses,8868870,100.00,0.76,of all dTLB cache accesses
+perf workload=mixed_allocorder rep=2
+18350783,,cycles:u,8439704,100.00,,
+589478,,cache-misses:u,8439704,100.00,3.55,of all cache refs
+16620560,,cache-references:u,8439704,100.00,,
+16620560,,dTLB-loads,8439704,100.00,,
+127446,,dTLB-load-misses,8439704,100.00,0.77,of all dTLB cache accesses
+perf workload=mixed_allocorder rep=3
+19154542,,cycles:u,8835203,100.00,,
+590841,,cache-misses:u,8835203,100.00,3.55,of all cache refs
+16620217,,cache-references:u,8835203,100.00,,
+16620217,,dTLB-loads,8835203,100.00,,
+126920,,dTLB-load-misses,8835203,100.00,0.76,of all dTLB cache accesses
+perf workload=mixed_grouped rep=1
+19084728,,cycles:u,8745076,100.00,,
+615840,,cache-misses:u,8745076,100.00,3.71,of all cache refs
+16614733,,cache-references:u,8745076,100.00,,
+16614733,,dTLB-loads,8745076,100.00,,
+126888,,dTLB-load-misses,8745076,100.00,0.76,of all dTLB cache accesses
+perf workload=mixed_grouped rep=2
+19404875,,cycles:u,8989480,100.00,,
+617842,,cache-misses:u,8989480,100.00,3.72,of all cache refs
+16614490,,cache-references:u,8989480,100.00,,
+16614490,,dTLB-loads,8989480,100.00,,
+126701,,dTLB-load-misses,8989480,100.00,0.76,of all dTLB cache accesses
+perf workload=mixed_grouped rep=3
+20250563,,cycles:u,9264426,100.00,,
+622984,,cache-misses:u,9264426,100.00,3.75,of all cache refs
+16622653,,cache-references:u,9264426,100.00,,
+16622653,,dTLB-loads,9264426,100.00,,
+127280,,dTLB-load-misses,9264426,100.00,0.77,of all dTLB cache accesses

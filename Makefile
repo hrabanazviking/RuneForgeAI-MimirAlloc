@@ -1467,3 +1467,15 @@ $(BUILD)/bench_k004: $(LIBOBJS) $(BUILD)/bench_k004.o
 bench-k004: $(BUILD)/bench_k004
 	./$(BUILD)/bench_k004
 .PHONY: bench-k004
+
+# K-005: locality bench - one harness (tests/perf/bench_k005.c)
+# linked against banked LIBOBJS (-O0 shipped flavour; harness
+# -O2, bench_k002 precedent). Standalone, NOT in `make test`.
+$(BUILD)/bench_k005.o: tests/perf/bench_k005.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -c tests/perf/bench_k005.c -o $@
+$(BUILD)/bench_k005: $(LIBOBJS) $(BUILD)/bench_k005.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/bench_k005.o -o $@
+bench-k005: $(BUILD)/bench_k005
+	./tests/perf/run_bench_k005.sh /tmp/k005_raw.txt 7
+	python3 tests/perf/summarize_k005.py /tmp/k005_raw.txt
+.PHONY: bench-k005
