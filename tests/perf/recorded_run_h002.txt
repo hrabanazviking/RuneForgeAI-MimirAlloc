@@ -1,0 +1,52 @@
+H-002 recorded run - Phase 8 cross-thread/contention baseline
+Sat Nov  7 02:06:43 AM EST 2026
+base: 3a93c112e95d96b0b6689c6f9baa0f6346d1ebdd branch: yrsa/mimiralloc-02
+aarch64
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+--- architecture greps (recorded) ---
+src/platform/mimir_platform.c:140:static pthread_mutex_t mimir_global_lock = PTHREAD_MUTEX_INITIALIZER;
+grep _Thread_local/__thread/pthread_key (expect no match, exit 1):
+grep_exit:1
+192:static struct mimir_descriptor *mimir_registry_head; /* NULL: empty */
+228:    desc->list_next = mimir_registry_head;
+229:    if (mimir_registry_head != NULL) {
+230:        mimir_registry_head->list_prev = desc;
+232:    mimir_registry_head = desc;
+242:        mimir_registry_head = desc->list_next;
+--- probe reps (make test-h002 x3) ---
+REP 1
+CONFIG threads=1 cross_ops=1500 pattern_fail=0 null_fail=0 cross_max_ns=48219839 contention_ops=1500 contention_sum_ns=6076844 contention_ns_per_op=4051 wall_ns=59195102 OK
+CONFIG threads=2 cross_ops=3000 pattern_fail=0 null_fail=0 cross_max_ns=198685349 contention_ops=3000 contention_sum_ns=24825336 contention_ns_per_op=8275 wall_ns=221882169 OK
+CONFIG threads=4 cross_ops=6000 pattern_fail=0 null_fail=0 cross_max_ns=678904376 contention_ops=6000 contention_sum_ns=77010355 contention_ns_per_op=12835 wall_ns=723849368 OK
+CONFIG threads=8 cross_ops=12000 pattern_fail=0 null_fail=0 cross_max_ns=3038009494 contention_ops=12000 contention_sum_ns=344408608 contention_ns_per_op=28700 wall_ns=3157296529 OK
+RESULT: PASS
+probe_exit:0
+REP 2
+CONFIG threads=1 cross_ops=1500 pattern_fail=0 null_fail=0 cross_max_ns=50980410 contention_ops=1500 contention_sum_ns=6474102 contention_ns_per_op=4316 wall_ns=63187671 OK
+CONFIG threads=2 cross_ops=3000 pattern_fail=0 null_fail=0 cross_max_ns=203883805 contention_ops=3000 contention_sum_ns=25433316 contention_ns_per_op=8477 wall_ns=228668993 OK
+CONFIG threads=4 cross_ops=6000 pattern_fail=0 null_fail=0 cross_max_ns=742385731 contention_ops=6000 contention_sum_ns=98616304 contention_ns_per_op=16436 wall_ns=792216328 OK
+CONFIG threads=8 cross_ops=12000 pattern_fail=0 null_fail=0 cross_max_ns=3039820287 contention_ops=12000 contention_sum_ns=309338379 contention_ns_per_op=25778 wall_ns=3137686704 OK
+RESULT: PASS
+probe_exit:0
+REP 3
+CONFIG threads=1 cross_ops=1500 pattern_fail=0 null_fail=0 cross_max_ns=48648080 contention_ops=1500 contention_sum_ns=6277436 contention_ns_per_op=4184 wall_ns=59497676 OK
+CONFIG threads=2 cross_ops=3000 pattern_fail=0 null_fail=0 cross_max_ns=175049179 contention_ops=3000 contention_sum_ns=24638520 contention_ns_per_op=8212 wall_ns=198133480 OK
+CONFIG threads=4 cross_ops=6000 pattern_fail=0 null_fail=0 cross_max_ns=711944570 contention_ops=6000 contention_sum_ns=105519944 contention_ns_per_op=17586 wall_ns=763023998 OK
+CONFIG threads=8 cross_ops=12000 pattern_fail=0 null_fail=0 cross_max_ns=3000324769 contention_ops=12000 contention_sum_ns=293735661 contention_ns_per_op=24477 wall_ns=3101198330 OK
+RESULT: PASS
+probe_exit:0
+--- make test ---
+make_test_exit:0
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+--- ABI ---
+4
+0000000000000988 T mimir_calloc
+0000000000000954 T mimir_free
+0000000000000924 T mimir_malloc
+00000000000009c0 T mimir_realloc
+--- Samtal ---
+samtal_http:200

@@ -803,3 +803,17 @@ test-h001: $(BUILD)/test_h001
 	./$(BUILD)/test_h001 $(BUILD)/libmimiralloc.so
 
 .PHONY: test-h001
+
+# H-002: Phase 8 cross-thread/contention baseline probe -
+# standalone via make test-h002; NOT part of make test.
+# Recorded run: tests/perf/recorded_run_h002.txt.
+$(BUILD)/probe_h002.o: tests/perf/probe_h002.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_h002.c -o $@
+
+$(BUILD)/probe_h002: $(LIBOBJS) $(BUILD)/probe_h002.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_h002.o -o $@
+
+test-h002: $(BUILD)/probe_h002
+	./$(BUILD)/probe_h002
+
+.PHONY: test-h002
