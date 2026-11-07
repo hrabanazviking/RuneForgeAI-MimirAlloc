@@ -1237,3 +1237,664 @@ The project should neither freeze all invention after 1.0 nor merge everything e
 
 ---
 
+## 22. Cross-cutting test and measurement matrices
+
+These matrices are **templates for future qualification**, not current pass results. Every cell begins OWED unless a recorded result at the exact named commit, target and flavor is linked. Import existing Phase 3–13 evidence only where its test environment and contract genuinely match. Do not relabel an emulated run as native.
+
+### 22.1 Build/test axis matrix
+
+| Axis | Minimum categories | Evidence requirement |
+|---|---|---|
+| Architecture | AArch64, x86-64; optional RISC-V | Native / emulated / cross-build labelled distinctly |
+| Libc | glibc, musl, bionic | ABI + runtime contract at exact libc |
+| Page size | 4 KiB and 16 KiB where applicable | In-run page-size measurement and mapping test |
+| Build mode | release, debug, hardened | Separate binaries, symbols, tests and overhead table |
+| Compiler | GCC and Clang supported versions | Warnings, link, optimizations and ABI exports |
+| Link model | static, dynamic, optional explicit plugin | Ownership and loader-lifetime proof |
+| Thread count | 1, 2, 4, 8, stress target | Isolation, cross-thread frees, p99 and deadlocks |
+| Allocation size | 0, 1, class boundaries, page boundaries, huge, overflow | Contract and data-integrity test |
+| Failure mode | mmap/munmap/mutex/errno/fd/overflow/OOM | Deterministic injection and correct rollback |
+| Lifecycle | startup, idle, churn, trim, unload, restart | No unexpected ownership loss or retained growth |
+| Pressure | normal, cgroup, RLIMIT_AS, Android background | Bounded refusal and responsiveness |
+| Workload | synthetic + trace + real consumer | Validated output and comparable baseline |
+| Security | fuzz, model checks, sanitizer, corrupted metadata | Zero untriaged defects in supported scope |
+| Delivery | source archive, shared/static package | Signature/hash/provenance, install, consumer run |
+| Privacy | profiling off/on, local/cloud opt-in | No unapproved data transmission |
+
+A supported target does **not** require every future optional extension. The release manifest must define its exact required rows and exclude experimental rows explicitly. Matrix expansion should be deliberate to avoid combinatorial explosion.
+
+### 22.2 Quality gates and stopping rules
+
+| Gate | Positive evidence | Immediate blocker |
+|---|---|---|
+| Q1 correctness | Contract suite, property invariants, corruption and failure recovery | Overlapping live allocations, lost ownership, failed integrity |
+| Q2 threading | Cross-thread and same-thread tests, bounded soak, synchronization fault handling | Reproducible deadlock, untriaged race or silent lock failure |
+| Q3 ABI | Correct exported symbols, SONAME policy, clean consumer test | Unreviewed ABI change or broken old consumer |
+| Q4 platform | Real run on named target, page-size and libc proof | Claim relies only on emulation/cross-compile |
+| Q5 hardening | Security review, sanitizers/fuzz where meaningful, known-defect register | P0 unmitigated flaw with production claim |
+| Q6 performance | Correctness-preserving controlled benchmarks, tail+RSS | Unmeasured win claim, severe undisclosed regression |
+| Q7 release | SBOM + hashes + provenance + rollback + security contact | Missing signed provenance/working support as defined by release scope |
+| Q8 app integration | Actual routed allocation, correct output, fallback | Adapter demo claimed as inference proof |
+| Q9 experimental | Feature flag, threat model, rollback and separate evidence | Remote service required for local malloc or unsafe default |
+| Q10 documentation | Claims match code and latest run | Silent omission of known limitation |
+
+### 22.3 Size-class and arithmetic edge suite
+
+A future tests/contract/size_boundary_matrix should cover at least:
+
+- Zero request, 1 byte, two bytes, max_align_t, every size-class boundary minus one/equal/plus one.
+- Zero factors for calloc, 1×large, large×1, multiplication overflow and near-SIZE_MAX factors.
+- Large allocation near page boundary, next page, multi-page and across direct-mmap transition.
+- Realloc shrink, equal, grow, cross-class, map-to-span and span-to-map transitions.
+- Realloc failure atomicity: original contents and ownership intact.
+- Free NULL, free live valid pointer, double free and invalid-pointer behavior as *documented* (not undefined-behavior guarantees invented by tests).
+- Cross-thread realloc/free with concurrent allocations and source-buffer integrity checks.
+- Operations during init, first concurrent call, diagnostics, trim, repeated library load/unload and process exit.
+- Aligned results for all documented required alignments; misalignment flagged before use.
+
+### 22.4 Fragmentation and memory accounting
+
+Report these independently and consistently, with definitions in docs/METRICS_CONTRACT.md:
+
+- **Requested-live:** sum of live user-requested sizes, only if the allocator actually tracks the sizes.
+- **Allocated-class:** physical class capacity given to live objects.
+- **Mapped:** bytes obtained from OS memory-mapping calls and still held, accounting for unmap successes/failures.
+- **Retained-free:** allocator-managed mapped storage with no live objects that remains reusable.
+- **Internal fragmentation:** class slot capacity minus requested bytes of live objects.
+- **External fragmentation:** free capacity unavailable for a requested object shape; workload-specific denominator required.
+- **Metadata:** descriptor/span/static/runtime overhead, including per-thread/per-CPU caches where applicable.
+- **Resident:** RSS/PSS or cgroup as measured from OS instrumentation. These are not derivable exactly from mapped bytes.
+- **File-backed:** weight file pages and OS page-cache effects; do not assign to allocator-owned anonymous heap.
+- **GPU/NPU:** runtime/driver-reported allocations, marked unknown if reporting unavailable.
+- **Remote inventory:** a peer-advertised resource, not local resident capacity.
+
+For every figure, report sampling method, units, timing, target, counter/measurement provenance, and whether it is exact, estimated or unavailable.
+
+### 22.5 Multi-thread schedule/failure suite
+
+Plan deterministic tests for these interleavings:
+
+1. Thread A allocates while B frees previously owned block.
+2. Two threads free distinct slots in same span.
+3. Thread A reallocates to a new size class while B is working on a distinct allocation.
+4. Thread A trims while B allocates and C frees.
+5. Thread A dies with outstanding allocations; B later frees them.
+6. Deferred cancellation between calls and during a test-controlled safe point.
+7. Unsupported asynchronous cancellation exposed as a negative scope boundary (do not promote).
+8. Lock acquisition failure on alloc/free/trim; safe state and visible report.
+9. Unlock failure after mutation, with explicitly defined fail-stop behavior.
+10. Diagnostic write failure during OOM, with no further allocation.
+11. dlclose after quiescence and after a controlled misused active-object scenario (unsupported case isolated).
+12. Fork without threads versus fork with active threads (documented unsafe posture).
+13. Concurrent config-change attempt against current runtime mutability contract.
+14. Cross-thread small-path free vs large-path free, verifying both stats paths.
+15. Concurrent long-duration churn with constrained virtual address space.
+
+Only legal supported behavior is required to succeed, but forbidden behavior must be documented and where feasible fail predictably.
+
+### 22.6 Baseline publication template
+
+| Benchmark | MimirAlloc revision | Reference revision | Target | Metrics | Verdict |
+|---|---|---|---|---|---|
+| PERF-01 | SHA required | exact libc build | CPU/page size required | p50/p95/p99, RSS, variance | OWED |
+| PERF-06 | SHA required | exact libc build | thread topology required | scaling, contention, tails | OWED |
+| PERF-10 | SHA required | baseline consumer | trace hash required | duration, correctness, RSS | OWED |
+| PERF-15 | real A.E.S.I.R. + model hash required | same engine/model | actual backend required | tokens/sec, TTFT, KV, output | OWED |
+| PERF-16 | physical Android app required | same app/target | measured device required | frame time, PSS, power | OWED |
+
+Do **not** fill this template with the Phase 11 numbers until each original workload and control is copied accurately. Phase 11 remains the historical reference.
+
+---
+
+## 23. Release checklists and mechanical evidence schemas
+
+### 23.1 Engineering slice ticket template
+
+Copy into docs/work-orders/N-XX-YY.md when implementing a task.
+
+~~~markdown
+# N-XX-YY — Short, measurable title
+
+Status: PROPOSED | IN PROGRESS | MERGED | VERIFIED-RUN | PARTIAL | OWED | BLOCKED
+Priority: P0 | P1 | P2 | P3
+Owner:
+Independent reviewer:
+Target branch and base SHA:
+Files allowed to change:
+Dependencies and required decisions:
+Protected host/service constraints:
+
+## Problem and baseline
+- Historical INC/phase references:
+- Exact defect, performance issue or missing evidence:
+- Existing reproduction (command, target and observed result):
+- Scope and excluded behavior:
+
+## Design
+- Minimum safe change:
+- Alternatives considered:
+- ABI/ownership/lock/failure consequences:
+- Portability and provenance implications:
+- Rollback/reversal:
+- Why the change does not silently broaden public claims:
+
+## Tests to run
+- Exact commands and expected exit codes:
+- Fault and adversarial cases:
+- Benchmarks and raw metrics if performance-related:
+- Environment manifest and data retention:
+- Sanity controls; existing negative cases to retain:
+
+## Results
+- Commit SHA and file diff:
+- Full stdout/stderr logs with exit status:
+- Machine, kernel, libc, page size, compiler, flags:
+- Counts, failures, skipped cases, sanitizer results:
+- Known limitations and new INCs:
+
+## Review and verdict
+- Reviewer findings:
+- Acceptance checklist:
+- Verdict: MET | PARTIAL | UNMET | OWED | BLOCKED
+- Next steps, owner and evidence needed to close:
+~~~
+
+### 23.2 Run evidence schema
+
+A test run archived as machine-readable metadata should contain at least:
+
+~~~yaml
+schema_version: 1
+project: mimiralloc
+purpose: contract-test
+status: recorded-not-independently-reproduced
+source_commit: EXACT_SHA_HERE
+target:
+  architecture: aarch64
+  os: Debian
+  kernel: EXACT_KERNEL_HERE
+  libc: glibc
+  libc_version: EXACT_VERSION_HERE
+  page_size_bytes: 16384
+toolchain:
+  compiler: EXACT_COMPILER_HERE
+  flags: EXACT_FLAGS_HERE
+build:
+  command: "make clean && make test"
+  exit_code: null
+test:
+  command: "make test"
+  exit_code: null
+  checks_run: null
+  failed: null
+  skipped: null
+logs:
+  stdout_path: tests/evidence/recorded_run.txt
+  stderr_path: tests/evidence/recorded_err.txt
+  sha256: EXACT_SHA256_HERE
+controls:
+  service_health_before: NOT_MEASURED
+  service_health_after: NOT_MEASURED
+  free_memory_before: NOT_MEASURED
+  free_memory_after: NOT_MEASURED
+verdict: OWED
+reviewed_by: null
+~~~
+
+This example is an **empty schema illustration**, not a claim a new test ran. A release gate should refuse null mandatory fields rather than silently substitute assumed values.
+
+### 23.3 Minimal source and ABI proof script outline
+
+Future maintainers can build a verified script from the following recorded 0.1.0 instructions. **Confirm targets and toolchain first**; running these commands as text here is not evidence that they succeeded today.
+
+~~~sh
+git rev-parse HEAD
+cat VERSION
+make clean
+make test
+make lib
+nm -D --defined-only build/libmimiralloc.so
+make test-fuzz-m004
+# Known historical standalone issue: do not silently omit:
+make test-g008
+# Release-specific procedure lives in docs/REPRODUCIBLE_BUILD.md
+~~~
+
+The separate test-g008 command may exit nonzero because its stale expectation is still an open item. Logs must capture that failure and cite the governing decision. The proper versioned library / SONAME / SHA256 proof follows docs/REPRODUCIBLE_BUILD.md and changes with release policy.
+
+### 23.4 Code-review checklist for a memory allocator patch
+
+- [ ] Pointer arithmetic and sizes checked for overflow before use.
+- [ ] No assumption that alignment/page size is a universal constant.
+- [ ] No unvalidated caller pointer used to read internal metadata.
+- [ ] Error paths preserve pointer ownership and public data guarantees.
+- [ ] State transition is explicit and lock/atomic ordering documented.
+- [ ] Cross-thread and recursion hazards considered.
+- [ ] Direct OS mapping and release lengths agree, including rollback.
+- [ ] Debug/hardened/production variants considered.
+- [ ] No accidental global allocator symbol/interposition or changed SONAME.
+- [ ] New diagnostics cannot recursively call allocation routines.
+- [ ] Reproducer for each bug and adverse cases committed.
+- [ ] Memory overhead and latency impact measured if hot path touched.
+- [ ] Source provenance and license checked; no unreviewed copied implementation.
+- [ ] All affected supported-target rows updated with evidence or OWED.
+- [ ] Failed tests, skips and unsupported cases listed openly.
+- [ ] Reviewer independent of the code-generation agent.
+
+### 23.5 Stable release candidate gate checklist
+
+A release candidate **must not be labelled 1.0** solely because this checklist exists.
+
+- [ ] Approved scope-specific release contract and historical M-009 verdict retained.
+- [ ] No release-blocking P0 bug.
+- [ ] Contract semantics and 0.x-to-1.x ABI migration decision complete.
+- [ ] Full supported-target suite and required standalone tests pass.
+- [ ] Security review and adversarial/sanitizer/fuzz reports attached.
+- [ ] Real native device/host evidence for every claimed supported platform.
+- [ ] Measured application workload and benchmark matrix with negative results.
+- [ ] Reproducible release artifacts, SBOM and dependency provenance.
+- [ ] Artifact authenticity/attestation verified by independent consumer.
+- [ ] Package install/uninstall and rollback tested outside source tree.
+- [ ] Security reporting path is operational.
+- [ ] User documentation and unsupported-case statement reviewed.
+- [ ] Owner explicitly approves release candidate and separately approves release.
+- [ ] Any exception is documented with scope, expiry and risk owner.
+
+### 23.6 Release evidence folder organization (proposed)
+
+~~~text
+docs/
+  PRODUCTION_AND_BEYOND_MASTER_ROADMAP_2026-11-07.md
+  PRODUCTION_DEBT_LEDGER.md
+  RELEASE_SCOPE_DECISION.md
+  CAPABILITY_EVIDENCE_MATRIX.md
+  PLATFORM_QUALIFICATION_2026.md
+  work-orders/
+    N-14-01.md
+    N-14-02.md
+    ...
+  releases/
+    0.9.0-rc1/
+      SCOPE.md
+      TARGETS.md
+      VERIFICATION.md
+      PERFORMANCE.md
+      SECURITY.md
+      SIGNOFF.md
+tests/
+  evidence/
+    <phase-and-target-tag>/
+release/
+  SHA256SUMS
+  ...
+~~~
+
+These example paths are **proposed future artifacts** and do not imply those files currently exist. Release checksums must correspond to the exact released bytes.
+
+---
+
+## 24. Critical path, wave allocations and priority queue
+
+### 24.1 Hard dependencies
+
+~~~text
+Existing research 0.1.0 + M-009 PARTIAL exit
+                 |
+                 v
+      PHASE 14 — evidence truth
+        /       |          \
+       v        v           v
+   PHASE 15  PHASE 16   Scope decision
+   correctness platform       |
+       |         |            |
+       v         v            |
+   PHASE 17  Android lane     |
+   hardening      |            |
+       |         v            |
+       +------> PHASE 21      |
+       |                      |
+       v                      v
+   PHASE 18 --------------> PHASE 19
+   performance                release
+       |                         |
+       +---------> SCOPED LINUX RC / 1.0
+       |
+       +---------> PHASE 20 A.E.S.I.R. proof
+                         |
+                         v
+                  PHASES 22 / 24
+                  budgets + metrics
+                         |
+               +---------+----------+
+               v         v          v
+            PHASE 23  PHASE 25   PHASE 26
+            scaling   AI-aware  accelerators
+                         |          |
+                         +-----+----+
+                               v
+                            PHASE 27
+                          distributed
+                               |
+                               v
+                            PHASE 28
+                          agent research
+
+PHASE 29 (ecosystem) draws from qualified releases/consumers.
+PHASE 30 (maintenance) starts at the first production release
+and never stops while a supported release exists.
+~~~
+
+Phases 17, 18 and 19 can overlap *after* their shared interfaces and safety conditions are stable. The arrows are dependencies, not mandatory serialization of every documentation task. Experimental phases must not hold core correctness work hostage.
+
+### 24.2 Wave proposal
+
+| Wave | Execution theme | Suggested concurrent lanes | Gate / exit deliverable |
+|---|---|---|---|
+| **W14** | Evidence truth and scope decisions | Keeper, defect archivist, target researcher | G0, live debt ledger and release scope |
+| **W15** | ABI/semantics/lock-failure closure | Contract, core, independent adversarial review | G1 core safety |
+| **W16** | Real x86, ARM page-size and Android prerequisite runs | Platform, CI reviewer, physical device | G2 matrix |
+| **W17** | Security fault injection, fuzz and merged debug | Security, core, toolchain | G1 hardened release candidate |
+| **W18** | Benchmark and hot-path optimization | Perf, algorithm prototype, independent measurement | G3 measured value |
+| **W19** | Release tooling and scoped RC | Release, packaging, security | G4 signed-off RC |
+| **W20** | Mojo/A.E.S.I.R. route and model proof | Inference, FFI/ABI, device | G5 documented application use |
+| **W21** | Android and constrained edge qualification | Android, power/pressure, QA | Mobile scope release decision |
+| **W22–24** | Budgets, concurrency and metrics | Core, perf, API, telemetry | Feature-qualified extensions |
+| **W25–28** | AI-aware, heterogeneous, federated, agent experiments | Independent research teams | G6 per-module experimental gates |
+| **W29–30** | Ecosystem and maintenance | Release, integrations, community | Sustainable versioned support |
+
+A wave number is not a calendar promise. Resource availability, failed tests, mandatory owner decisions and external dependencies can reorder or block work.
+
+### 24.3 Critical first fifteen tickets
+
+1. **N-14-01:** current source/build/export inventory.
+2. **N-14-02:** reconciled live defect and evidence ledger.
+3. **N-14-03:** open and assign INC-M002-01/02 lock-failure closure.
+4. **N-14-04:** inspect and repair/repoint G-008 stale check with recorded negative-test history preserved.
+5. **N-14-05:** reconcile supported-platform docs to authoritative M-006 target grades.
+6. **N-14-07:** reconcile M-007 versioned artifact changes with M-008 public defects.
+7. **N-14-08:** record strict historic versus newly scoped Linux release-gate decision.
+8. **N-14-09:** re-run clean baseline with explicit g008 and fuzz outputs.
+9. **N-15-01:** stable C API behavioral contract ledger, all U-* unresolved questions.
+10. **N-15-08:** lock acquisition error reporting/rollback test.
+11. **N-15-09:** unlock failure detection/fail-stop policy test.
+12. **N-15-15:** production/debug/hardened merged-tree test.
+13. **N-16-01:** hosted native x86-64 portable suite, independent of Pi emulation.
+14. **N-16-03:** physical 4 KiB AArch64 Linux host proof.
+15. **N-17-02:** revisit the six silent metadata-corruption classes.
+
+These tasks come first because they strengthen trust in *every later experiment*. A new size class or AI policy cannot responsibly bypass unresolved ownership and lock guarantees.
+
+### 24.4 Suggested research-resource allocation
+
+These are planning ranges, not measured time or cost:
+
+- **45% of early effort:** correctness, security and evidence reconciliation.
+- **20%:** platform qualification, Android toolchains and physical devices.
+- **20%:** profiler-backed performance engineering and benchmarking.
+- **10%:** releases, compatibility and developer usability.
+- **5%:** isolated research into AI-aware and distributed directions, until G1–G4 are credible.
+
+After a qualified stable core is established, the mix may shift toward experimentation. No experimental workload may starve a shared host or displace a release blocker without an explicit owner decision.
+
+### 24.5 Ownership decisions explicitly reserved to Volmarr
+
+- Install of reserved system toolchains, NDKs, musl packages or host configuration changes.
+- Whether to activate GitHub CI automatically or keep manual dispatch.
+- Which targets to promise in an initial stable Linux release.
+- Whether to alter API semantics and commit to a stable ABI/SONAME policy.
+- Whether to collect new real-device telemetry or enable security reporting services.
+- Whether to publish packages or signatures through an identity-bearing workflow.
+- Whether to route model, user or agent data to another device/cloud provider.
+- Whether an experimental AI-optimized or distributed module may ship opt-in.
+
+Document the choice and date. Silence is not authorization.
+
+---
+
+## 25. Threat model, risk register and stop conditions
+
+### 25.1 Risk register
+
+| Risk | Impact | Leading indicator | Mitigation / owner |
+|---|---|---|---|
+| Silent lock/unlock errors | Corruption opacity, hangs | Fault injection cannot observe event | P0 core + adversarial reviewer, Phase 15 |
+| Incorrect pointer ownership | Memory corruption | Cross-allocator free or invalid deallocator | Contract review, explicit adapters, negative tests |
+| Metadata corruption | Process crash or exploit path | Undetected corrupt headers/links | Hardened metadata strategy, Phase 17 |
+| Platform overclaim | Unexpected crashes on Android/x86 | No native run or bionic semantics mismatch | Target matrix and verified-run evidence |
+| 16 KiB Android incompatibility | Install/load failures | ELF/PT_LOAD alignment failing | NDK/ELF test, official page-size guidance |
+| One-Pi test bias | Unsupported generalized claim | Only single page size/CPU kernel | Cross-target test campaign |
+| Performance worse than baseline | Unuseful deployment | Slowdowns in p99/RSS | Independent controlled benchmarks and fallback |
+| Unbounded cache retention | OOM/foreground degradation | Post-churn mapped/RSS growth | Explicit retention caps, trim, pressure tests |
+| Overaggressive reclaim | Latency thrash | Repeated map/unmap and p99 spikes | Controlled policy A/B, rollback |
+| CI supply chain attack | Compromised artifacts | Mutable actions, unverified builds | Restricted permissions, pinned inputs, signed provenance |
+| Unreviewed agent-generated code | UB, races, ABI drift | Large diffs without tests | Small PRs, independent reviewers, release gates |
+| False AI inference integration | Misleading product claim | Harness passes but engine never calls mimir_* | Real call-site proof and controlled inference |
+| Driver memory conflated with host heap | Incorrect memory accounting | GPU bytes added to mapped host bytes | Separate typed memory domains |
+| Network-tier data loss | Corruption / privacy leak | Unauthenticated transfers, stale leases | Off by default; handles, auth, checksums, permissioning |
+| Research sprawl | No production improvement | Many branches, no gate closure | Critical path priority and stop/go reviews |
+| Maintainer overload | No security response/support | Unowned patches and stale releases | Narrow support policy and smaller release scope |
+
+### 25.2 Immediate stop conditions
+
+Suspend the affected experiment/release and investigate if:
+
+- A live allocation overlaps another live allocation.
+- A supported operation changes another allocation's contents without authorization.
+- An untriaged concurrency deadlock, data race or unmapped metadata dereference is reproducible.
+- A known P0 bug remains unfixed while an RC is advertised as production.
+- Security diagnostics reveal a private secret or memory content without permission.
+- A benchmark script produces unexplained invalid output or skipped correctness checks.
+- A test campaign threatens a cohosting service or exhausts device memory outside agreed bounds.
+- A release artifact's hash, signature/provenance or SBOM does not match the actual published bytes.
+- An experiment reaches unapproved system-wide libc/malloc configuration.
+- An agent or remote optimizer changes production behavior without review and rollback.
+- A distributed transfer moves user-controlled private data to an unapproved destination.
+
+A stop is not a project failure; it is a safety gate working as intended.
+
+### 25.3 Explicit non-goals for the production core
+
+- No claim to fix arbitrary undefined behavior in applications.
+- No blanket malloc/free interposition on all libraries.
+- No unconditional fork-while-busy or async-cancellation support.
+- No automatic GPU/NPU allocation or acceleration.
+- No global/coherent RAM across unrelated devices.
+- No semantic interpretation of user data by the allocator.
+- No external LLM inference required for malloc/free.
+- No undisclosed background telemetry, exfiltration, upgrade or system configuration.
+- No universal performance win, ABI support or energy improvement without evidence.
+- No commitment to support every OS/architecture simultaneously.
+
+---
+
+## 26. Engineering research bibliography
+
+**Source policy:** these links are reference material for independent engineering and current platform requirements. They do **not** authorize copying source code into MimirAlloc under a “clean-room” label. Recheck versions, platform policies and licenses at implementation time. Research from November 2026 is a starting snapshot and may change.
+
+### 26.1 Core allocator designs (conceptual comparison only)
+
+1. **Google TCMalloc:** [overview](https://google.github.io/tcmalloc/), [design](https://github.com/google/tcmalloc/blob/master/docs/design.md), [repo](https://github.com/google/tcmalloc). Research per-CPU/per-thread caching, refill/transfer caches, large-object page heaps and explicit allocator-page versus OS-page semantics. **Do not infer that TCMalloc lacks Linux AArch64 support.** The original tablet failure must be diagnosed for its precise environment.
+2. **Microsoft mimalloc:** [project](https://github.com/microsoft/mimalloc), [research discussion](https://www.microsoft.com/en-us/research/blog/mimalloc-a-high-performance-scalable-memory-allocator-for-the-modern-era/). Review compact data structures, concurrency, memory footprint and selectable hardening concepts; measure comparisons independently.
+3. **jemalloc:** [official site and manual](https://jemalloc.net/). Reference fragmentation avoidance, scalable arenas, profiling and configuration; use version-pinned consumer comparisons.
+4. **Linux kernel Restartable Sequences:** [kernel documentation](https://kernel.org/doc/html/latest/userspace-api/rseq.html). Potential advanced per-CPU fast-path research; requires explicit kernel/ABI/runtime fallback.
+5. **Linux cgroup v2:** [kernel administrator guide](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html). Memory.high, memory.max, pressure and accounting behavior for realistic pressure tests.
+
+### 26.2 Platform and portability rules
+
+6. **Android official 16 KiB page-size guide:** [Android Developers](https://developer.android.com/guide/practices/page-sizes). Native libraries must be built/packaged for current page-size requirements; NDK r28+ defaults and binary alignment guidance are relevant, but real device proof is still required.
+7. **Android NDK build-system guidance:** [Build System Maintainers Guide](https://android.googlesource.com/platform/ndk/+/refs/heads/master/docs/BuildSystemMaintainers.md). Avoid compile-time PAGE_SIZE assumptions; validate native ABI/linker behavior.
+8. **Existing project page-size analysis:** [PAGE_SIZE_PORTABILITY](PAGE_SIZE_PORTABILITY.md). Implementation-specific 4/16 KiB arithmetic audit, not a substitute for a 4 KiB physical host run.
+9. **Existing target matrix:** [SUPPORTED_TARGETS](SUPPORTED_TARGETS.md). Authoritative supported/partial/owed distinctions at the M-006 baseline.
+10. **Existing Mojo/Android field notes:** [Android ARM64 research](field-notes/android-arm64-2026-11/README.md). Observations on tablet and toolchain environment; not evidence of installed MimirAlloc.
+
+### 26.3 Security, verification and supply chain
+
+11. **LLVM AddressSanitizer:** [official guide](https://clang.llvm.org/docs/AddressSanitizer.html). Understand custom allocator/tooling limitations, virtual address space overhead and why sanitizer runtimes are for testing rather than release-hardening.
+12. **LLVM libFuzzer:** [official guide](https://llvm.org/docs/LibFuzzer.html). Coverage-guided fuzzing, seed corpora, minimization, target entrypoints and limitations.
+13. **NIST SP 800-218 SSDF:** [NIST publication](https://csrc.nist.gov/pubs/sp/800/218/final). Secure development, protection, response and repeatable software supply-chain practices.
+14. **SLSA:** [build levels](https://slsa.dev/spec/v1.0/levels), [provenance model](https://slsa.dev/spec/v1.0/provenance). Establish what a provenance attestation proves and what it does not; target a level only after checking all actual requirements.
+15. **Sigstore/Cosign:** [signing overview](https://docs.sigstore.dev/cosign/signing/overview/), [quickstart](https://docs.sigstore.dev/quickstart/quickstart-cosign/). Authenticated artifact signatures and verification; separate from checksum-only accident detection.
+16. **GitHub artifact attestations:** [GitHub documentation](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations). Potential native provenance route if the owner authorizes CI publishing.
+17. **OpenSSF Scorecard:** [project](https://openssf.org/scorecard/). Useful source/repository security signal; not a substitute for allocator-specific review.
+
+### 26.4 MimirAlloc's authoritative internal research
+
+18. [M-009 Phase 13 exit](PHASE_13_EXIT_EVIDENCE.md): inherited release truth and carried-owed list.
+19. [M-001 stable criteria](PHASE_13_FOUNDATION_PLAN.md): the original 20-condition rule; do not retroactively regrade it.
+20. [Phase 3 exit](PHASE_3_EXIT_EVIDENCE.md): original portable suite debt and contract history.
+21. [Phase 4 exit](PHASE_4_EXIT_EVIDENCE.md): Android/bionic device evidence still owed.
+22. [Phase 10 exit](PHASE_10_EXIT_EVIDENCE.md): hardening and statistics caveats.
+23. [Phase 11 exit](PHASE_11_EXIT_EVIDENCE.md): measured baseline behind glibc.
+24. [Phase 12 exit](PHASE_12_EXIT_EVIDENCE.md): harness versus real A.E.S.I.R. integration distinction.
+25. [Known limitations and defects](LIMITATIONS_AND_KNOWN_DEFECTS.md): public register with items needing M-006/M-007 reconciliation.
+26. [Versioned release notes](PHASE_13_VERSIONING_AND_RELEASE_M007.md) and [reproducible build](REPRODUCIBLE_BUILD.md).
+27. [SBOM](SBOM.md) and [security policy](../SECURITY.md).
+28. [Original master research roadmap](MimirAlloc_Research_and_Development_Roadmap.md), plus the [research library](research/README.md) for speculative directions.
+
+**Research hygiene:** pin external docs by retrieval date or commit before writing a design decision; ensure examples are re-derived, testable and properly attributed. No third-party benchmark chart is evidence of this project's performance.
+
+---
+
+## 27. Next work orders
+
+This is the immediate, handoff-ready sequence for the keeper and specialized agents. These work orders are **proposals only**; no implementation described in this section has been performed merely by committing this roadmap.
+
+### Order A: ground-truth reconciliation
+
+**Primary:** Keeper/documentation verifier. **Reviewer:** independent release guardian.  
+**Base:** latest main before implementation.  
+**Output:** docs/PRODUCTION_DEBT_LEDGER.md, docs/RELEASE_SCOPE_DECISION.md and docs/PHASE_14_EXIT_EVIDENCE.md.
+
+1. Fetch M-009, current VERSION, README, SUPPORTED_TARGETS, SUPPORTED_PLATFORMS, BASELINE_INVENTORY, SECURITY.md and public limitations register.
+2. Enumerate M-009's 14 carried-owed groups, the complete public register and all named unresolved U-* and INC-* identities.
+3. Do not remove/retitle any older records. Mark outdated statuses explicitly superseded with original date/commit context.
+4. Reconcile version/SONAME, supported target grades and any obsolete documentation-only claims.
+5. Present the owner with the exact stable release scope choices, not an assumed decision.
+6. Run a lightweight inventory and report all unverified claims without modifying core code.
+7. Deliver a machine-readable set of open tasks and cross-links to docs and test evidence.
+8. Publish a reviewed Phase 14 packet showing each resolved or owed item.
+
+**Acceptance:** no missing issue identities, false supported claims or unlabelled stale platform rows.
+
+### Order B: lock error and corruption safety
+
+**Primary:** allocator core specialist. **Reviewer:** independent concurrency/adversarial specialist.  
+**Dependency:** Phase 14 findings.  
+**Output:** docs/LOCK_FAILURE_POSTURE.md, fault-injection harness, source patch and Phase 15 evidence.
+
+1. Read core synchronization paths, including every lock/unlock operation and early return.
+2. Classify code paths that mutate metadata before an unlock can fail.
+3. Design a bounded, observable failure policy, including allocation-free reporting.
+4. Create test-only injection points for lock acquisition and release errors with no production overhead when disabled.
+5. Prove retained metadata is safe or process fails explicitly; do not silently wedge later calls.
+6. Retain the exact public API export count until an ABI decision.
+7. Re-run full suite, targeted multithread tests, sanitizers when compatible, unload and OOM behavior.
+8. Record before/after logs, fault sites, limits and reviewer sign-off.
+
+**Acceptance:** INC-M002-01/02 closed by proof, or clearly blocking with a reproducible remaining gap.
+
+### Order C: native target qualification
+
+**Primary:** platform specialist. **Reviewer:** contract verifier.  
+**Dependencies:** owner hardware/toolchain permission, scoped tests.  
+**Output:** native x86-64 report, ARM64 4 KiB host plan/run and updated target matrix.
+
+1. Fix the workflow or run a native x86-64 host manually, preserving target details and full output.
+2. Confirm all C/API symbols, versioned shared object and consumer route actually execute.
+3. Test the portable suite, concurrency and page-size behavior; label emulator checks separately.
+4. Run on a real 4 KiB AArch64 Linux host when provisioned; no automatic switch from the Pi's current kernel.
+5. Keep musl and Android owed until their exact toolchain/device proof exists.
+6. Update target records only for genuinely executed criteria.
+
+**Acceptance:** historical Phase 3 x86 evidence debt discharged by a true hosted run, and target document claims track live proof.
+
+### Order D: diagnostic and full hardening integration
+
+**Primary:** security specialist. **Reviewer:** independent core engineer.  
+**Dependencies:** Phase 15 safety patch.  
+**Output:** merged hardened/debug build plus Phase 17 evidence.
+
+1. Reconcile production, debug/redzone, poisoning and hardened flags on one commit.
+2. Reproduce the 25 Phase 10 metadata probes; identify the six silent cases.
+3. Add mitigation hypotheses in order of exploitability and implementation complexity.
+4. Measure debug/hardened footprint and performance.
+5. Run seeded and coverage-guided fuzzing plus static/sanitizer checks where supported.
+6. Document all non-detectable classes and explicitly forbid unsupported blanket claims.
+
+**Acceptance:** integrated hardened build with no untriaged critical known fault in supported use.
+
+### Order E: profile before rewriting the fast path
+
+**Primary:** performance engineer. **Reviewer:** independent benchmark engineer.  
+**Dependencies:** correctness baseline and benchmark controls.  
+**Output:** PERF-01–PERF-12 reproducibility packet, CPU/lock breakdown and ranked optimization candidates.
+
+1. Reproduce Phase 11 measurements on an identical or precisely described host.
+2. Profile single-thread hot path, contention, mapping operations and size classes.
+3. Confirm relative performance deficits using raw runs and variance.
+4. Propose **one** narrow optimization with expected improvement and safety risk.
+5. Implement in isolated branch and compare with the same tests.
+6. Preserve a rejected/no-change result if performance does not improve meaningfully.
+
+**Acceptance:** measured evidence rather than ungrounded hot-path rewrite.
+
+### Order F: release candidate architecture
+
+**Primary:** release guardian. **Reviewer:** security and ABI specialists.  
+**Dependencies:** scope decision and Phases 15–18 gates.  
+**Output:** v1.0 release specification, package plan, SBOM/provenance and signed-off gate matrix.
+
+1. Confirm supported platforms and actual ABI stability obligations.
+2. Add reproducible build and independent consumer packaging checks.
+3. Select a verified artifact signing/attestation workflow with owner identity and authorization.
+4. Specify rollback, uninstall and vulnerability response.
+5. Rehearse a release without publishing a stable tag.
+6. Present unresolved gates and get an explicit publish decision.
+
+**Acceptance:** no release action until scope-specific quality and security gates all satisfy the chosen policy.
+
+### Order G: A.E.S.I.R. end-to-end proof
+
+**Primary:** AI inference integration specialist. **Reviewer:** allocator ABI + model-correctness specialist.  
+**Dependencies:** real runnable engine/model and stable allocator interface.  
+**Output:** explicit adapter, routed allocation trace, reproducible Qwen3 comparison and Phase 20 evidence.
+
+1. Confirm exact original Mojo blocker rather than accepting hearsay.
+2. Identify the real A.E.S.I.R. heap interfaces and ownership boundaries.
+3. Implement opt-in MimirAlloc routing with a zero-MimirAlloc fallback.
+4. Prove allocations actually traverse the new path in a full engine run.
+5. Perform controlled inference with the same model, prompt, context, backend, threads and thermal envelope.
+6. Report output, TTFT, throughput, mapped/resident host memory and all out-of-scope device memory.
+7. Re-run unload/context-resize tests and prove no ownership leaks.
+
+**Acceptance:** actual integrated engine use and honest comparator evidence, not a separate harness result.
+
+### Order H: Android flagship proof
+
+**Primary:** Android/Termux specialist. **Reviewer:** device pressure and security specialist.  
+**Dependencies:** authorized NDK, physical tablet and Phase 16 plan.  
+**Output:** tested physical-device binary with D-007-class evidence and Phase 21 exit.
+
+1. Build a properly aligned Android ARM64 library with a declared minimum API.
+2. Verify real SM-X400 page size in the test, not from the earlier field note.
+3. Run bounded native API/cross-thread tests, record crash logs and memory conditions.
+4. Check foreground/background responsiveness with a baseline control.
+5. Run distinct Termux and proot legs if requested and feasible.
+6. Report unsupported behavior and all skipped categories, without marking Android generally supported prematurely.
+
+**Acceptance:** a physical Android MimirAlloc execution report and no unsubstantiated platform promise.
+
+---
+
+## Final principles: the runes of a dependable allocator
+
+**ᚨ Ansuz — explain.** Every claimed behavior has a clear contract and an observable test.  
+**ᚲ Kenaz — illuminate.** Measure latency, memory, energy and failure honestly, including negative results.  
+**ᚷ Gebo — exchange.** Integrations explicitly agree about ownership and lifetime.  
+**ᛗ Mannaz — human control.** An agent or automated optimizer may suggest, but cannot secretly rewrite production behavior.  
+**ᛚ Laguz — adapt.** Adapt to pressure, platforms and workloads using bounded, testable policies.  
+**ᚱ Raidho — proceed by gates.** A working stage earns the right to support the next stage.
+
+**Definition of victory:** a small, reliable core with proved target compatibility and maintainable releases, surrounded by optional research layers that can evolve without compromising the core. The aim is not to replace every memory allocator everywhere; it is to give edge and AI developers another independent, trustworthy choice, then explore how much further deliberately engineered memory systems can go.
+
+**Last-reviewed baseline:** 7 November 2026, M-009 / 0.1.0. This document must be rebaselined as code and evidence evolve. Any task not yet proven remains a plan, however inspiring the name.
