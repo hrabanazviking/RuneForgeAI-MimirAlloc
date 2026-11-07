@@ -1311,3 +1311,39 @@ test-j006: $(BUILD)/test_j006
 	./$(BUILD)/test_j006
 
 .PHONY: test-j006
+
+# J-007: Phase 10 allocation-free diagnostics evidence
+# test - the test under tests/core/ (test_j007.c) verifies
+# the diagnostics channel of docs/PHASE_10_DIAGNOSTICS.md
+# against the J-007 test-only header
+# (tests/core/mimir_diag_j007.h): fixed-format field-by-
+# field usefulness on captured fd 2 bytes, ZERO malloc-
+# family and ZERO L6 calls on the report path (counting
+# interposer tests/core/mimir_diag_shim_j007.c, --wrap
+# malloc/calloc/realloc/free/write, plus the I-004 fault
+# shim's counters), recursion proof (a report attempted
+# from inside a report's own write is suppressed; a
+# report from inside an allocation failure adds zero
+# acquires; max depth 1), wiring at the real failure
+# points (calloc overflow, oversize, injected backing /
+# lock / page-size, realloc grow backing), and silence
+# for posture NULLs, successes and invalid-pointer
+# realloc, with J-002 counter semantics intact. The two
+# shim objects are linked ONLY into this binary, exactly
+# as in test-j002. Standalone via `make test-j007`; NOT
+# part of `make test`, whose composition is unchanged.
+# Recorded run: tests/core/recorded_run_j007.txt;
+# slice record: docs/PHASE_10_DIAGNOSTICS.md.
+$(BUILD)/mimir_diag_shim_j007.o: tests/core/mimir_diag_shim_j007.c tests/core/mimir_diag_shim_j007.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/mimir_diag_shim_j007.c -o $@
+
+$(BUILD)/test_j007.o: tests/core/test_j007.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_diag_j007.h tests/core/mimir_fault_i004.h tests/core/mimir_diag_shim_j007.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_j007.c -o $@
+
+$(BUILD)/test_j007: $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/mimir_diag_shim_j007.o $(BUILD)/test_j007.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/mimir_diag_shim_j007.o $(BUILD)/test_j007.o -Wl,--wrap=mimir_platform_map_acquire -Wl,--wrap=mimir_platform_map_release -Wl,--wrap=mimir_platform_global_lock -Wl,--wrap=mimir_platform_page_size -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free -Wl,--wrap=write -o $@
+
+test-j007: $(BUILD)/test_j007
+	./$(BUILD)/test_j007
+
+.PHONY: test-j007

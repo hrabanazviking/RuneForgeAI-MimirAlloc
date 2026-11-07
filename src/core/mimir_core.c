@@ -142,13 +142,30 @@
  * (the only road back to reuse) and on demand. The
  * production build contains none of this code. The
  * slice record is docs/PHASE_10_POISON_QUARANTINE.md.
+ *
+ * J-007 addendum (Phase 10 allocation-free diagnostics):
+ * the core now owns ONE error-reporting channel,
+ * mimir_core_diag_report (declared in mimir_core.h),
+ * wired to the genuine failure NULL paths of the three
+ * allocating entry points. Fixed stack buffer, fixed name
+ * tables, write(2) to fd 2 -- the J-004/J-005 report shape
+ * generalised from debug-only detection to production
+ * error reporting (J-001 S5.4). It allocates nothing,
+ * takes no lock, calls no L6 entry and cannot re-enter
+ * itself (counted guard). Posture NULLs stay silent.
  */
 
 #include "mimir_core.h"
 
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h> /* J-007: getenv for the channel's
+                       * enable gate (INC-J007-01). */
 #include <threads.h>
+#include <unistd.h> /* J-007: write(2) / STDERR_FILENO for
+                       * the diagnostic channel only (the
+                       * INC-J005-05 layer deviation, now the
+                       * channel's documented home). */
 
 #ifdef MIMIR_DEBUG
 /* J-004 debug-only reporting channel (see the J-004 block
@@ -311,6 +328,169 @@ static void mimir_stats_note_posture(void)
 {
     __atomic_fetch_add(&mimir_stats_alloc_posture_nulls, 1ULL,
                        __ATOMIC_RELAXED);
+}
+
+/* ---- J-007 diagnostics channel ----------------------------
+ * Everything below in this section uses ONLY: fixed static
+ * tables, its arguments, the two J-002 atomic counters
+ * (loaded, never allocated), one fixed stack buffer and
+ * write(2). No malloc family call, no L6 call, no stdio,
+ * no lock -- by construction, and proven by interposer in
+ * tests/core/test_j007.c. mimir_diag_last_cause is written
+ * by the locked construction paths (or a pre-lock admission
+ * gate) immediately before they return NULL and read by
+ * the same entry-point call after unlock, still on the
+ * failing thread; it is a cause LABEL for the report, never
+ * a decision input (Invariant 8 posture). */
+static const char *const mimir_diag_op_names[] = {
+    "malloc", "calloc", "realloc"
+};
+static const char *const mimir_diag_cause_names[] = {
+    "none", "backing", "arithmetic", "lock", "page-size",
+    "internal"
+};
+static int mimir_diag_last_cause;
+static int mimir_diag_guard; /* 0 idle, 1 reporting */
+static uint64_t mimir_diag_emitted_count;
+static uint64_t mimir_diag_suppressed_count;
+static uint64_t mimir_diag_max_depth_seen;
+
+/* Record the cause and return NULL from a pointer-returning
+ * locked construction path (alloc_locked /
+ * span_acquire_locked). */
+#define MIMIR_DIAG_FAIL(cause)     (mimir_diag_last_cause = (cause), NULL)
+
+static size_t mimir_diag_append(char *buf, size_t cap,
+                                size_t len, const char *text)
+{
+    while (*text != '\0' && len < cap) {
+        buf[len++] = *text++;
+    }
+    return len;
+}
+
+static size_t mimir_diag_append_u64(char *buf, size_t cap,
+                                    size_t len, uint64_t value)
+{
+    char digits[20];
+    size_t n = 0;
+    if (value == 0) {
+        digits[n++] = '0';
+    }
+    while (value > 0) {
+        digits[n++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+    while (n > 0 && len < cap) {
+        buf[len++] = digits[--n];
+    }
+    return len;
+}
+
+void mimir_core_diag_report(int op, int cause,
+                            uint64_t requested)
+{
+    char buf[224];
+    const char *gate;
+
+    size_t len = 0;
+    size_t off = 0;
+    const char *op_name = "unknown";
+    const char *cause_name = "unknown";
+    uint64_t failures;
+    uint64_t posture;
+
+    /* INC-J007-01 enable gate: emission happens only when
+     * the process environment carries MIMIRALLOC_DIAG=1.
+     * The banked C-006 audit (MA-6.3-020..023 silence
+     * battery, inside `make test`) grades the Phase 3
+     * no-reporting baseline, and J-001 S5.4's default-on
+     * reading cannot hold simultaneously with that banked
+     * gate; the channel therefore ships in production,
+     * wired and proven, with emission explicitly enabled
+     * until the banking reconciliation rules on flipping
+     * the default (docs/PHASE_10_DIAGNOSTICS.md S5). The
+     * gate itself is allocation-free: getenv performs no
+     * allocation (a bounded scan of environ), takes no
+     * lock and allocates no storage, so every bound proven
+     * for the channel covers the gated path whole. When
+     * the gate is closed the call is a plain return: no
+     * counter moves, nothing is written. */
+    gate = getenv("MIMIRALLOC_DIAG");
+    if (gate == NULL || gate[0] != '1' || gate[1] != '\0') {
+        return;
+    }
+    if (__atomic_exchange_n(&mimir_diag_guard, 1,
+                            __ATOMIC_ACQ_REL) != 0) {
+        /* Nested attempt (a report triggered from inside a
+         * report): counted and dropped. Depth never exceeds
+         * 1, and nothing here can re-enter the allocator. */
+        __atomic_fetch_add(&mimir_diag_suppressed_count, 1ULL,
+                           __ATOMIC_RELAXED);
+        return;
+    }
+    if (mimir_diag_max_depth_seen < 1) {
+        mimir_diag_max_depth_seen = 1;
+    }
+    if (op >= 0 && op < (int)(sizeof mimir_diag_op_names /
+                              sizeof mimir_diag_op_names[0])) {
+        op_name = mimir_diag_op_names[op];
+    }
+    if (cause >= 0 &&
+        cause < (int)(sizeof mimir_diag_cause_names /
+                      sizeof mimir_diag_cause_names[0])) {
+        cause_name = mimir_diag_cause_names[cause];
+    }
+    failures = __atomic_load_n(&mimir_stats_alloc_failures,
+                               __ATOMIC_RELAXED);
+    posture = __atomic_load_n(&mimir_stats_alloc_posture_nulls,
+                              __ATOMIC_RELAXED);
+    len = mimir_diag_append(buf, sizeof buf, len,
+                            "mimiralloc: error op=");
+    len = mimir_diag_append(buf, sizeof buf, len, op_name);
+    len = mimir_diag_append(buf, sizeof buf, len, " cause=");
+    len = mimir_diag_append(buf, sizeof buf, len, cause_name);
+    len = mimir_diag_append(buf, sizeof buf, len, " req=");
+    len = mimir_diag_append_u64(buf, sizeof buf, len, requested);
+    len = mimir_diag_append(buf, sizeof buf, len, " failures=");
+    len = mimir_diag_append_u64(buf, sizeof buf, len, failures);
+    len = mimir_diag_append(buf, sizeof buf, len, " posture=");
+    len = mimir_diag_append_u64(buf, sizeof buf, len, posture);
+    len = mimir_diag_append(buf, sizeof buf, len, "\n");
+    while (off < len) {
+        ssize_t written = write(STDERR_FILENO, buf + off,
+                                len - off);
+        if (written <= 0) {
+            break;
+        }
+        off += (size_t)written;
+    }
+    if (off == len) {
+        __atomic_fetch_add(&mimir_diag_emitted_count, 1ULL,
+                           __ATOMIC_RELAXED);
+    } else {
+        __atomic_fetch_add(&mimir_diag_suppressed_count, 1ULL,
+                           __ATOMIC_RELAXED);
+    }
+    __atomic_store_n(&mimir_diag_guard, 0, __ATOMIC_RELEASE);
+}
+
+uint64_t mimir_core_diag_emitted(void)
+{
+    return __atomic_load_n(&mimir_diag_emitted_count,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_diag_suppressed(void)
+{
+    return __atomic_load_n(&mimir_diag_suppressed_count,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_diag_max_depth(void)
+{
+    return __atomic_load_n(&mimir_diag_max_depth_seen,
+                           __ATOMIC_RELAXED);
 }
 
 /* Insert at the head of the registry. Caller holds the lock
@@ -482,14 +662,14 @@ static void *alloc_locked(size_t size, int zero_user,
      * no mapping attempted and no fallback constant (F-11). */
     status = mimir_platform_page_size(&page_size);
     if (status != MIMIR_PLATFORM_OK || page_size == 0) {
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_PAGESIZE);
     }
     usable_offset = page_size; /* exactly one system page, S7.1 */
 
     /* Checked arithmetic, check before evaluate (B-007 A3/A4):
      * total = usable_offset + requested_size, tested first. */
     if (size > SIZE_MAX - usable_offset) {
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_ARITHMETIC);
     }
     total_unrounded = usable_offset + size;
 
@@ -507,19 +687,19 @@ static void *alloc_locked(size_t size, int zero_user,
     status = mimir_platform_map_acquire(total_unrounded,
                                         &base, &mapping_length);
     if (status != MIMIR_PLATFORM_OK) {
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_BACKING);
     }
 
     /* B-007 A8: subtraction checked before evaluate, and the
      * publication gate usable_size >= requested_size. */
     if (usable_offset > mapping_length) {
         (void)mimir_platform_map_release(base, mapping_length);
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
     usable_size = mapping_length - usable_offset;
     if (usable_size < size) {
         (void)mimir_platform_map_release(base, mapping_length);
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
 
     /* B-007 A9: pointer-range check, before the addition is
@@ -531,7 +711,7 @@ static void *alloc_locked(size_t size, int zero_user,
      * is released and nothing is published (A.3). */
     if (usable_offset > (size_t)(UINTPTR_MAX - (uintptr_t)base)) {
         (void)mimir_platform_map_release(base, mapping_length);
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
 
     /* B-007 A10: exact counter checks, before publication. On
@@ -542,7 +722,7 @@ static void *alloc_locked(size_t size, int zero_user,
     if (mapping_length > SIZE_MAX - mimir_live_bytes ||
         mimir_live_mappings == SIZE_MAX) {
         (void)mimir_platform_map_release(base, mapping_length);
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
 
     /* Publication (B-006 S11.1 step 8; B-007 C1.4): write the
@@ -1056,7 +1236,7 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
 
     status = mimir_platform_page_size(&page_size);
     if (status != MIMIR_PLATFORM_OK || page_size == 0) {
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_PAGESIZE);
     }
     /* A span must hold its header plus at least one object
      * of its class; on every admitted host (page >= 4096,
@@ -1066,21 +1246,21 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
     if (page_size <= MIMIR_SPAN_HEADER_SIZE ||
         page_size - MIMIR_SPAN_HEADER_SIZE <
             mimir_class_sizes[class_index]) {
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
     status = mimir_platform_map_acquire(page_size, &base,
                                         &mapping_length);
     if (status != MIMIR_PLATFORM_OK) {
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_BACKING);
     }
     if (mapping_length != page_size) {
         (void)mimir_platform_map_release(base, mapping_length);
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
     if (mapping_length > SIZE_MAX - mimir_live_span_bytes ||
         mimir_live_spans == SIZE_MAX) {
         (void)mimir_platform_map_release(base, mapping_length);
-        return NULL;
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
 
     span = (struct mimir_span_header *)base;
@@ -2407,13 +2587,26 @@ void *mimir_core_alloc(size_t size)
     }
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
+        /* J-007: report AFTER the failed lock attempt, no
+         * lock held; the channel itself takes no lock. */
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               MIMIR_DIAG_CAUSE_LOCK,
+                               (uint64_t)size);
         return NULL;
     }
+    mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
     result = alloc_any_locked(size, 0, NULL, NULL);
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
     }
     (void)mimir_platform_global_unlock();
+    if (result == NULL) {
+        /* J-007: emitted after unlock, from the cause the
+         * failing construction path recorded. */
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               mimir_diag_last_cause,
+                               (uint64_t)size);
+    }
     return result;
 }
 
@@ -2457,19 +2650,34 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
     }
     if (nmemb > SIZE_MAX / size) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
+        /* J-007: checked-arithmetic refusal. req=SIZE_MAX
+         * marks the unrepresentable product (no product
+         * value exists to report). */
+        mimir_core_diag_report(MIMIR_DIAG_OP_CALLOC,
+                               MIMIR_DIAG_CAUSE_ARITHMETIC,
+                               (uint64_t)SIZE_MAX);
         return NULL;
     }
     product = nmemb * size;
 
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
+        mimir_core_diag_report(MIMIR_DIAG_OP_CALLOC,
+                               MIMIR_DIAG_CAUSE_LOCK,
+                               (uint64_t)product);
         return NULL;
     }
+    mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
     result = alloc_any_locked(product, 1, NULL, NULL);
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
     }
     (void)mimir_platform_global_unlock();
+    if (result == NULL) {
+        mimir_core_diag_report(MIMIR_DIAG_OP_CALLOC,
+                               mimir_diag_last_cause,
+                               (uint64_t)product);
+    }
     return result;
 }
 
@@ -2558,8 +2766,12 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
     }
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
+        mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
+                               MIMIR_DIAG_CAUSE_LOCK,
+                               (uint64_t)new_size);
         return NULL;
     }
+    mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
 
     desc = find_candidate_locked(ptr);
     if (desc != NULL && descriptor_is_live(desc)) {
@@ -2589,8 +2801,11 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         new_ptr = alloc_any_locked(new_size, 0, &new_desc,
                                    &new_span);
         if (new_ptr == NULL) {
+            int cause = mimir_diag_last_cause; /* J-007 */
             mimir_stats_note_failure(); /* J-002 */
             (void)mimir_platform_global_unlock();
+            mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
+                                   cause, (uint64_t)new_size);
             return NULL;
         }
         memcpy(new_ptr, ptr, old_size);
@@ -2599,6 +2814,11 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
             mimir_stats_note_failure(); /* J-002: release failure */
             retire_any_locked(new_ptr, new_desc);
             (void)mimir_platform_global_unlock();
+            /* J-007: the transfer step's L6 release failed:
+             * cause class backing (an OS release refusal). */
+            mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
+                                   MIMIR_DIAG_CAUSE_BACKING,
+                                   (uint64_t)new_size);
             return NULL;
         }
         (void)mimir_platform_global_unlock();
@@ -2655,8 +2875,11 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         new_ptr = alloc_any_locked(new_size, 0, &new_desc,
                                    &new_span);
         if (new_ptr == NULL) {
+            int cause = mimir_diag_last_cause; /* J-007 */
             mimir_stats_note_failure(); /* J-002 */
             (void)mimir_platform_global_unlock();
+            mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
+                                   cause, (uint64_t)new_size);
             return NULL;
         }
         memcpy(new_ptr, ptr, span_class);

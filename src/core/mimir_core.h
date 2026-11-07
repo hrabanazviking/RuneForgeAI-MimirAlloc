@@ -227,4 +227,56 @@ int mimir_debug_quarantine_verify(void);
  * production entry point calls it. */
 int mimir_core_metadata_check(void);
 
+/* J-007 diagnostics channel (docs/PHASE_10_DIAGNOSTICS.md;
+ * J-001 S5.4, exit item X6): allocation-free, recursion-
+ * proof error reporting. mimir_core_diag_report formats ONE
+ * fixed-format line into a fixed stack buffer from fixed
+ * name tables and emits it with write(2) to fd 2 (the
+ * J-004/J-005 precedent shape, generalised; L6 publishes no
+ * diagnostic channel -- INC-J005-05's re-home). It calls no
+ * allocator, no L6 entry and no stdio; a static guard makes
+ * a nested report attempt a counted no-op, so reporting can
+ * never recursively allocate or re-enter. Fields, in order:
+ * op (table below), cause (table below), req (caller-
+ * requested bytes; SIZE_MAX marks an unrepresentable calloc
+ * product), failures / posture (the J-002 counters,
+ * atomically loaded at emit time -- the failure being
+ * reported is already counted, so failures >= 1 on every
+ * wired path). Wired ONLY to genuine failure NULLs:
+ * allocation backing/arithmetic/pagesize/internal failures
+ * and lock failure at the entry points. Posture NULLs
+ * (U-09/U-12) and invalid-pointer realloc refusals emit
+ * NOTHING: posture is not an error, and alloc_failures /
+ * alloc_posture_nulls keep their J-002 disjoint semantics.
+ * Internal only, INC-E001-07 shape (b) exactly like the
+ * stats surface: declared here, re-declared for tests only
+ * in tests/core/mimir_diag_j007.h; bound local in the
+ * shared library (nm -D stays exactly 4). Emission is
+ * gated by the process environment (MIMIRALLOC_DIAG=1),
+ * the recorded INC-J007-01 reconciliation with the banked
+ * C-006 silence battery; the gate check itself is
+ * allocation-free (getenv) and a closed gate is a plain
+ * return with no counter movement. The three
+ * counters are cumulative since process start:
+ * emitted (lines fully written), suppressed (nested
+ * attempts + lines whose write failed), max_depth (deepest
+ * report nesting ever entered; the guard keeps it at 1). */
+enum mimir_diag_op {
+    MIMIR_DIAG_OP_MALLOC  = 0,
+    MIMIR_DIAG_OP_CALLOC  = 1,
+    MIMIR_DIAG_OP_REALLOC = 2
+};
+enum mimir_diag_cause {
+    MIMIR_DIAG_CAUSE_NONE       = 0,
+    MIMIR_DIAG_CAUSE_BACKING    = 1, /* L6 map acquire failed */
+    MIMIR_DIAG_CAUSE_ARITHMETIC = 2, /* checked arithmetic refused */
+    MIMIR_DIAG_CAUSE_LOCK       = 3, /* global lock failure */
+    MIMIR_DIAG_CAUSE_PAGESIZE   = 4, /* page-size discovery failed */
+    MIMIR_DIAG_CAUSE_INTERNAL   = 5  /* layout/publication gate */
+};
+void mimir_core_diag_report(int op, int cause, uint64_t requested);
+uint64_t mimir_core_diag_emitted(void);
+uint64_t mimir_core_diag_suppressed(void);
+uint64_t mimir_core_diag_max_depth(void);
+
 #endif /* MIMIR_CORE_H */

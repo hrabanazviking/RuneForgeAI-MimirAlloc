@@ -1,0 +1,66 @@
+MimirAlloc J-007 recorded run - Phase 10 allocation-free diagnostics
+date: 2026-11-07T08:15:12-05:00
+host: Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+base: 1aab76258ccc8af8e29bb482c674484c47d8f117 branch: yrsa/mimiralloc-07
+pagesize: 16384
+samtal before: 200
+
+$ make test-j007
+./build/test_j007
+L1 line: mimiralloc: error op=malloc cause=backing req=4096 failures=1 posture=0
+L2 line: mimiralloc: error op=calloc cause=arithmetic req=18446744073709551615 failures=1 posture=0
+L3 line: mimiralloc: error op=calloc cause=arithmetic req=18446744073709551615 failures=2 posture=0
+L4 line: mimiralloc: error op=malloc cause=arithmetic req=18446744073709551615 failures=3 posture=0
+L5 line: mimiralloc: error op=malloc cause=backing req=200000 failures=4 posture=0
+L6 line: mimiralloc: error op=malloc cause=lock req=64 failures=5 posture=0
+L7 line: mimiralloc: error op=malloc cause=page-size req=200000 failures=6 posture=0
+L8 line: mimiralloc: error op=malloc cause=internal req=42 failures=6 posture=0
+L11 line: mimiralloc: error op=realloc cause=backing req=300000 failures=7 posture=3
+test_j007: 59 checks / 0 failures
+
+$ make test (summary)
+SMOKE 18/18 checks passed
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+make test stderr bytes: 0
+
+$ make test-j002
+checks: 550, failures: 0
+RESULT: PASS
+$ make test-i004
+checks=248 failures=0
+RESULT: PASS
+$ make test-i003
+checks=72 failures=0
+RESULT: PASS
+
+$ make lib; nm -D --defined-only build/libmimiralloc.so
+make: Nothing to be done for 'lib'.
+0000000000000bb8 T mimir_calloc
+0000000000000b84 T mimir_free
+0000000000000b54 T mimir_malloc
+0000000000000bf0 T mimir_realloc
+nm -D count: 4
+diag symbols in .so dynamic table: 0
+
+README + public header vs base 1aab762:
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  -
+
+samtal after: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           1           0          12          13
