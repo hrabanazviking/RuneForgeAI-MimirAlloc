@@ -1347,3 +1347,77 @@ test-j007: $(BUILD)/test_j007
 	./$(BUILD)/test_j007
 
 .PHONY: test-j007
+
+# J-008: hardened build flavour + overflow/overhead evidence -
+# a SEPARATE build directory (build-hardened/) so no hardened
+# object can be linked into a production artefact by stale-
+# file accident (the J-001 S5.1 directory-and-macro rule,
+# carried to hardening). Flags probed on this Pi's toolchain
+# (gcc 12.2 / glibc 2.36); per-flag verdicts and artefact
+# evidence: docs/PHASE_10_HARDENED_BUILD.md. The default
+# production build is untouched: no default target, flag or
+# composition changes. Standalone via `make lib-hardened`,
+# `make test-j008`, `make bench-j008`; NOT part of `make test`.
+HARD    = build-hardened
+HCFLAGS = $(CFLAGS) -O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection -Wformat -Wformat-security -Werror=format-security
+HARDLINK = -Wl,-z,relro,-z,now,-z,noexecstack
+HARDOBJS = $(HARD)/mimir_alloc.o $(HARD)/mimir_core.o $(HARD)/mimir_platform.o
+HARDPIC  = $(HARD)/pic/mimir_alloc_pic.o $(HARD)/pic/mimir_core_pic.o $(HARD)/pic/mimir_platform_pic.o
+
+$(HARD):
+	mkdir -p $(HARD)
+
+$(HARD)/pic: | $(HARD)
+	mkdir -p $(HARD)/pic
+
+$(HARD)/mimir_alloc.o: src/api/mimir_alloc.c include/mimir_alloc.h src/core/mimir_core.h | $(HARD)
+	$(CC) $(HCFLAGS) -c src/api/mimir_alloc.c -o $@
+
+$(HARD)/mimir_core.o: src/core/mimir_core.c src/core/mimir_core.h src/platform/mimir_platform.h | $(HARD)
+	$(CC) $(HCFLAGS) -c src/core/mimir_core.c -o $@
+
+$(HARD)/mimir_platform.o: src/platform/mimir_platform.c src/platform/mimir_platform.h | $(HARD)
+	$(CC) $(HCFLAGS) -c src/platform/mimir_platform.c -o $@
+
+$(HARD)/pic/mimir_alloc_pic.o: src/api/mimir_alloc.c include/mimir_alloc.h src/core/mimir_core.h | $(HARD)/pic
+	$(CC) $(HCFLAGS) -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o $@
+
+$(HARD)/pic/mimir_core_pic.o: src/core/mimir_core.c src/core/mimir_core.h src/platform/mimir_platform.h | $(HARD)/pic
+	$(CC) $(HCFLAGS) -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o $@
+
+$(HARD)/pic/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mimir_platform.h | $(HARD)/pic
+	$(CC) $(HCFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
+
+$(HARD)/libmimiralloc.so: $(HARDPIC) $(MAPFILE) | $(HARD)
+	$(CC) -shared $(HARDLINK) -Wl,--version-script=$(MAPFILE) -o $@ $(HARDPIC) -pthread
+
+lib-hardened: $(HARD)/libmimiralloc.so
+
+$(HARD)/test_j008.o: tests/core/test_j008.c include/mimir_alloc.h tests/core/mimir_stats_j002.h | $(HARD)
+	$(CC) $(HCFLAGS) -fPIE -c tests/core/test_j008.c -o $@
+
+$(HARD)/test_j008: $(HARDOBJS) $(HARD)/test_j008.o
+	$(CC) $(HCFLAGS) -fPIE -pie $(HARDLINK) $(HARDOBJS) $(HARD)/test_j008.o -o $@
+
+test-j008: $(HARD)/test_j008 $(HARD)/libmimiralloc.so
+	./$(HARD)/test_j008
+
+$(BUILD)/bench_j008.o: tests/core/bench_j008.c include/mimir_alloc.h tests/core/mimir_stats_j002.h | $(BUILD)
+	$(CC) $(CFLAGS) -O2 -c tests/core/bench_j008.c -o $@
+
+$(BUILD)/bench_j008: $(LIBOBJS) $(BUILD)/bench_j008.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/bench_j008.o -o $@
+
+$(HARD)/bench_j008.o: tests/core/bench_j008.c include/mimir_alloc.h tests/core/mimir_stats_j002.h | $(HARD)
+	$(CC) $(HCFLAGS) -c tests/core/bench_j008.c -o $@
+
+$(HARD)/bench_j008: $(HARDOBJS) $(HARD)/bench_j008.o
+	$(CC) $(HCFLAGS) $(HARDOBJS) $(HARD)/bench_j008.o -o $@
+
+bench-j008: $(BUILD)/bench_j008 $(HARD)/bench_j008
+	@echo production; ./$(BUILD)/bench_j008
+	@echo production+stats; ./$(BUILD)/bench_j008 stats
+	@echo hardened; ./$(HARD)/bench_j008
+	@echo hardened+stats; ./$(HARD)/bench_j008 stats
+
+.PHONY: lib-hardened test-j008 bench-j008

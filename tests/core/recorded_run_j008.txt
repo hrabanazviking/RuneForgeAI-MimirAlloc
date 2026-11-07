@@ -1,0 +1,119 @@
+J-008 RECORDED RUN - Raspberry Pi Mimir (purpleviking1), AArch64
+Sat Nov  7 08:24:45 AM EST 2026
+1aab76258ccc8af8e29bb482c674484c47d8f117
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+ldd (Debian GLIBC 2.36-9+rpt2+deb12u14) 2.36
+16384
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           1           0          12          13
+Samtal before: HTTP 200
+== flag probes ==
+ACCEPTED: -fstack-protector-strong
+ACCEPTED: -fstack-clash-protection
+ACCEPTED: -D_FORTIFY_SOURCE=3 -O2
+ACCEPTED: -Wformat -Wformat-security -Werror=format-security
+cc1: error: ‘-Wformat-security’ ignored without ‘-Wformat’ [-Werror=format-security]
+== make test-j008 (hardened) ==
+./build-hardened/test_j008
+page_size=16384
+PASS A1 malloc(64)
+PASS A2 small write/read
+PASS A3 malloc(8192) large
+PASS A4 large write/read
+PASS A5 calloc(16,32)
+PASS A6 calloc zeroed
+PASS A7 realloc grow
+PASS A8 grow preserves bytes
+PASS A9 frees return
+PASS B1 malloc(SIZE_MAX) NULL (re-verifies banked)
+PASS B2 malloc(SIZE_MAX-page+1) NULL - A3 gate, NEW
+PASS B3 malloc(SIZE_MAX-page) NULL - admissible arith, unmappable, NEW
+PASS B4 calloc product overflow (re-verifies C-005)
+PASS B5 calloc product overflow swapped, NEW
+PASS B6 calloc(SIZE_MAX,1): product==SIZE_MAX passes product gate, A3 refuses, NEW
+PASS B7 calloc(1,SIZE_MAX) NULL, NEW
+PASS B8 malloc(2048) pre-realloc
+PASS B9 realloc grow to SIZE_MAX NULL, NEW
+PASS B10 original preserved after refused grow, NEW
+PASS B11 original freeable after refused grow, NEW
+PASS B12 allocator healthy after refusal storm
+PASS B13 stats snapshot on hardened build
+PASS B14 no live mappings at quiescence
+PASS B15 no live small objects at quiescence
+PASS B16 genuine failures counted
+RESULT: PASS (25 checks, 0 failures)
+== artefact evidence: hardened .so ==
+0000000000000ae0 T mimir_calloc
+0000000000000ab0 T mimir_free
+0000000000000a80 T mimir_malloc
+0000000000000b20 T mimir_realloc
+  GNU_STACK      0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x000000 RW  0x10
+  GNU_RELRO      0x00fd28 0x000000000001fd28 0x000000000001fd28 0x0002d8 0x0002d8 R   0x1
+ 0x000000000000001e (FLAGS)              BIND_NOW
+ 0x000000006ffffffb (FLAGS_1)            Flags: NOW
+                 U __stack_chk_fail@GLIBC_2.17
+                 U __stack_chk_guard@GLIBC_2.17
+  Type:                              DYN (Position-Independent Executable file)
+== production regression ==
+make test exit=0
+7
+checks: 550, failures: 0
+RESULT: PASS
+4
+== bench: 5 reps per flavour, fresh process per rep ==
+-- build/bench_j008 
+small64: 121 ns/op (2423571 ns / 20000 ops)
+large4096: 5869 ns/op (11738057 ns / 2000 ops)
+small64: 121 ns/op (2421459 ns / 20000 ops)
+large4096: 6078 ns/op (12157650 ns / 2000 ops)
+small64: 121 ns/op (2423663 ns / 20000 ops)
+large4096: 6442 ns/op (12884500 ns / 2000 ops)
+small64: 136 ns/op (2735811 ns / 20000 ops)
+large4096: 6192 ns/op (12384167 ns / 2000 ops)
+small64: 120 ns/op (2418311 ns / 20000 ops)
+large4096: 6735 ns/op (13471074 ns / 2000 ops)
+-- build/bench_j008 stats
+small64+snapshot/1000: 123 ns/op (2470441 ns / 20000 ops)
+large4096: 6314 ns/op (12629742 ns / 2000 ops)
+small64+snapshot/1000: 121 ns/op (2429404 ns / 20000 ops)
+large4096: 8229 ns/op (16459958 ns / 2000 ops)
+small64+snapshot/1000: 120 ns/op (2416423 ns / 20000 ops)
+large4096: 5831 ns/op (11663558 ns / 2000 ops)
+small64+snapshot/1000: 121 ns/op (2423237 ns / 20000 ops)
+large4096: 6083 ns/op (12167409 ns / 2000 ops)
+small64+snapshot/1000: 121 ns/op (2422182 ns / 20000 ops)
+large4096: 5764 ns/op (11529391 ns / 2000 ops)
+-- build-hardened/bench_j008 
+small64: 72 ns/op (1450646 ns / 20000 ops)
+large4096: 5644 ns/op (11289688 ns / 2000 ops)
+small64: 73 ns/op (1468054 ns / 20000 ops)
+large4096: 5588 ns/op (11176484 ns / 2000 ops)
+small64: 113 ns/op (2273959 ns / 20000 ops)
+large4096: 5696 ns/op (11393503 ns / 2000 ops)
+small64: 72 ns/op (1452331 ns / 20000 ops)
+large4096: 5722 ns/op (11444836 ns / 2000 ops)
+small64: 114 ns/op (2291367 ns / 20000 ops)
+large4096: 5635 ns/op (11270225 ns / 2000 ops)
+-- build-hardened/bench_j008 stats
+small64+snapshot/1000: 73 ns/op (1462369 ns / 20000 ops)
+large4096: 5803 ns/op (11606169 ns / 2000 ops)
+small64+snapshot/1000: 73 ns/op (1461109 ns / 20000 ops)
+large4096: 5695 ns/op (11390688 ns / 2000 ops)
+small64+snapshot/1000: 73 ns/op (1461276 ns / 20000 ops)
+large4096: 5603 ns/op (11207484 ns / 2000 ops)
+small64+snapshot/1000: 98 ns/op (1974812 ns / 20000 ops)
+large4096: 5831 ns/op (11662688 ns / 2000 ops)
+small64+snapshot/1000: 73 ns/op (1466831 ns / 20000 ops)
+large4096: 5965 ns/op (11931650 ns / 2000 ops)
+Samtal after: HTTP 200
+-- O2-unhardened control (/tmp/j008ctl/bench, -O2, no hardening flags)
+small64: 74 ns/op (1494109 ns / 20000 ops)
+large4096: 5756 ns/op (11512354 ns / 2000 ops)
+small64: 72 ns/op (1459424 ns / 20000 ops)
+large4096: 5717 ns/op (11434299 ns / 2000 ops)
+small64: 71 ns/op (1436017 ns / 20000 ops)
+large4096: 6390 ns/op (12781056 ns / 2000 ops)
+small64: 71 ns/op (1432775 ns / 20000 ops)
+large4096: 5702 ns/op (11405818 ns / 2000 ops)
+small64: 71 ns/op (1435406 ns / 20000 ops)
+large4096: 5607 ns/op (11215225 ns / 2000 ops)
