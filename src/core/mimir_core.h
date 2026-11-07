@@ -17,6 +17,7 @@
 #define MIMIR_CORE_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 /* Allocate size bytes (size > 0 admitted) or return NULL.
  * Zero-size: returns NULL as an implementation posture only;
@@ -90,5 +91,88 @@ size_t mimir_core_trim_retained_some(size_t max_spans);
 size_t mimir_core_retained_spans(void);
 size_t mimir_core_retained_bytes(void);
 size_t mimir_core_mapped_bytes(void);
+
+/* J-002 statistics snapshot (docs/PHASE_10_STATISTICS.md;
+ * roadmap Phase 10; quantities in the I-002 vocabulary of
+ * docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3.2/S4.1).
+ * mimir_core_stats_snapshot copies the whole statistics
+ * surface under the one global lock, so every field of one
+ * snapshot describes the same instant; it returns 0 on
+ * success and -1 (with *out untouched) when out is NULL or
+ * the lock cannot be taken (G-007 getter posture carried to
+ * a struct). Internal only, INC-E001-07 shape (b) exactly
+ * like the trim surface above: declared here and
+ * re-declared for tests only in
+ * tests/core/mimir_stats_j002.h; bound local in the shared
+ * library (nm -D stays exactly 4).
+ *
+ * Field meanings (exact; slice doc S2 has the full table):
+ * - bytes_requested: cumulative caller-requested bytes of
+ *   successful NEW block publications (malloc, calloc
+ *   product, realloc-NULL, and realloc grow/move new size).
+ *   Staying/shrink/same-size realloc publishes nothing and
+ *   adds nothing. Monotone.
+ * - bytes_allocated: cumulative usable bytes actually
+ *   granted at those same publications (small: the class
+ *   size; large: usable_size = mapping_length - one page).
+ *   Monotone.
+ * - bytes_cached: bytes of retained EMPTY spans now
+ *   (Q-RETAINED, registry walk under the lock).
+ * - bytes_mapped: Q-MAPPED now (live mapping bytes + live
+ *   span bytes).
+ * - bytes_released: Q-RELEASED, cumulative successfully
+ *   released mapping_length over published mappings and
+ *   spans (retire_locked / span_release_locked successes).
+ *   Monotone.
+ * - peak_mapped: Q-PEAKMAPPED, high-water of Q-MAPPED
+ *   sampled at the two publication points under the lock.
+ * - alloc_failures: Q-FAILED-OS -- entry-point calls that
+ *   returned NULL for a genuine reason (backing, page-size
+ *   or lock failure, or a pre-admission arithmetic
+ *   rejection such as calloc overflow / oversize). Posture
+ *   NULLs are NOT counted here.
+ * - alloc_posture_nulls: entry-point calls that returned
+ *   NULL purely as an implementation posture (zero-size
+ *   U-09, calloc zero factor U-09, realloc(ptr,0) U-12).
+ *   Disjoint from alloc_failures.
+ * - cross_thread_frees: PARTIAL (INC-J002-01) -- frees of
+ *   MAPPING-path blocks whose allocating thread (recorded
+ *   in the mapping's reserve page past the 96-byte
+ *   descriptor at publication; the descriptor's own flags
+ *   and reserved bytes stay zero per B-007 C1.4) differs
+ *   from the freeing thread. Small-object frees are not
+ *   counted: no per-object owner record exists.
+ * - lock_contention / lock_contention_measured:
+ *   ABSENT (INC-J002-02) -- always 0 / 0; no truthful cheap
+ *   measure exists under the one L6 global lock.
+ * - live_* and span_* fields: occupancy at the snapshot
+ *   instant (per-class live objects, span counts, empty
+ *   span counts and summed per-span capacities). */
+#define MIMIR_STATS_CLASS_COUNT 20
+struct mimir_stats {
+    uint64_t bytes_requested;
+    uint64_t bytes_allocated;
+    uint64_t bytes_cached;
+    uint64_t bytes_mapped;
+    uint64_t bytes_released;
+    uint64_t peak_mapped;
+    uint64_t alloc_failures;
+    uint64_t alloc_posture_nulls;
+    uint64_t cross_thread_frees;
+    uint64_t lock_contention;
+    uint64_t lock_contention_measured;
+    uint64_t live_mappings;
+    uint64_t live_spans;
+    uint64_t live_small_objects;
+    uint64_t live_mapping_bytes;
+    uint64_t live_span_bytes;
+    uint64_t page_size_bytes;
+    uint64_t span_class_size[MIMIR_STATS_CLASS_COUNT];
+    uint64_t span_live_objects[MIMIR_STATS_CLASS_COUNT];
+    uint64_t span_total_spans[MIMIR_STATS_CLASS_COUNT];
+    uint64_t span_empty_spans[MIMIR_STATS_CLASS_COUNT];
+    uint64_t span_capacity_objects[MIMIR_STATS_CLASS_COUNT];
+};
+int mimir_core_stats_snapshot(struct mimir_stats *out);
 
 #endif /* MIMIR_CORE_H */

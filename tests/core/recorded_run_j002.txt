@@ -1,0 +1,490 @@
+MimirAlloc J-002 recorded run - Phase 10 statistics counters implementation
+Sat Nov  7 07:11:54 AM EST 2026
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+PAGESIZE=16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+0dd6f7a I-009 (Phase 9): exit evidence packet - Phase 9 graded PARTIAL (MET 8 / PARTIAL 2 / UNMET 0; X1 enforcement owed INC-I001-14, X7 partial, Android track owed, XC held, no LMK claim); fresh run on base: make test 4590/0, i003 72/0, i004 248/0, i005 PASS, i006 120/0, i007 63/0; test-i008 not in base, cited banking-parallel from keeper figures; nm -D exactly 4; README and public header byte-identical; INC-I009-01..02
+yrsa/mimiralloc-02
+ M Makefile
+ M src/core/mimir_core.c
+ M src/core/mimir_core.h
+?? build/
+?? docs/PHASE_10_STATISTICS.md
+?? hidden_files/
+?? tests/core/mimir_stats_j002.h
+?? tests/core/recorded_run_j002.txt
+?? tests/core/test_j002.c
+Samtal_before: 200
+--- header and README integrity vs base 0dd6f7a ---
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  -
+--- make test-j002 ---
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/mimir_fault_shim_i004.o build/test_j002.o -Wl,--wrap=mimir_platform_map_acquire -Wl,--wrap=mimir_platform_map_release -Wl,--wrap=mimir_platform_global_lock -Wl,--wrap=mimir_platform_page_size -o build/test_j002
+./build/test_j002
+test_j002: Phase 10 statistics counters (J-002)
+  [ok] page size discovered via sysconf
+  page size = 16384 bytes
+  [ok] snapshot(NULL) returns -1
+Leg 0: baseline is exactly zero
+  [ok] leg0 requested (got 0, want 0)
+  [ok] leg0 allocated (got 0, want 0)
+  [ok] leg0 mapped (got 0, want 0)
+  [ok] leg0 released (got 0, want 0)
+  [ok] leg0 peak (got 0, want 0)
+  [ok] leg0 snapshot page size (got 16384, want 16384)
+  [ok] leg0 snapshot class table == banked G-002 table
+  [ok] leg0: bytes_requested (got 0, want 0)
+  [ok] leg0: bytes_allocated (got 0, want 0)
+  [ok] leg0: bytes_mapped (got 0, want 0)
+  [ok] leg0: bytes_released (got 0, want 0)
+  [ok] leg0: peak_mapped (got 0, want 0)
+  [ok] leg0: alloc_failures (got 0, want 0)
+  [ok] leg0: alloc_posture_nulls (got 0, want 0)
+  [ok] leg0: cross_thread_frees (got 0, want 0)
+  [ok] leg0: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] leg0: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] leg0: lock_contention ABSENT
+Leg A: small + large publications, trim, frees
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small alloc non-NULL
+  [ok] legA small blocks pairwise distinct
+  [ok] legA live small (got 10, want 10)
+  [ok] legA class 112 live objects (got 10, want 10)
+  [ok] legA class 112 spans (got 1, want 1)
+  [ok] legA class 112 empty (got 0, want 0)
+  [ok] legA class 112 capacity (got 145, want 145)
+  [ok] legA class size table (got 112, want 112)
+  [ok] legA cached 0 while live (got 0, want 0)
+  [ok] legA1: bytes_requested (got 1000, want 1000)
+  [ok] legA1: bytes_allocated (got 1120, want 1120)
+  [ok] legA1: bytes_mapped (got 16384, want 16384)
+  [ok] legA1: bytes_released (got 0, want 0)
+  [ok] legA1: peak_mapped (got 16384, want 16384)
+  [ok] legA1: alloc_failures (got 0, want 0)
+  [ok] legA1: alloc_posture_nulls (got 0, want 0)
+  [ok] legA1: cross_thread_frees (got 0, want 0)
+  [ok] legA1: mapped == I-003 Q-MAPPED (got 16384, want 16384)
+  [ok] legA1: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legA1: lock_contention ABSENT
+  [ok] legA large alloc non-NULL
+  [ok] legA live mappings (got 1, want 1)
+  [ok] legA live mapping bytes (got 32768, want 32768)
+  [ok] legA2: bytes_requested (got 3000, want 3000)
+  [ok] legA2: bytes_allocated (got 17504, want 17504)
+  [ok] legA2: bytes_mapped (got 49152, want 49152)
+  [ok] legA2: bytes_released (got 0, want 0)
+  [ok] legA2: peak_mapped (got 49152, want 49152)
+  [ok] legA2: alloc_failures (got 0, want 0)
+  [ok] legA2: alloc_posture_nulls (got 0, want 0)
+  [ok] legA2: cross_thread_frees (got 0, want 0)
+  [ok] legA2: mapped == I-003 Q-MAPPED (got 49152, want 49152)
+  [ok] legA2: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legA2: lock_contention ABSENT
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small pattern intact before free
+  [ok] legA small all freed (got 0, want 0)
+  [ok] legA span retained empty (got 1, want 1)
+  [ok] legA cached = one page (got 16384, want 16384)
+  [ok] legA3: bytes_requested (got 3000, want 3000)
+  [ok] legA3: bytes_allocated (got 17504, want 17504)
+  [ok] legA3: bytes_mapped (got 49152, want 49152)
+  [ok] legA3: bytes_released (got 0, want 0)
+  [ok] legA3: peak_mapped (got 49152, want 49152)
+  [ok] legA3: alloc_failures (got 0, want 0)
+  [ok] legA3: alloc_posture_nulls (got 0, want 0)
+  [ok] legA3: cross_thread_frees (got 0, want 0)
+  [ok] legA3: mapped == I-003 Q-MAPPED (got 49152, want 49152)
+  [ok] legA3: cached == I-003 Q-RETAINED (got 16384, want 16384)
+  [ok] legA3: lock_contention ABSENT
+  [ok] legA trim releases exactly the retained span
+  [ok] legA cached 0 after trim (got 0, want 0)
+  [ok] legA4: bytes_requested (got 3000, want 3000)
+  [ok] legA4: bytes_allocated (got 17504, want 17504)
+  [ok] legA4: bytes_mapped (got 32768, want 32768)
+  [ok] legA4: bytes_released (got 16384, want 16384)
+  [ok] legA4: peak_mapped (got 49152, want 49152)
+  [ok] legA4: alloc_failures (got 0, want 0)
+  [ok] legA4: alloc_posture_nulls (got 0, want 0)
+  [ok] legA4: cross_thread_frees (got 0, want 0)
+  [ok] legA4: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legA4: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legA4: lock_contention ABSENT
+  [ok] legA large pattern intact before free
+  [ok] legA5: bytes_requested (got 3000, want 3000)
+  [ok] legA5: bytes_allocated (got 17504, want 17504)
+  [ok] legA5: bytes_mapped (got 0, want 0)
+  [ok] legA5: bytes_released (got 49152, want 49152)
+  [ok] legA5: peak_mapped (got 49152, want 49152)
+  [ok] legA5: alloc_failures (got 0, want 0)
+  [ok] legA5: alloc_posture_nulls (got 0, want 0)
+  [ok] legA5: cross_thread_frees (got 0, want 0)
+  [ok] legA5: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legA5: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legA5: lock_contention ABSENT
+Leg B: calloc, staying realloc, grow-by-move
+  [ok] legB calloc non-NULL
+  [ok] legB calloc extent zeroed
+  [ok] legB1: bytes_requested (got 3200, want 3200)
+  [ok] legB1: bytes_allocated (got 17728, want 17728)
+  [ok] legB1: bytes_mapped (got 16384, want 16384)
+  [ok] legB1: bytes_released (got 49152, want 49152)
+  [ok] legB1: peak_mapped (got 49152, want 49152)
+  [ok] legB1: alloc_failures (got 0, want 0)
+  [ok] legB1: alloc_posture_nulls (got 0, want 0)
+  [ok] legB1: cross_thread_frees (got 0, want 0)
+  [ok] legB1: mapped == I-003 Q-MAPPED (got 16384, want 16384)
+  [ok] legB1: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legB1: lock_contention ABSENT
+  [ok] legB staying realloc returns same pointer
+  [ok] legB staying realloc preserves bytes
+  [ok] legB2 staying realloc moves no counter: bytes_requested (got 3200, want 3200)
+  [ok] legB2 staying realloc moves no counter: bytes_allocated (got 17728, want 17728)
+  [ok] legB2 staying realloc moves no counter: bytes_mapped (got 16384, want 16384)
+  [ok] legB2 staying realloc moves no counter: bytes_released (got 49152, want 49152)
+  [ok] legB2 staying realloc moves no counter: peak_mapped (got 49152, want 49152)
+  [ok] legB2 staying realloc moves no counter: alloc_failures (got 0, want 0)
+  [ok] legB2 staying realloc moves no counter: alloc_posture_nulls (got 0, want 0)
+  [ok] legB2 staying realloc moves no counter: cross_thread_frees (got 0, want 0)
+  [ok] legB2 staying realloc moves no counter: mapped == I-003 Q-MAPPED (got 16384, want 16384)
+  [ok] legB2 staying realloc moves no counter: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legB2 staying realloc moves no counter: lock_contention ABSENT
+  [ok] legB grow realloc moves
+  [ok] legB grow preserves the requested prefix
+  [ok] legB old object retired (got 0, want 0)
+  [ok] legB old span retained empty (got 16384, want 16384)
+  [ok] legB3: bytes_requested (got 6200, want 6200)
+  [ok] legB3: bytes_allocated (got 34112, want 34112)
+  [ok] legB3: bytes_mapped (got 49152, want 49152)
+  [ok] legB3: bytes_released (got 49152, want 49152)
+  [ok] legB3: peak_mapped (got 49152, want 49152)
+  [ok] legB3: alloc_failures (got 0, want 0)
+  [ok] legB3: alloc_posture_nulls (got 0, want 0)
+  [ok] legB3: cross_thread_frees (got 0, want 0)
+  [ok] legB3: mapped == I-003 Q-MAPPED (got 49152, want 49152)
+  [ok] legB3: cached == I-003 Q-RETAINED (got 16384, want 16384)
+  [ok] legB3: lock_contention ABSENT
+  [ok] legB quiesced to zero mapped (got 0, want 0)
+  [ok] legB4: bytes_requested (got 6200, want 6200)
+  [ok] legB4: bytes_allocated (got 34112, want 34112)
+  [ok] legB4: bytes_mapped (got 0, want 0)
+  [ok] legB4: bytes_released (got 98304, want 98304)
+  [ok] legB4: peak_mapped (got 49152, want 49152)
+  [ok] legB4: alloc_failures (got 0, want 0)
+  [ok] legB4: alloc_posture_nulls (got 0, want 0)
+  [ok] legB4: cross_thread_frees (got 0, want 0)
+  [ok] legB4: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legB4: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legB4: lock_contention ABSENT
+Leg C: genuine failures vs posture NULLs (I-004 shim)
+  [ok] legC anchor large alloc non-NULL
+  [ok] legC0: bytes_requested (got 11200, want 11200)
+  [ok] legC0: bytes_allocated (got 50496, want 50496)
+  [ok] legC0: bytes_mapped (got 32768, want 32768)
+  [ok] legC0: bytes_released (got 98304, want 98304)
+  [ok] legC0: peak_mapped (got 49152, want 49152)
+  [ok] legC0: alloc_failures (got 0, want 0)
+  [ok] legC0: alloc_posture_nulls (got 0, want 0)
+  [ok] legC0: cross_thread_frees (got 0, want 0)
+  [ok] legC0: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legC0: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC0: lock_contention ABSENT
+  [ok] legC injected acquire failure is NULL
+  [ok] legC exactly one injected acquire failure (got 1, want 1)
+  [ok] legC1 failure counted, nothing else moved: bytes_requested (got 11200, want 11200)
+  [ok] legC1 failure counted, nothing else moved: bytes_allocated (got 50496, want 50496)
+  [ok] legC1 failure counted, nothing else moved: bytes_mapped (got 32768, want 32768)
+  [ok] legC1 failure counted, nothing else moved: bytes_released (got 98304, want 98304)
+  [ok] legC1 failure counted, nothing else moved: peak_mapped (got 49152, want 49152)
+  [ok] legC1 failure counted, nothing else moved: alloc_failures (got 1, want 1)
+  [ok] legC1 failure counted, nothing else moved: alloc_posture_nulls (got 0, want 0)
+  [ok] legC1 failure counted, nothing else moved: cross_thread_frees (got 0, want 0)
+  [ok] legC1 failure counted, nothing else moved: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legC1 failure counted, nothing else moved: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC1 failure counted, nothing else moved: lock_contention ABSENT
+  [ok] legC recovery alloc succeeds
+  [ok] legC1 recovery reconciles: bytes_requested (got 17200, want 17200)
+  [ok] legC1 recovery reconciles: bytes_allocated (got 66880, want 66880)
+  [ok] legC1 recovery reconciles: bytes_mapped (got 32768, want 32768)
+  [ok] legC1 recovery reconciles: bytes_released (got 131072, want 131072)
+  [ok] legC1 recovery reconciles: peak_mapped (got 65536, want 65536)
+  [ok] legC1 recovery reconciles: alloc_failures (got 1, want 1)
+  [ok] legC1 recovery reconciles: alloc_posture_nulls (got 0, want 0)
+  [ok] legC1 recovery reconciles: cross_thread_frees (got 0, want 0)
+  [ok] legC1 recovery reconciles: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legC1 recovery reconciles: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC1 recovery reconciles: lock_contention ABSENT
+  [ok] legC page-size failure is NULL
+  [ok] legC page-size failure attempted no mapping (got 7, want 7)
+  [ok] legC2: bytes_requested (got 17200, want 17200)
+  [ok] legC2: bytes_allocated (got 66880, want 66880)
+  [ok] legC2: bytes_mapped (got 32768, want 32768)
+  [ok] legC2: bytes_released (got 131072, want 131072)
+  [ok] legC2: peak_mapped (got 65536, want 65536)
+  [ok] legC2: alloc_failures (got 2, want 2)
+  [ok] legC2: alloc_posture_nulls (got 0, want 0)
+  [ok] legC2: cross_thread_frees (got 0, want 0)
+  [ok] legC2: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legC2: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC2: lock_contention ABSENT
+  [ok] legC lock failure is NULL
+  [ok] legC3: bytes_requested (got 17200, want 17200)
+  [ok] legC3: bytes_allocated (got 66880, want 66880)
+  [ok] legC3: bytes_mapped (got 32768, want 32768)
+  [ok] legC3: bytes_released (got 131072, want 131072)
+  [ok] legC3: peak_mapped (got 65536, want 65536)
+  [ok] legC3: alloc_failures (got 3, want 3)
+  [ok] legC3: alloc_posture_nulls (got 0, want 0)
+  [ok] legC3: cross_thread_frees (got 0, want 0)
+  [ok] legC3: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legC3: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC3: lock_contention ABSENT
+  [ok] legC malloc(0) posture NULL
+  [ok] legC calloc(0,8) posture NULL
+  [ok] legC calloc(3,0) posture NULL
+  [ok] legC realloc(ptr,0) posture NULL
+  [ok] legC posture realloc leaves original intact
+  [ok] legC4 postures counted apart from failures: bytes_requested (got 17200, want 17200)
+  [ok] legC4 postures counted apart from failures: bytes_allocated (got 66880, want 66880)
+  [ok] legC4 postures counted apart from failures: bytes_mapped (got 32768, want 32768)
+  [ok] legC4 postures counted apart from failures: bytes_released (got 131072, want 131072)
+  [ok] legC4 postures counted apart from failures: peak_mapped (got 65536, want 65536)
+  [ok] legC4 postures counted apart from failures: alloc_failures (got 3, want 3)
+  [ok] legC4 postures counted apart from failures: alloc_posture_nulls (got 4, want 4)
+  [ok] legC4 postures counted apart from failures: cross_thread_frees (got 0, want 0)
+  [ok] legC4 postures counted apart from failures: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legC4 postures counted apart from failures: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC4 postures counted apart from failures: lock_contention ABSENT
+  [ok] legC calloc overflow is NULL
+  [ok] legC oversize malloc is NULL
+  [ok] legC oversize attempted no mapping (got 7, want 7)
+  [ok] legC5: bytes_requested (got 17200, want 17200)
+  [ok] legC5: bytes_allocated (got 66880, want 66880)
+  [ok] legC5: bytes_mapped (got 32768, want 32768)
+  [ok] legC5: bytes_released (got 131072, want 131072)
+  [ok] legC5: peak_mapped (got 65536, want 65536)
+  [ok] legC5: alloc_failures (got 5, want 5)
+  [ok] legC5: alloc_posture_nulls (got 4, want 4)
+  [ok] legC5: cross_thread_frees (got 0, want 0)
+  [ok] legC5: mapped == I-003 Q-MAPPED (got 32768, want 32768)
+  [ok] legC5: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC5: lock_contention ABSENT
+  [ok] legC6 quiesced: bytes_requested (got 17200, want 17200)
+  [ok] legC6 quiesced: bytes_allocated (got 66880, want 66880)
+  [ok] legC6 quiesced: bytes_mapped (got 0, want 0)
+  [ok] legC6 quiesced: bytes_released (got 163840, want 163840)
+  [ok] legC6 quiesced: peak_mapped (got 65536, want 65536)
+  [ok] legC6 quiesced: alloc_failures (got 5, want 5)
+  [ok] legC6 quiesced: alloc_posture_nulls (got 4, want 4)
+  [ok] legC6 quiesced: cross_thread_frees (got 0, want 0)
+  [ok] legC6 quiesced: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legC6 quiesced: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legC6 quiesced: lock_contention ABSENT
+Leg D: cross-thread frees (PARTIAL: mapping path)
+  [ok] legD1 alloc non-NULL
+  [ok] legD1 worker created
+  [ok] legD1 worker joined
+  [ok] legD1 cross-thread free counted once: bytes_requested (got 22200, want 22200)
+  [ok] legD1 cross-thread free counted once: bytes_allocated (got 83264, want 83264)
+  [ok] legD1 cross-thread free counted once: bytes_mapped (got 0, want 0)
+  [ok] legD1 cross-thread free counted once: bytes_released (got 196608, want 196608)
+  [ok] legD1 cross-thread free counted once: peak_mapped (got 65536, want 65536)
+  [ok] legD1 cross-thread free counted once: alloc_failures (got 5, want 5)
+  [ok] legD1 cross-thread free counted once: alloc_posture_nulls (got 4, want 4)
+  [ok] legD1 cross-thread free counted once: cross_thread_frees (got 1, want 1)
+  [ok] legD1 cross-thread free counted once: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legD1 cross-thread free counted once: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legD1 cross-thread free counted once: lock_contention ABSENT
+  [ok] legD2 alloc non-NULL
+  [ok] legD2 same-thread free not counted: bytes_requested (got 27200, want 27200)
+  [ok] legD2 same-thread free not counted: bytes_allocated (got 99648, want 99648)
+  [ok] legD2 same-thread free not counted: bytes_mapped (got 0, want 0)
+  [ok] legD2 same-thread free not counted: bytes_released (got 229376, want 229376)
+  [ok] legD2 same-thread free not counted: peak_mapped (got 65536, want 65536)
+  [ok] legD2 same-thread free not counted: alloc_failures (got 5, want 5)
+  [ok] legD2 same-thread free not counted: alloc_posture_nulls (got 4, want 4)
+  [ok] legD2 same-thread free not counted: cross_thread_frees (got 1, want 1)
+  [ok] legD2 same-thread free not counted: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legD2 same-thread free not counted: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legD2 same-thread free not counted: lock_contention ABSENT
+  [ok] legD3 small alloc non-NULL
+  [ok] legD3 worker created
+  [ok] legD3 worker joined
+  [ok] legD3 small span retained empty after free (got 16384, want 16384)
+  [ok] legD3 small cross-thread free uncounted: bytes_requested (got 27264, want 27264)
+  [ok] legD3 small cross-thread free uncounted: bytes_allocated (got 99712, want 99712)
+  [ok] legD3 small cross-thread free uncounted: bytes_mapped (got 16384, want 16384)
+  [ok] legD3 small cross-thread free uncounted: bytes_released (got 229376, want 229376)
+  [ok] legD3 small cross-thread free uncounted: peak_mapped (got 65536, want 65536)
+  [ok] legD3 small cross-thread free uncounted: alloc_failures (got 5, want 5)
+  [ok] legD3 small cross-thread free uncounted: alloc_posture_nulls (got 4, want 4)
+  [ok] legD3 small cross-thread free uncounted: cross_thread_frees (got 1, want 1)
+  [ok] legD3 small cross-thread free uncounted: mapped == I-003 Q-MAPPED (got 16384, want 16384)
+  [ok] legD3 small cross-thread free uncounted: cached == I-003 Q-RETAINED (got 16384, want 16384)
+  [ok] legD3 small cross-thread free uncounted: lock_contention ABSENT
+  [ok] legD3 drained: bytes_requested (got 27264, want 27264)
+  [ok] legD3 drained: bytes_allocated (got 99712, want 99712)
+  [ok] legD3 drained: bytes_mapped (got 0, want 0)
+  [ok] legD3 drained: bytes_released (got 245760, want 245760)
+  [ok] legD3 drained: peak_mapped (got 65536, want 65536)
+  [ok] legD3 drained: alloc_failures (got 5, want 5)
+  [ok] legD3 drained: alloc_posture_nulls (got 4, want 4)
+  [ok] legD3 drained: cross_thread_frees (got 1, want 1)
+  [ok] legD3 drained: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legD3 drained: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legD3 drained: lock_contention ABSENT
+  [ok] legD4 worker created
+  [ok] legD4 worker joined
+  [ok] legD4 worker alloc non-NULL
+  [ok] legD4 worker-alloc main-free counted: bytes_requested (got 32264, want 32264)
+  [ok] legD4 worker-alloc main-free counted: bytes_allocated (got 116096, want 116096)
+  [ok] legD4 worker-alloc main-free counted: bytes_mapped (got 0, want 0)
+  [ok] legD4 worker-alloc main-free counted: bytes_released (got 278528, want 278528)
+  [ok] legD4 worker-alloc main-free counted: peak_mapped (got 65536, want 65536)
+  [ok] legD4 worker-alloc main-free counted: alloc_failures (got 5, want 5)
+  [ok] legD4 worker-alloc main-free counted: alloc_posture_nulls (got 4, want 4)
+  [ok] legD4 worker-alloc main-free counted: cross_thread_frees (got 2, want 2)
+  [ok] legD4 worker-alloc main-free counted: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legD4 worker-alloc main-free counted: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legD4 worker-alloc main-free counted: lock_contention ABSENT
+Leg E: span occupancy across classes
+  [ok] legE class 16 alloc
+  [ok] legE class 16 alloc
+  [ok] legE class 16 alloc
+  [ok] legE class 1024 alloc
+  [ok] legE class 1024 alloc
+  [ok] legE class 256 alloc
+  [ok] legE class 256 alloc
+  [ok] legE class 256 alloc
+  [ok] legE class 256 alloc
+  [ok] legE class 256 alloc
+  [ok] legE class 16 live (got 3, want 3)
+  [ok] legE class 1024 live (got 2, want 2)
+  [ok] legE class 256 live (got 5, want 5)
+  [ok] legE class 16 spans (got 1, want 1)
+  [ok] legE class 1024 spans (got 1, want 1)
+  [ok] legE class 256 spans (got 1, want 1)
+  [ok] legE class 16 capacity (got 1018, want 1018)
+  [ok] legE class 1024 capacity (got 15, want 15)
+  [ok] legE live small total (got 10, want 10)
+  [ok] legE occupancy == G-003 alloc-free identity (got 10, want 10)
+  [ok] legE1: bytes_requested (got 35640, want 35640)
+  [ok] legE1: bytes_allocated (got 119472, want 119472)
+  [ok] legE1: bytes_mapped (got 49152, want 49152)
+  [ok] legE1: bytes_released (got 278528, want 278528)
+  [ok] legE1: peak_mapped (got 65536, want 65536)
+  [ok] legE1: alloc_failures (got 5, want 5)
+  [ok] legE1: alloc_posture_nulls (got 4, want 4)
+  [ok] legE1: cross_thread_frees (got 2, want 2)
+  [ok] legE1: mapped == I-003 Q-MAPPED (got 49152, want 49152)
+  [ok] legE1: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legE1: lock_contention ABSENT
+  [ok] legE two emptied classes retained (got 32768, want 32768)
+  [ok] legE class 16 empty (got 1, want 1)
+  [ok] legE class 256 empty (got 1, want 1)
+  [ok] legE class 1024 live (got 0, want 0)
+  [ok] legE drained to zero (got 0, want 0)
+  [ok] legE no live small (got 0, want 0)
+  [ok] legE3: bytes_requested (got 35640, want 35640)
+  [ok] legE3: bytes_allocated (got 119472, want 119472)
+  [ok] legE3: bytes_mapped (got 0, want 0)
+  [ok] legE3: bytes_released (got 327680, want 327680)
+  [ok] legE3: peak_mapped (got 65536, want 65536)
+  [ok] legE3: alloc_failures (got 5, want 5)
+  [ok] legE3: alloc_posture_nulls (got 4, want 4)
+  [ok] legE3: cross_thread_frees (got 2, want 2)
+  [ok] legE3: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] legE3: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] legE3: lock_contention ABSENT
+Leg F: snapshot invariants under concurrent churn
+  [ok] legF churn worker created
+  [ok] legF churn worker joined
+  [ok] legF all 200 churn large allocs succeeded (got 200, want 200)
+  [ok] legF all 200 churn small allocs succeeded (got 200, want 200)
+  [ok] legF invariant: mapped == mapping+span bytes (100 snaps)
+  [ok] legF invariant: cached <= span bytes (100 snaps)
+  [ok] legF invariant: peak >= mapped (100 snaps)
+  [ok] legF invariant: occupancy sums to live small (100 snaps)
+  [ok] legF invariant: class spans sum to live spans (100 snaps)
+  [ok] legF invariant: contention ABSENT in every snapshot
+Final reconciliation
+  [ok] final mapped 0 (got 0, want 0)
+  [ok] final cached 0 (got 0, want 0)
+  [ok] final live mappings 0 (got 0, want 0)
+  [ok] final live spans 0 (got 0, want 0)
+  [ok] final E-005 published == retired (got 207, want 207)
+  [ok] final G-003 spans published == retired (got 7, want 7)
+  [ok] final G-003 small alloc == free (got 222, want 222)
+  [ok] final released == all published bytes identity (got 6897664, want 6897664)
+  [ok] final peak is the scripted 4 pages (Leg C: anchor + recovery live together) (got 65536, want 65536)
+  [ok] final: bytes_requested (got 451640, want 451640)
+  [ok] final: bytes_allocated (got 3402672, want 3402672)
+  [ok] final: bytes_mapped (got 0, want 0)
+  [ok] final: bytes_released (got 6897664, want 6897664)
+  [ok] final: peak_mapped (got 65536, want 65536)
+  [ok] final: alloc_failures (got 5, want 5)
+  [ok] final: alloc_posture_nulls (got 4, want 4)
+  [ok] final: cross_thread_frees (got 2, want 2)
+  [ok] final: mapped == I-003 Q-MAPPED (got 0, want 0)
+  [ok] final: cached == I-003 Q-RETAINED (got 0, want 0)
+  [ok] final: lock_contention ABSENT
+checks: 550, failures: 0
+RESULT: PASS
+test-j002 exit: 0
+--- make test (full regression) ---
+CASE P3-T-CAL-001 PASS (4 checks)
+CASE P3-T-CAL-002 PASS (1 checks)
+CASE P3-T-CAL-003 PASS (2 checks)
+CASE P3-T-CAL-011 PASS (3 checks)
+CASE P3-T-CAL-012 PASS (2 checks)
+CASE P3-T-CAL-021 PASS (2 checks)
+CASE P3-T-REA-001 PASS (5 checks)
+CASE P3-T-REA-002 PASS (4 checks)
+CASE P3-T-REA-011 PASS (4 checks)
+CASE P3-T-REA-012 PASS (5 checks)
+CASE P3-T-REA-021 PASS (2 checks)
+CASE P3-T-REA-022 PASS (3 checks)
+CASE P3-T-REA-031 PASS (3 checks)
+INSPECTED P3-T-UNS-091 INSPECTED (audit case): no timing value is an oracle in any case of this suite (verified by inspection of this source: no clock/timing assertion exists); timestamps in the recorded run are records, never oracles, and no PASS line carries a performance conclusion
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+--- Phase 9 battery ---
+test-i003 exit: 0 :: RESULT: PASS
+test-i004 exit: 0 :: RESULT: PASS
+test-i005 exit: 0 :: RESULT: PASS (10 checks, 0 failures)
+test-i006 exit: 0 :: RESULT: PASS
+test-i007 exit: 0 :: RESULT: PASS
+test-i008 exit: 0 :: RESULT: PASS (10 checks, 0 failures)
+--- nm -D libmimiralloc.so ---
+0000000000000a48 T mimir_calloc
+0000000000000a14 T mimir_free
+00000000000009e4 T mimir_malloc
+0000000000000a80 T mimir_realloc
+count: 4
+Samtal_after: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13

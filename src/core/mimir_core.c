@@ -138,6 +138,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <threads.h>
 
 #include "../platform/mimir_platform.h"
 
@@ -193,6 +194,22 @@ _Static_assert(offsetof(struct mimir_descriptor, list_next) == 56,
                "list_next offset (B-006 S7.3)");
 _Static_assert(offsetof(struct mimir_descriptor, reserved) == 72,
                "reserved offset (B-006 S7.3)");
+/* J-002: the allocating thread identity (ISO C11 thrd_t,
+ * no OS facility named in this layer) is recorded for the
+ * cross_thread_frees counter in the mapping's RESERVE
+ * PAGE at offset 96, immediately past the 96-byte
+ * descriptor -- deliberately NOT in the descriptor: its
+ * flags and reserved[24] are zero-on-publication by
+ * B-006 S7.3 and audited exactly by B-007 C1.4
+ * (test_b007), and the span header's 96 bytes are fully
+ * assigned (G-002 S7). The reserve page is one whole
+ * system page (>= 4096 on every admitted host) and only
+ * its first 96 bytes are the descriptor, so offset 96 is
+ * allocator-owned scratch inside the reserve page; see
+ * INC-J002-01. */
+#define MIMIR_OWNER_THREAD_OFFSET ((size_t)96)
+_Static_assert(sizeof(thrd_t) <= 4096 - 96,
+               "thrd_t must fit the reserve page past the descriptor (J-002)");
 
 /*
  * Registry anchors and counters (B-006 S8.1): fixed, small,
@@ -232,6 +249,42 @@ static size_t mimir_live_bytes;                      /* 0 at start  */
  */
 unsigned long mimir_audit_alloc_published;
 unsigned long mimir_audit_mapping_retired;
+
+/*
+ * J-002 statistics state (docs/PHASE_10_STATISTICS.md;
+ * roadmap Phase 10; I-002 S3.2 quantities). Fixed static
+ * storage below L1, like every counter above. The byte
+ * counters, the peak and the cross-thread counter are
+ * updated only inside the one global lock, at the exact
+ * publication / release points named in mimir_core.h.
+ * alloc_failures and alloc_posture_nulls are also
+ * incremented on pre-lock paths (posture gates, lock
+ * failure itself), so those two use __atomic_fetch_add
+ * (relaxed) exactly like the E-005 audit counters; the
+ * snapshot reads them with __atomic_load_n under the lock.
+ * Counters drive no allocation decision (Invariant 8).
+ */
+static uint64_t mimir_stats_bytes_requested;
+static uint64_t mimir_stats_bytes_allocated;
+static uint64_t mimir_stats_bytes_released;
+static uint64_t mimir_stats_peak_mapped;
+static uint64_t mimir_stats_alloc_failures;
+static uint64_t mimir_stats_alloc_posture_nulls;
+static uint64_t mimir_stats_cross_thread_frees;
+
+static void mimir_stats_peak_update_locked(void);
+
+static void mimir_stats_note_failure(void)
+{
+    __atomic_fetch_add(&mimir_stats_alloc_failures, 1ULL,
+                       __ATOMIC_RELAXED);
+}
+
+static void mimir_stats_note_posture(void)
+{
+    __atomic_fetch_add(&mimir_stats_alloc_posture_nulls, 1ULL,
+                       __ATOMIC_RELAXED);
+}
 
 /* Insert at the head of the registry. Caller holds the lock
  * and has fully written the descriptor (B-007 C1.4). */
@@ -333,6 +386,7 @@ static int retire_locked(struct mimir_descriptor *desc)
     }
     __atomic_fetch_add(&mimir_audit_mapping_retired, 1UL,
                        __ATOMIC_RELAXED);
+    mimir_stats_bytes_released += mapping_length; /* J-002 Q-RELEASED */
     return 1;
 }
 
@@ -447,6 +501,13 @@ static void *alloc_locked(size_t size, int zero_user,
     desc->state = MIMIR_STATE_LIVE;
     desc->flags = 0;
     memset(desc->reserved, 0, sizeof desc->reserved);
+    {   /* J-002: record the allocating thread in the
+         * reserve page past the descriptor (INC-J002-01);
+         * desc->flags and desc->reserved stay zero (C1.4). */
+        thrd_t j002_self = thrd_current();
+        memcpy((unsigned char *)base + MIMIR_OWNER_THREAD_OFFSET,
+               &j002_self, sizeof j002_self);
+    }
 
     /* Zeroing (calloc only; B-008 S3.2 step 5, S3.3): the
      * usable extent is zeroed explicitly after the mapping
@@ -467,6 +528,13 @@ static void *alloc_locked(size_t size, int zero_user,
     mimir_live_bytes += mapping_length;
     __atomic_fetch_add(&mimir_audit_alloc_published, 1UL,
                        __ATOMIC_RELAXED);
+    /* J-002: one new block published -- requested bytes are
+     * the admitted size, allocated bytes the usable extent
+     * actually granted, and Q-MAPPED is re-sampled for the
+     * peak in this same locked section. */
+    mimir_stats_bytes_requested += size;
+    mimir_stats_bytes_allocated += usable_size;
+    mimir_stats_peak_update_locked();
 
     if (out_desc != NULL) {
         *out_desc = desc;
@@ -688,6 +756,20 @@ static int span_header_is_live(const struct mimir_span_header *span)
            span->class_size == mimir_class_sizes[span->class_index];
 }
 
+/* J-002 peak sampler: Q-MAPPED only ever grows at the two
+ * publication points (alloc_locked above, span publication
+ * below), so sampling exactly there under the lock yields
+ * the exact high-water mark (I-002 Q-PEAKMAPPED). */
+static void mimir_stats_peak_update_locked(void)
+{
+    uint64_t mapped =
+        (uint64_t)(mimir_live_bytes + mimir_live_span_bytes);
+
+    if (mapped > mimir_stats_peak_mapped) {
+        mimir_stats_peak_mapped = mapped;
+    }
+}
+
 /*
  * Acquire and publish one fresh span for class_index, with
  * the lock held. The mapping is exactly one system page,
@@ -754,6 +836,7 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
     mimir_live_span_bytes += mapping_length;
     __atomic_fetch_add(&mimir_audit_span_published, 1UL,
                        __ATOMIC_RELAXED);
+    mimir_stats_peak_update_locked(); /* J-002 */
     mimir_class_active[class_index] = span;
     return span;
 }
@@ -795,6 +878,7 @@ static int span_release_locked(struct mimir_span_header *span)
     }
     __atomic_fetch_add(&mimir_audit_span_retired, 1UL,
                        __ATOMIC_RELAXED);
+    mimir_stats_bytes_released += mapping_length; /* J-002 Q-RELEASED */
     return 1;
 }
 
@@ -929,6 +1013,10 @@ static void *small_alloc_locked(size_t size, int zero_user,
 
     span->live_count += 1;
     mimir_live_small_objects += 1;
+    /* J-002: requested = admitted size, allocated = the
+     * class extent actually granted. */
+    mimir_stats_bytes_requested += size;
+    mimir_stats_bytes_allocated += class_size;
     __atomic_fetch_add(&mimir_audit_small_alloc, 1UL,
                        __ATOMIC_RELAXED);
     if (out_span != NULL) {
@@ -1268,6 +1356,82 @@ size_t mimir_core_mapped_bytes(void)
 }
 
 /*
+ * J-002 statistics snapshot (docs/PHASE_10_STATISTICS.md).
+ * One locked snapshot: the global lock is taken once, every
+ * field is copied or walked inside that single locked
+ * section, and the lock is released before return, so a
+ * snapshot never mixes instants. bytes_cached and the
+ * span_* occupancy fields come from one registry walk in
+ * the same section (the retained_snapshot_locked
+ * discipline, generalised per class). On a NULL out or a
+ * lock failure it returns -1 with *out untouched (G-007
+ * getter posture); the page size is discovered through L6
+ * BEFORE the lock is taken (it needs no lock) and is 0 if
+ * discovery failed. lock_contention is reported ABSENT
+ * (INC-J002-02): the fields are the constant pair 0 / 0,
+ * never a fabricated measure.
+ */
+_Static_assert(MIMIR_STATS_CLASS_COUNT == MIMIR_SMALL_CLASS_COUNT,
+               "stats class count must match the core class table (J-002)");
+
+int mimir_core_stats_snapshot(struct mimir_stats *out)
+{
+    struct mimir_span_header *span;
+    size_t page_size = 0;
+    size_t i;
+
+    if (out == NULL) {
+        return -1;
+    }
+    (void)mimir_platform_page_size(&page_size);
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return -1;
+    }
+    memset(out, 0, sizeof *out);
+    out->bytes_requested = mimir_stats_bytes_requested;
+    out->bytes_allocated = mimir_stats_bytes_allocated;
+    out->bytes_released = mimir_stats_bytes_released;
+    out->peak_mapped = mimir_stats_peak_mapped;
+    out->alloc_failures = __atomic_load_n(
+        &mimir_stats_alloc_failures, __ATOMIC_RELAXED);
+    out->alloc_posture_nulls = __atomic_load_n(
+        &mimir_stats_alloc_posture_nulls, __ATOMIC_RELAXED);
+    out->cross_thread_frees = mimir_stats_cross_thread_frees;
+    out->lock_contention = 0;          /* ABSENT: INC-J002-02 */
+    out->lock_contention_measured = 0; /* ABSENT: INC-J002-02 */
+    out->live_mappings = (uint64_t)mimir_live_mappings;
+    out->live_spans = (uint64_t)mimir_live_spans;
+    out->live_small_objects = (uint64_t)mimir_live_small_objects;
+    out->live_mapping_bytes = (uint64_t)mimir_live_bytes;
+    out->live_span_bytes = (uint64_t)mimir_live_span_bytes;
+    out->bytes_mapped = (uint64_t)(mimir_live_bytes +
+                                   mimir_live_span_bytes);
+    out->page_size_bytes = (uint64_t)page_size;
+    for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
+        out->span_class_size[i] = (uint64_t)mimir_class_sizes[i];
+    }
+    span = mimir_span_head;
+    while (span != NULL) {
+        size_t idx = (size_t)span->class_index;
+        if (idx < MIMIR_SMALL_CLASS_COUNT) {
+            out->span_total_spans[idx] += 1;
+            out->span_live_objects[idx] +=
+                (uint64_t)span->live_count;
+            out->span_capacity_objects[idx] +=
+                (uint64_t)span_capacity(span);
+            if (span->live_count == 0) {
+                out->span_empty_spans[idx] += 1;
+                out->bytes_cached +=
+                    (uint64_t)span->mapping_length;
+            }
+        }
+        span = span->list_next;
+    }
+    (void)mimir_platform_global_unlock();
+    return 0;
+}
+
+/*
  * The image destructor (H-001): registered in this
  * translation unit, it runs when this image is finalised
  * -- at dlclose, and at process exit for a statically
@@ -1344,12 +1508,17 @@ void *mimir_core_alloc(size_t size)
     void *result;
 
     if (size == 0) {
+        mimir_stats_note_posture(); /* J-002: U-09 posture */
         return NULL;
     }
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
         return NULL;
     }
     result = alloc_any_locked(size, 0, NULL, NULL);
+    if (result == NULL) {
+        mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
+    }
     (void)mimir_platform_global_unlock();
     return result;
 }
@@ -1389,17 +1558,23 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
     void *result;
 
     if (nmemb == 0 || size == 0) {
+        mimir_stats_note_posture(); /* J-002: U-09 posture */
         return NULL;
     }
     if (nmemb > SIZE_MAX / size) {
+        mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
         return NULL;
     }
     product = nmemb * size;
 
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
         return NULL;
     }
     result = alloc_any_locked(product, 1, NULL, NULL);
+    if (result == NULL) {
+        mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
+    }
     (void)mimir_platform_global_unlock();
     return result;
 }
@@ -1484,9 +1659,11 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         return mimir_core_alloc(new_size);
     }
     if (new_size == 0) {
+        mimir_stats_note_posture(); /* J-002: U-12 posture */
         return NULL;
     }
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
         return NULL;
     }
 
@@ -1518,12 +1695,14 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         new_ptr = alloc_any_locked(new_size, 0, &new_desc,
                                    &new_span);
         if (new_ptr == NULL) {
+            mimir_stats_note_failure(); /* J-002 */
             (void)mimir_platform_global_unlock();
             return NULL;
         }
         memcpy(new_ptr, ptr, old_size);
 
         if (!retire_locked(desc)) {
+            mimir_stats_note_failure(); /* J-002: release failure */
             retire_any_locked(new_ptr, new_desc);
             (void)mimir_platform_global_unlock();
             return NULL;
@@ -1575,6 +1754,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         new_ptr = alloc_any_locked(new_size, 0, &new_desc,
                                    &new_span);
         if (new_ptr == NULL) {
+            mimir_stats_note_failure(); /* J-002 */
             (void)mimir_platform_global_unlock();
             return NULL;
         }
@@ -1650,6 +1830,21 @@ void mimir_core_free(void *ptr)
      * bookkeeping still describes actual memory
      * (Invariant 2), and this call simply returns with the
      * block still LIVE. */
+    {   /* J-002 cross_thread_frees (PARTIAL, INC-J002-01):
+         * mapping-path blocks only -- the reserve page
+         * past the descriptor recorded the allocating
+         * thread at publication; the realloc transfer retire does NOT
+         * pass through here and is never counted as a free. */
+        thrd_t j002_owner;
+        thrd_t j002_self = thrd_current();
+        memcpy(&j002_owner,
+               (const unsigned char *)desc +
+                   MIMIR_OWNER_THREAD_OFFSET,
+               sizeof j002_owner);
+        if (!thrd_equal(j002_owner, j002_self)) {
+            mimir_stats_cross_thread_frees += 1;
+        }
+    }
     if (!retire_locked(desc)) {
         (void)mimir_platform_global_unlock();
         return;

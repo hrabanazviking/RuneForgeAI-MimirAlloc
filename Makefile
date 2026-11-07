@@ -1098,3 +1098,34 @@ test-i008: $(BUILD)/test_i008
 	./$(BUILD)/test_i008
 
 .PHONY: test-i008
+
+# J-002: Phase 10 statistics counters evidence test -
+# the test under tests/core/ (test_j002.c) verifies the
+# Phase 10 statistics surface of
+# docs/PHASE_10_STATISTICS.md against the J-002 test-only
+# header (tests/core/mimir_stats_j002.h): ONE locked
+# snapshot whose counters move by exactly the scripted
+# amounts for stated small / large / calloc / realloc
+# workloads (definitions written before the run),
+# Q-MAPPED / Q-RETAINED cross-reads against the I-003
+# surface, a failure leg through the I-004 --wrap shim
+# proving alloc_failures counts genuine failures while
+# posture NULLs are counted separately, span occupancy
+# per class, cross-thread frees (PARTIAL: mapping path),
+# lock contention honestly ABSENT, and snapshot
+# invariants under concurrent churn. The I-004 shim
+# object is linked ONLY into this binary, exactly as in
+# test-i004. Standalone via `make test-j002`; NOT part
+# of `make test`, whose composition is unchanged.
+# Recorded run: tests/core/recorded_run_j002.txt;
+# slice record: docs/PHASE_10_STATISTICS.md.
+$(BUILD)/test_j002.o: tests/core/test_j002.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_trim_i003.h tests/core/mimir_drain_h001.h tests/core/mimir_small_g003.h tests/core/mimir_fault_i004.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_j002.c -o $@
+
+$(BUILD)/test_j002: $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/test_j002.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/test_j002.o -Wl,--wrap=mimir_platform_map_acquire -Wl,--wrap=mimir_platform_map_release -Wl,--wrap=mimir_platform_global_lock -Wl,--wrap=mimir_platform_page_size -o $@
+
+test-j002: $(BUILD)/test_j002
+	./$(BUILD)/test_j002
+
+.PHONY: test-j002
