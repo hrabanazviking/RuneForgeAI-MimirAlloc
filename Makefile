@@ -1554,3 +1554,19 @@ test-k008: $(BUILD)/bench_k008_glibc $(BUILD)/bench_k008_mimir
 	python3 tests/perf/summarize_k008.py /tmp/k008_smoke.txt
 
 .PHONY: bench-k008 test-k008
+
+# M-004: Phase 13 fuzzing harness (docs/PHASE_13_FUZZING_M004.md;
+# roadmap S10). Standalone via `make test-fuzz-m004`: seeded,
+# bounded sequences against an ownership model, linking the
+# LIBOBJS directly so the test-visible stats (J-002) and trim
+# (I-003) routes are reachable. NOT part of `make test`.
+$(BUILD)/fuzz_m004.o: tests/fuzz/fuzz_m004.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_trim_i003.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/fuzz/fuzz_m004.c -o $@
+
+$(BUILD)/fuzz_m004: $(LIBOBJS) $(BUILD)/fuzz_m004.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/fuzz_m004.o -o $@
+
+test-fuzz-m004: $(BUILD)/fuzz_m004
+	./tests/fuzz/run_fuzz_m004.sh ./$(BUILD)/fuzz_m004
+
+.PHONY: test-fuzz-m004

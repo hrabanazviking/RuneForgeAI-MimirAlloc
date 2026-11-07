@@ -1,0 +1,60 @@
+M-004 recorded run - Phase 13 fuzzing harness
+date: 2026-11-07T15:27:00-05:00
+host: purpleviking1 aarch64
+cc: cc (Debian 12.2.0-14+deb12u1) 12.2.0
+base: 721e518eea707ed6f790e2ea98704628fb037e8c
+
+== baseline/post-slice make test ==
+make test exit: 0
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+
+== make lib + nm -D ==
+make lib exit: 0
+0000000000000b80 T mimir_calloc
+0000000000000b50 T mimir_free
+0000000000000b20 T mimir_malloc
+0000000000000bc0 T mimir_realloc
+nm -D T count: 4
+
+== make test-fuzz-m004 (timed) ==
+fuzz exit: 0
+wall seconds: 2
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -c tests/fuzz/fuzz_m004.c -o build/fuzz_m004.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/fuzz_m004.o -o build/fuzz_m004
+./tests/fuzz/run_fuzz_m004.sh ./build/fuzz_m004
+FUZZ-M004 harness v1 (trace version 1) bounded
+SEED 4001 ops=2000 alloc=586 write=295 realloc=301 calloc=180 free=296 trim=80 xfer=121 handoff=59 verify=38 freenull=45 checks=57687 fails=0 live_end=0
+SEED-RESULT 4001 PASS
+SEED 4002 ops=2000 alloc=561 write=280 realloc=302 calloc=192 free=308 trim=88 xfer=122 handoff=59 verify=40 freenull=48 checks=58217 fails=0 live_end=0
+SEED-RESULT 4002 PASS
+SEED 4003 ops=2000 alloc=563 write=287 realloc=307 calloc=199 free=300 trim=72 xfer=134 handoff=59 verify=41 freenull=40 checks=52266 fails=0 live_end=0
+SEED-RESULT 4003 PASS
+SEED 4004 MT threads=3 alloc=420 write=206 realloc=0 free=290 xfer=44 handed=70 checks=214 fails=0 live_end=0
+SEED-RESULT 4004 PASS
+RESULT: PASS
+
+== reproducibility: two fresh full runs diff ==
+diff: identical (REPRODUCIBLE)
+
+== single-seed reproducer modes ==
+FUZZ-M004 harness v1 (trace version 1) bounded
+SEED 4001 ops=2000 alloc=586 write=295 realloc=301 calloc=180 free=296 trim=80 xfer=121 handoff=59 verify=38 freenull=45 checks=57687 fails=0 live_end=0
+RESULT: PASS checks=57687 fails=0
+single exit: 0
+FUZZ-M004 harness v1 (trace version 1) bounded
+SEED 4004 MT threads=3 alloc=420 write=206 realloc=0 free=290 xfer=44 handed=70 checks=214 fails=0 live_end=0
+RESULT: PASS checks=214 fails=0
+mt exit: 0
