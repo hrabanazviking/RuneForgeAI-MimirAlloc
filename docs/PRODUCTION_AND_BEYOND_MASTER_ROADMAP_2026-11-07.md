@@ -906,3 +906,334 @@ These are candidates, not all required to ship. A single suitable architecture i
 
 ---
 
+## 16. Phase 25: AI-aware allocation and inference specialization
+
+**Purpose:** permit deliberate allocator policies optimized for inference workloads while retaining predictable core behavior.  
+**Priority:** P2 research, P1 only after real A.E.S.I.R. routing proof. **Dependencies:** 20, 22, 24. **Gate:** G6.
+
+### 25.1 Distinguish physical memory from workload meaning
+
+A model system uses different resources and lifetimes:
+
+- **File-backed weights:** OS page cache, mmap residency and host address space. The allocator may manage metadata or host buffers but does not automatically own weight pages.
+- **Tokenizer structures:** lexicon, trie/BPE tables, temporary strings and token arrays; different locality and lifespan.
+- **KV cache:** lifecycle tied to context length, number of sequences, model topology, datatype and attention mechanism; possibly CPU, GPU or mixed.
+- **Prefill/decode scratch:** typically bursty buffers with predictable phase boundaries.
+- **Activation/temporary workspace:** controlled by the inference engine or accelerator backend, not necessarily normal C malloc.
+- **GPU/NPU device memory:** allocations and lifetime controlled through a driver/runtime; a host malloc call is not a device allocation.
+- **Long-lived agent memory/RAG:** application data, indexes, document storage and KV semantics; usually not a contiguous heap managed by MimirAlloc.
+
+**No single “AI memory used” number** captures these categories. Separate request sizes, mapped virtual memory, physical residency, backing stores and device allocations. Never count remote bytes as local resident bytes.
+
+### 25.2 Layered architecture
+
+1. **Core allocator** stays content-agnostic and deterministic; receives only sizes, lifetimes/ownership and explicit optional hints.
+2. **Optional classification adapter** receives trusted application-supplied categories: TOKENIZER, WEIGHTS_METADATA, KV_HOST, SCRATCH, UI, GENERAL, NETWORK_BUFFER and other explicitly versioned identifiers.
+3. **Policy engine** chooses among safe, bounded core policies using static rules first; parameter ranges validated at startup or through safe coordination.
+4. **Inference integration adapter** translates model lifecycle events into allocation pools, reclamation hints and metrics without changing core memory semantics.
+5. **Research optimization service** analyzes historical traces outside the hot path and proposes new policies to compare offline.
+
+Do not ask a language model whether each malloc/free should succeed. LLM latency, nondeterminism and remote dependency make it fundamentally unsuitable as a synchronous allocator decision maker.
+
+### 25.3 Work packages
+
+- **N-25-01 — Workload taxonomy.** Define versioned categories with precise counting/ownership boundaries; include “unknown” class by default.
+- **N-25-02 — Trace capture.** Gather privacy-safe synthetic and real permitted traces from tokenizer, prompt prefill, decode, KV growth/shrink, model load/unload and mixed usage.
+- **N-25-03 — Lifetime analysis.** Quantify size distributions, survival curves, reuse interval, locality and observed peak/steady-state memory by class.
+- **N-25-04 — User hint API.** Design optional allocation hint/grouping interface, with no ABI destabilization of the existing four-symbol surface. Hint absence should always produce correct ordinary allocation.
+- **N-25-05 — Arena experiments.** Prototype model-scoped arenas for short-lived scratch and independently freed persistent buffers, but prevent mixed-ownership frees and arena destruction with live pointers.
+- **N-25-06 — KV allocation adapters.** Let a host KV buffer policy request alignment, growth/trim and class-specific budget while ensuring the inference engine controls semantics and data correctness.
+- **N-25-07 — Preallocation/pool hints.** Explore bounded reserve/commit strategies for predictable decode workloads, with explicit failure policy under low memory.
+- **N-25-08 — Model-switch policy.** Measure reclaim after unload, hot restart and rapid alternation of models; verify no retained growth across cycles.
+- **N-25-09 — Multiple agents.** Support separate accounting groups for independent local agents; prevent a large inference from starving UI/control tasks when budget policy is enabled.
+- **N-25-10 — RAG memory awareness.** Track document/index/cache lifetimes only through applications that explicitly integrate. Disk database pages and managed-language heaps require dedicated adapters, not guesses.
+- **N-25-11 — Speculative decode analysis.** Observe draft/target model buffer lifetimes and batching, with correct cleanup on rejected speculation.
+- **N-25-12 — Quantization workload studies.** Compare host scratch and metadata for 4-, 8- and higher-bit models, keeping kernel/toolchain differences controlled; do not claim quantization accelerates MimirAlloc itself.
+- **N-25-13 — Context growth.** Exercise real prompt lengths and context resize under capacity constraints, including failed KV growth and fallback paths.
+- **N-25-14 — Multi-model concurrency.** Verify bounded resource accounting when simultaneous sessions load independent models or share safe read-only file mappings.
+- **N-25-15 — Phase-correlation reporting.** Integrate with optional Phase 24 traces; show allocator activity during TTFT, prefill, decode and teardown without treating the phases as core allocator concepts.
+- **N-25-16 — Safe policy catalogue.** Offer measured, named policies (BALANCED, LOW_RESIDENT, LOW_LATENCY, MODEL_RELOAD, BATCH_INFERENCE), each with validated parameter ranges and known tradeoffs.
+- **N-25-17 — Offline optimization.** Use search, statistical modeling or a small local LLM to suggest policies after analyzing traces; outputs require full deterministic A/B validation.
+- **N-25-18 — Hot-swap limits.** A running allocator may only change a policy when its state transition is verified atomic and rollback-safe; otherwise policies change at process restart.
+- **N-25-19 — Boundary accuracy.** If a workload has GPU/NPU allocations, report them as out of scope unless the accelerator integration produces explicit accounting.
+- **N-25-20 — End-to-end evidence.** Compare MimirAlloc-enabled versus disabled engine in the *same* backend/model/thermal state, with output correctness and host resource metrics included.
+
+### 25.4 Promotion tests
+
+| Experiment | Proof needed before broad use | Mandatory fallback |
+|---|---|---|
+| Model-scoped arena | No incorrect free or premature arena destruction | Ordinary allocator |
+| Per-class retention | RSS/latency improvement on real traces, no thrash | Default retention |
+| KV growth strategy | Exact model output, no stale KV, bounded tail | Engine's baseline KV allocator |
+| Policy chosen by ML | Deterministic offline evaluation on held-out traces | Static bounded policy |
+| Session admission budget | No deadlock, starvation or unbounded queue | Application-level refusal |
+| Multi-model shared objects | Explicit lifetime, immutability and ownership | Isolated copies/allocations |
+
+### 25.5 Exit gate
+
+- [ ] Real inference integration exists first.
+- [ ] Application ownership of each memory class is verified.
+- [ ] Optional policy cannot make the default C allocator depend on an external AI service.
+- [ ] Benchmarks report output correctness, time, residency and rollback.
+- [ ] Every workload-specific policy has an honest supported-scope statement.
+
+**Artifacts:** docs/AI_MEMORY_TAXONOMY.md; examples/aesir_memory_adapter; tests/ai_workloads; docs/PHASE_25_EXIT_EVIDENCE.md.
+
+---
+
+## 17. Phase 26: heterogeneous and accelerator memory research
+
+**Purpose:** investigate host/device allocation coordination across GPU, NPU, DMA, coherent and noncoherent memory.  
+**Priority:** P3 research. **Dependencies:** 20, 24, 25 and access to hardware/SDKs. **Gate:** G6.
+
+### 26.1 Crucial boundary: memory is not interchangeable
+
+CPU virtual memory, page-locked host memory, GPU VRAM, unified memory, NPU-managed pools and storage-backed mappings have different ownership, coherency, protection, fault and lifetime rules. An accelerator “allocation” may be an opaque driver handle, not an ordinary pointer that can be returned by mimir_malloc. The project must **not claim automatic global pooling** simply because several devices have addressable memory.
+
+A design may coordinate reservations, staging and transfer **while keeping memory domains distinct**.
+
+### 26.2 Research architecture
+
+- **Host allocator domain:** existing MimirAlloc objects.
+- **Driver-backed domain:** CUDA/HIP/Vulkan/OpenCL/NNAPI/vendor SDK allocations owned by the respective runtime.
+- **Shared/interop domain:** imported/exported buffers or DMA-BUF where a specific platform supports and documents the mechanism.
+- **Mapped file domain:** mmap and page-cache residency; not a GPU allocation.
+- **Staging/transfer domain:** application-managed copies between domains, with explicit completion/fences.
+- **Policy domain:** schedules when and where an object should be allocated or copied; never masquerades as physical coherence.
+
+### 26.3 Work packages
+
+- **N-26-01:** survey each target's actual CPU/GPU/NPU memory architecture, unified-memory semantics, IOMMU protections and applicable vendor APIs.
+- **N-26-02:** define a typed memory-domain descriptor and opaque handle, separate from the four ordinary malloc functions.
+- **N-26-03:** prototype one read-only capability discovery adapter on a known hardware/SDK target, with no allocation claims.
+- **N-26-04:** build explicit pin/unpin and staging-buffer APIs only when platform support and access rights allow them.
+- **N-26-05:** define DMA and accelerator synchronization rules, including fences, cache flushing and data-visibility correctness.
+- **N-26-06:** prove that device buffers cannot be erroneously passed to mimir_free and that host buffers use the correct deallocator.
+- **N-26-07:** study GPU/NPU memory OOM paths and device reset/recovery through the owning runtime.
+- **N-26-08:** measure page-locked host buffer impact on OS reclaim and mobile responsiveness.
+- **N-26-09:** compare explicit memcpy/async-transfer overhead, latency hiding and allocation residency, with hardware telemetry when available.
+- **N-26-10:** design a zero-copy protocol only where actual coherent/shared memory is proven; otherwise report required copies.
+- **N-26-11:** provide an opt-in inference adapter that manages pools of host staging buffers used by A.E.S.I.R., not its GPU allocations unless explicitly routed.
+- **N-26-12:** investigate 64-bit unified-address-space machines while preserving pointer provenance and driver deallocation semantics.
+- **N-26-13:** separate CXL.io/CXL.mem or other memory expansion concepts from ordinary Linux anonymous memory; require the actual device/kernel topology and NUMA policies before claims.
+- **N-26-14:** benchmark scenarios where moving data is slower than recomputing/reloading, and record rejected ideas as first-class results.
+- **N-26-15:** handle device disappearance, context loss and fence timeout without corrupted host allocator state.
+- **N-26-16:** define process isolation, permissions and security implications for shared device buffers.
+- **N-26-17:** keep vendor SDK dependencies optional and avoid contaminating the core MIT build.
+- **N-26-18:** specify portable fallbacks for a machine without supported accelerators.
+- **N-26-19:** publish per-hardware support matrices distinct from Linux/Android libc matrices.
+- **N-26-20:** graduate no acceleration claim until a real test proves it on real hardware.
+
+### 26.4 Exit gate
+
+- [ ] All device allocations and host allocations have separate, validated ownership rules.
+- [ ] One real device-domain adapter has bounded tests and accurate metrics.
+- [ ] Host allocator correctness does not depend on a GPU/NPU service.
+- [ ] Coherency, fencing and recovery semantics are documented and observed.
+- [ ] Unsupported hardware falls back without loss of core allocator operation.
+
+**Artifacts:** docs/MEMORY_DOMAINS.md; docs/ACCELERATOR_BOUNDARY.md; research/accelerators; docs/PHASE_26_EXIT_EVIDENCE.md.
+
+---
+
+## 18. Phase 27: federated and distributed memory research
+
+**Purpose:** coordinate memory resources across devices without pretending distributed RAM is ordinary address space.  
+**Priority:** P3 speculative. **Dependencies:** 24–26, explicit networking/security design. **Gate:** G6.
+
+### 27.1 Model the right abstraction
+
+A distributed system can maintain **object placement**, **caches**, **leases**, **transfer queues**, **replicas** and **capacity reservations** across machines. It cannot ordinarily guarantee the semantics of an in-process C pointer across a network. Network access introduces latency, failure, partition, reordering and authorization. A pointer from one process is not meaningful in another process without a separately designed remapping/coherence mechanism, and a device's free memory is not automatically free capacity for the requesting process.
+
+Prefer an object/handle API, not malloc returning an apparent globally coherent pointer.
+
+### 27.2 Possible federated design
+
+- **Local fast path:** MimirAlloc on each node; normal allocations stay local.
+- **Inventory plane:** each peer advertises capacity classes, capabilities, measured latencies and security policies, with expiration.
+- **Coordinator plane:** optional app-level scheduling/admission; does not seize ownership of peer processes.
+- **Object plane:** immutable or versioned objects with typed handles, checksums, owners and explicit leases.
+- **Transfer plane:** authenticated chunked copies with resumption, backpressure and integrity verification.
+- **Recovery plane:** node failure handling, cancelled leases, retry idempotence and careful replica invalidation.
+- **Privacy plane:** per-peer authorization and explicit data placement policies; no hidden sending of local conversation/model material to cloud hosts.
+
+### 27.3 Work packages
+
+- **N-27-01:** choose use cases where distributed coordination can beat simply reloading data from disk/network (e.g. shared readonly models, cooperative caching), and reject nonsensical low-latency-pointer goals.
+- **N-27-02:** define node identity, trust model, key management, mTLS or equivalent authenticated channel and permission revocation.
+- **N-27-03:** define object ownership, immutable/varying data, lease lifetimes, version numbers, checksums and garbage collection.
+- **N-27-04:** design explicit remote allocation/transfer APIs that return typed handles rather than C heap pointers.
+- **N-27-05:** implement capability discovery in a simulator first with deterministic peer failure injection.
+- **N-27-06:** characterize LAN/Wi-Fi/mobile internet latency and bandwidth separately from local memory latency.
+- **N-27-07:** choose when a transfer should be blocking, asynchronous, cancelled or retried; bound all queues.
+- **N-27-08:** prevent split-brain ownership and stale object use with leases and idempotent operation identifiers.
+- **N-27-09:** define object lifecycle when the originating agent/process stops or a device disappears.
+- **N-27-10:** support safe persistence or spill only when the application explicitly authorizes data storage, encryption and retention.
+- **N-27-11:** account remote bytes, cache bytes, local resident bytes and replicas separately; never add them into one “RAM available” number.
+- **N-27-12:** guarantee local allocator operation when the network is offline or peers refuse requests.
+- **N-27-13:** implement transfer corruption/partial-failure tests with reproducible artificial fault injection.
+- **N-27-14:** measure end-to-end workload benefit against a plain local baseline, including idle power, network power and security overhead where possible.
+- **N-27-15:** define privacy constraints for local agent conversations, embeddings, documents, files and model data; user approval is mandatory before cloud transfer of sensitive material.
+- **N-27-16:** test adversarial peers, replay, malicious capacity advertisements and oversized messages; keep parser code outside core allocator fast path.
+- **N-27-17:** expose a simple textual explain-plan for “why was data placed there?” with reversible decisions.
+- **N-27-18:** support different device capability classes through explicit adapters, not one assumed universal address space.
+- **N-27-19:** keep the federated module optional with a separate process/service and package; network failure cannot crash ordinary allocation calls.
+- **N-27-20:** publish benchmarked negative results and determine when remote memory is economically or energetically worse.
+
+### 27.4 Admission tests
+
+The federated subsystem can graduate from research only when:
+
+- [ ] No unsupported promise of transparent process-wide pointer coherence.
+- [ ] Authenticated, permissioned transfers with integrity and replay protection.
+- [ ] Peer failure, network partition, retry and restart paths are reproducibly tested.
+- [ ] Local-only fallback works without the coordinator or internet.
+- [ ] Real workload benefit beats the full cost of transfer/storage/policy.
+- [ ] Data privacy and retention controls are explicit and user-controlled.
+
+**Artifacts:** docs/FEDERATED_MEMORY_PROTOCOL.md; docs/DISTRIBUTED_THREAT_MODEL.md; research/distributed_memory; docs/PHASE_27_EXIT_EVIDENCE.md.
+
+---
+
+## 19. Phase 28: self-optimization with bounded AI agents
+
+**Purpose:** turn Mythic Engineering into a safe experimental loop for policy discovery and performance improvement.  
+**Priority:** P3; never a blocker for the first production allocator. **Dependencies:** 18, 24, sufficient test automation. **Gate:** G6.
+
+### 28.1 Role of AI: design collaborator, not authority over live heap state
+
+An AI can generate hypotheses, identify counterexamples, propose size-class tables, review contracts, cluster regressions and plan controlled benchmark experiments. But live memory correctness must remain governed by deterministic code and verifiable invariants. No remote model may sit in the synchronous malloc path. An AI-produced patch is untrusted until ordinary testing and human/independent review.
+
+### 28.2 Closed-loop experimental research
+
+1. **Observe:** collect approved local metrics and traces without credentials or private user content.
+2. **Form hypotheses:** static rules, statistical search or an agent propose an explicit change with predicted resource tradeoffs.
+3. **Generate candidate:** patch an isolated research branch; no direct changes to the production release branch.
+4. **Verify correctness:** compile, static analysis, unit/contract tests, fuzz, concurrency and leak/overflow tests. Any P0 failure rejects candidate.
+5. **Benchmark:** run fixed controls and workloads in paired order; include tail latency and memory footprint.
+6. **Compare and explain:** publish original hypothesis, changed lines, evidence and statistical confidence.
+7. **Independent review:** owner/keeper approves or rejects; tests alone never authorize merge.
+8. **Roll out gradually:** feature flag and rollback for approved algorithms; gate promotion to default after field evidence.
+9. **Remember failures:** failed experiments become searchable records to prevent repeated bad ideas.
+10. **Repeat:** use explicit resource and time budgets for each experiment campaign.
+
+### 28.3 Work packages
+
+- **N-28-01:** define a reproducible experiment manifest with input commit, workload set, configuration space and rejection policy.
+- **N-28-02:** implement trace-derived feature extraction offline, retaining raw evidence and anonymization protocol.
+- **N-28-03:** build a rule-only deterministic baseline optimizer (grid search or Bayesian/statistical techniques), without an LLM dependency.
+- **N-28-04:** optionally test tiny local models as hypothesis generators, scoring their proposals against the same deterministic gates.
+- **N-28-05:** prohibit AI execution inside the allocator hot path, signal handler, global mutex owner or OOM rollback logic.
+- **N-28-06:** assign every candidate an exact diff, provenance, test fingerprint and benchmark fingerprint.
+- **N-28-07:** require separate red-team agent to search for pointer/lock/ABI violations; report any uninspected region.
+- **N-28-08:** maintain an allowlist of tunable policy parameters with bounded ranges; reject proposals altering ABI without architecture review.
+- **N-28-09:** design automated bisect and regression reproduction, but keep actual merge and publication as deliberate approvals.
+- **N-28-10:** ensure benchmark data cannot influence the evaluation set (held-out traces and devices).
+- **N-28-11:** cap candidate tests by CPU, RAM, wall time and energy budget so experiments cannot starve shared hosts.
+- **N-28-12:** provide a reproducibility report explaining whether a claimed gain survives independent repeats.
+- **N-28-13:** separate benchmark exploitation/gaming from genuine workload improvements; punish regressions in hidden challenge sets.
+- **N-28-14:** record negative experiments and conflicts between latency, fragmentation, power and code complexity.
+- **N-28-15:** add simple policy explainability: input telemetry, chosen parameter and expected consequence.
+- **N-28-16:** test “model unavailable”, malformed suggestion, tool failure and timeout; safe static policy remains in force.
+- **N-28-17:** perform a full secure-code review before promoting any agent-suggested low-level change.
+- **N-28-18:** avoid storing private agent memories in telemetry and avoid sending them to third-party optimization services by default.
+- **N-28-19:** define when experimentation is paused because observed changes lack benefit or security confidence.
+- **N-28-20:** release a public experiment notebook/spec so independent developers can repeat accepted ideas.
+
+### 28.4 Exit gate
+
+- [ ] AI optimization is optional and non-blocking.
+- [ ] Every accepted change passes same safety gates as human-authored code.
+- [ ] Reported improvements reproduce on held-out workloads.
+- [ ] Users can disable the optimizer without losing allocator functionality.
+- [ ] Review and rollback decision ownership is explicit.
+
+**Artifacts:** docs/AI_OPTIMIZATION_GUARDRAILS.md; tools/experiments; docs/PHASE_28_EXIT_EVIDENCE.md.
+
+---
+
+## 20. Phase 29: ecosystem, bindings and packages
+
+**Purpose:** make the allocator straightforward to consume by projects that have genuine use for it.  
+**Priority:** P2. **Dependencies:** stable API and target qualification, release process. **Gate:** G4/G5.
+
+### 29.1 Adoption tracks
+
+- **C direct API:** include the header, link the named library, pair every mimir_* pointer with the correct mimir_free. This should remain the most transparent default.
+- **C++ wrapper:** typed RAII ownership or memory-resource adapters, with versioned constructors/destructors and no accidental mixing with ::delete/free.
+- **Mojo adapter:** explicit integration through supported compiler/FFI interfaces and reproducible example.
+- **Rust:** optional allocator adapter only where Rust runtime and allocator API stability support it; distinguish alloc/free layout contract and error handling.
+- **Zig, Go, Python, Java/JNI:** explore through deliberate FFI adapters when benefits justify work; never assert drop-in replacement for managed runtime internals.
+- **Game engines:** integration through documented plugin allocators, resource systems and hot-reload lifetime constraints.
+- **Embedded systems:** separate fixed-region backend, API limitations and real-time proof requirements.
+- **Server applications:** library/consumer tests, thread-heavy benchmark corpus and production compatibility manifest.
+
+### 29.2 Work packages
+
+- **N-29-01:** publish a minimal C example and a lifecycle illustration of pointer ownership.
+- **N-29-02:** add CMake imported target, pkg-config metadata and optional Meson integration when maintenance capacity allows.
+- **N-29-03:** release standard build artifacts per actually qualified Linux target; no misleading generic “ARM64 Android Linux” package.
+- **N-29-04:** create C++ RAII and PMR-style examples under tested language versions without altering the core C ABI.
+- **N-29-05:** evaluate thread-local object owner and module-unload requirements for plugin architectures.
+- **N-29-06:** add explicit C++ mixed-allocation negative tests for mismatched allocator families.
+- **N-29-07:** publish Mojo sample only after it compiles under a named available toolchain.
+- **N-29-08:** add a tiny shared-library consumer suite to every release and package variant.
+- **N-29-09:** provide build-system-independent installation/uninstallation instructions.
+- **N-29-10:** publish packaging policies for distro packages and GitHub Releases without treating tags as validation.
+- **N-29-11:** maintain compatibility document mapping package/ABI versions to minimum runtime environments.
+- **N-29-12:** add troubleshooting for symbol not found, wrong libc, wrong page alignment, wrong linker path and invalid pointer ownership.
+- **N-29-13:** publish benchmark reproduction scripts and workload manifest with realistic limitations.
+- **N-29-14:** accept external test cases after licensing/source provenance review, separating public reusable code from private crash reports.
+- **N-29-15:** document unsupported targets and why support is withheld until a physical/native run exists.
+- **N-29-16:** write a migration guide for changes between 0.x, release candidates and 1.x.
+- **N-29-17:** plan documentation localization (for example Brazilian Portuguese) only after the English normative API contract is stable; never translate away contract qualifications.
+- **N-29-18:** provide contribution entry points: beginner docs/test tasks, advanced concurrency/security tasks and benchmark review.
+- **N-29-19:** create a community support policy and reporting expectations aligned with maintainer capacity.
+- **N-29-20:** gather anonymized user feedback and real workloads without collecting private application content by default.
+
+### 29.3 Exit gate
+
+- [ ] Fresh consumer can build, verify and uninstall the appropriate release from documentation.
+- [ ] Ownership rules unmistakable in every binding.
+- [ ] Bindings ship only for tested toolchains and supported semantics.
+- [ ] No default global interposition or silent CRT replacement.
+- [ ] Package and security updates have named maintainers.
+
+**Artifacts:** examples/; packaging/; docs/ABI_AND_UPGRADE_GUIDE.md; docs/PHASE_29_EXIT_EVIDENCE.md.
+
+---
+
+## 21. Phase 30: sustaining engineering and long-lived releases
+
+**Purpose:** preserve reliability after first release and manage further invention responsibly.  
+**Priority:** P1 once production exists. **Dependencies:** 19 and production scope approval. **Gate:** ongoing G4.
+
+### 30.1 Long-term program
+
+- **N-30-01:** define release branches, patch versus feature policy and support-end dates; avoid implying indefinite support.
+- **N-30-02:** maintain at least one known-good build per supported target and record toolchain/kernel lifecycle.
+- **N-30-03:** rerun full compatibility matrix for compiler/libc/kernel changes that materially affect the allocator.
+- **N-30-04:** classify discovered bugs by severity, exploitability, reproducibility and affected supported versions.
+- **N-30-05:** create a security advisory and backport playbook with a tested escalation route.
+- **N-30-06:** use fuzzing corpora as living regression suites, with privacy/security review for reproducer uploads.
+- **N-30-07:** conduct periodic code review for new undefined behavior, platform drift and API accidental expansion.
+- **N-30-08:** maintain performance dashboards with raw method and confirmed measurement variance; review regressions before releases.
+- **N-30-09:** measure actual user adoption and real use-case benefits without telemetry that violates user privacy.
+- **N-30-10:** reassess experimental features that generate high maintenance/security costs relative to demonstrated gains.
+- **N-30-11:** consider removal/retirement of unsupported targets only through documented deprecation and version policies.
+- **N-30-12:** publish reproducible historical releases and archive SBOMs/provenance, not only latest files.
+- **N-30-13:** keep release signing key/identity recovery and repository access contingency procedures.
+- **N-30-14:** onboard new contributors with a small contract/test contribution before core allocator changes.
+- **N-30-15:** document a way to reject incompatible enhancements while preserving evidence and discussion.
+- **N-30-16:** conduct periodic threat-model updates when adding cross-process, cloud or accelerator integrations.
+- **N-30-17:** maintain long-lived stable core API even while research branches explore disruptive architectures.
+- **N-30-18:** preserve a build path that does not require GPU, NPU, Docker, remote cloud service or an AI agent.
+- **N-30-19:** publish a versioned support matrix and runtime verification tutorial for each supported platform.
+- **N-30-20:** archive major failed experiments as learning resources, with “NOT IMPLEMENTED” and “NOT VERIFIED” labels intact.
+
+### 30.2 Anti-stagnation and anti-hype rule
+
+The project should neither freeze all invention after 1.0 nor merge everything exciting into production. Maintain a dependable, small core and a vigorous, openly experimental research forest. New roots are welcome, but core safety and release trust must never be traded for a beautiful diagram.
+
+---
+
