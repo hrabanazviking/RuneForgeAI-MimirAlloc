@@ -817,3 +817,24 @@ test-h002: $(BUILD)/probe_h002
 	./$(BUILD)/probe_h002
 
 .PHONY: test-h002
+
+# H-003: Phase 8 cross-thread frees evidence test -
+# the test under tests/core/ (test_h003.c) verifies
+# cross-thread frees on the span and mapping paths,
+# cross-thread calloc/realloc, and the H-001 drain
+# interplay, with exact audit-counter reconciliation
+# after every phase (E-005 discipline). Standalone
+# via make test-h003; NOT part of make test, whose
+# composition is unchanged. Recorded run:
+# tests/core/recorded_run_h003.txt; slice record:
+# docs/PHASE_8_CROSS_THREAD_FREES_H003.md.
+$(BUILD)/test_h003.o: tests/core/test_h003.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/core/mimir_drain_h001.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_h003.c -o $@
+
+$(BUILD)/test_h003: $(LIBOBJS) $(BUILD)/test_h003.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_h003.o -o $@
+
+test-h003: $(BUILD)/test_h003
+	./$(BUILD)/test_h003
+
+.PHONY: test-h003
