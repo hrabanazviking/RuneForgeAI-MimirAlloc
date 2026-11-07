@@ -1,0 +1,41 @@
+RECORDED RUN I-009 — Phase 9 exit packet fresh verification
+Host: Mimir (purpleviking1) aarch64, page 16384
+2026-11-07T06:53:26-05:00
+Base: 4a2a307dcafffb661d13269583e708b976fb923b
+=== make test ===
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+=== make test-i003 ===
+checks=72 failures=0
+RESULT: PASS
+=== make test-i004 ===
+checks=248 failures=0
+RESULT: PASS
+=== make test-i005 ===
+  CHILD D trim under pressure (largest level) checks=8 failures=0
+  CHILD E raw-mmap fragmentation checks=4 failures=0
+RESULT: PASS (10 checks, 0 failures)
+=== make test-i006 ===
+checks=120 failures=0
+RESULT: PASS
+=== make test-i007 ===
+checks=63 failures=0
+RESULT: PASS
+=== test-i008 ===
+NOT RUN: test-i008 target not present in this base (I-008 banking-parallel, Pi commit 55bb6ab). Keeper-verified figures cited in docs/PHASE_9_EXIT_EVIDENCE.md; no run of it is claimed here.
+=== ABI ===
+0000000000000998 T mimir_calloc
+0000000000000964 T mimir_free
+0000000000000934 T mimir_malloc
+00000000000009d0 T mimir_realloc
+count=4
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+README and public header byte-identical to base (sha256 match vs git show HEAD).
+Samtal HTTP 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
