@@ -1,0 +1,196 @@
+H-008 recorded run - Phase 8 latency and memory reports under contention + repeated stress archive
+Sat Nov  7 04:14:30 AM EST 2026
+de53575402e5e7f08f1150e6279525e2dde62669
+yrsa/mimiralloc-08
+aarch64
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_before:200
+--- repeated stress archive: make test x2 (output filtered to result lines) ---
+ARCHIVE make_test rep 1
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+PHASE B distinct live pointers: ok (64 recorded)
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+make_test_exit:0
+ARCHIVE make_test rep 2
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+THREAD 0: checks=1147 failures=0 allocs=522 frees=522
+THREAD 1: checks=1147 failures=0 allocs=522 frees=522
+THREAD 2: checks=1147 failures=0 allocs=522 frees=522
+THREAD 3: checks=1147 failures=0 allocs=522 frees=522
+PHASE B distinct live pointers: ok (64 recorded)
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+make_test_exit:0
+--- repeated stress archive: make test-h007 x3 (summary lines) ---
+ARCHIVE test_h007 rep 1
+SUMMARY threads=1 reps=3 failed_reps=0 OK
+SUMMARY threads=2 reps=3 failed_reps=0 OK
+SUMMARY threads=4 reps=3 failed_reps=0 OK
+SUMMARY threads=8 reps=3 failed_reps=0 OK
+SUMMARY threads=12 reps=3 failed_reps=0 OK
+RESULT: PASS
+probe_h007_exit:0
+ARCHIVE test_h007 rep 2
+SUMMARY threads=1 reps=3 failed_reps=0 OK
+SUMMARY threads=2 reps=3 failed_reps=0 OK
+SUMMARY threads=4 reps=3 failed_reps=0 OK
+SUMMARY threads=8 reps=3 failed_reps=0 OK
+SUMMARY threads=12 reps=3 failed_reps=0 OK
+RESULT: PASS
+probe_h007_exit:0
+ARCHIVE test_h007 rep 3
+SUMMARY threads=1 reps=3 failed_reps=0 OK
+SUMMARY threads=2 reps=3 failed_reps=0 OK
+SUMMARY threads=4 reps=3 failed_reps=0 OK
+SUMMARY threads=8 reps=3 failed_reps=0 OK
+SUMMARY threads=12 reps=3 failed_reps=0 OK
+RESULT: PASS
+probe_h007_exit:0
+--- make test-h008 x3 (full probe output) ---
+REP 1
+./build/probe_h008
+BASE page_size=16384 rss_kb=1216 live_small=0 live_map=0 live_spans=0
+MEM threads=1 held_small=96 held_map=32 live_small=96 live_map=32 live_spans=4 requested_bytes=92160 mapped_bytes=1048576 span_bytes=65536 rss_kb=2528 reconcile=OK
+MEM threads=1 after_free live_small_delta=0 live_map_delta=0 retained_spans=4 retained_span_bytes=65536 rss_kb=1696 pattern_fail=0 null_fail=0 OK
+MEM threads=2 held_small=192 held_map=64 live_small=192 live_map=64 live_spans=6 requested_bytes=184320 mapped_bytes=2097152 span_bytes=98304 rss_kb=3792 reconcile=OK
+MEM threads=2 after_free live_small_delta=0 live_map_delta=0 retained_spans=5 retained_span_bytes=81920 rss_kb=1728 pattern_fail=0 null_fail=0 OK
+MEM threads=4 held_small=384 held_map=128 live_small=384 live_map=128 live_spans=9 requested_bytes=368640 mapped_bytes=4194304 span_bytes=147456 rss_kb=5920 reconcile=OK
+MEM threads=4 after_free live_small_delta=0 live_map_delta=0 retained_spans=5 retained_span_bytes=81920 rss_kb=1760 pattern_fail=0 null_fail=0 OK
+MEM threads=8 held_small=768 held_map=256 live_small=768 live_map=256 live_spans=16 requested_bytes=737280 mapped_bytes=8388608 span_bytes=262144 rss_kb=10192 reconcile=OK
+MEM threads=8 after_free live_small_delta=0 live_map_delta=0 retained_spans=6 retained_span_bytes=98304 rss_kb=1776 pattern_fail=0 null_fail=0 OK
+LAT threads=1 malloc n=2000 mean_ns=399 p50_ns=111 p90_ns=2574 p99_ns=3389 max_ns=16630
+LAT threads=1 free n=2000 mean_ns=401 p50_ns=166 p90_ns=2112 p99_ns=2963 max_ns=7574
+LAT threads=1 pair n=2000 mean_ns=800 p50_ns=260 p90_ns=4834 p99_ns=6131 max_ns=22593
+LAT threads=1 pattern_fail=0 null_fail=0 OK
+LAT threads=2 malloc n=4000 mean_ns=800 p50_ns=185 p90_ns=3000 p99_ns=6704 max_ns=29611
+LAT threads=2 free n=4000 mean_ns=1227 p50_ns=259 p90_ns=4426 p99_ns=7018 max_ns=158963
+LAT threads=2 pair n=4000 mean_ns=2027 p50_ns=481 p90_ns=7168 p99_ns=10112 max_ns=159055
+LAT threads=2 pattern_fail=0 null_fail=0 OK
+LAT threads=4 malloc n=8000 mean_ns=1833 p50_ns=111 p90_ns=3056 p99_ns=39240 max_ns=1165924
+LAT threads=4 free n=8000 mean_ns=3617 p50_ns=185 p90_ns=3888 p99_ns=42981 max_ns=3332032
+LAT threads=4 pair n=8000 mean_ns=5451 p50_ns=296 p90_ns=7944 p99_ns=60074 max_ns=3332143
+LAT threads=4 pattern_fail=0 null_fail=0 OK
+LAT threads=8 malloc n=16000 mean_ns=3451 p50_ns=111 p90_ns=2462 p99_ns=8649 max_ns=8670933
+LAT threads=8 free n=16000 mean_ns=6413 p50_ns=148 p90_ns=2704 p99_ns=15259 max_ns=7780304
+LAT threads=8 pair n=16000 mean_ns=9864 p50_ns=260 p90_ns=5537 p99_ns=32037 max_ns=11867318
+LAT threads=8 pattern_fail=0 null_fail=0 OK
+FINAL retained_spans=6 retained_span_bytes=98304 rss_kb=2496
+RESULT: PASS
+probe_h008_exit:0
+REP 2
+./build/probe_h008
+BASE page_size=16384 rss_kb=1216 live_small=0 live_map=0 live_spans=0
+MEM threads=1 held_small=96 held_map=32 live_small=96 live_map=32 live_spans=4 requested_bytes=92160 mapped_bytes=1048576 span_bytes=65536 rss_kb=2528 reconcile=OK
+MEM threads=1 after_free live_small_delta=0 live_map_delta=0 retained_spans=4 retained_span_bytes=65536 rss_kb=1696 pattern_fail=0 null_fail=0 OK
+MEM threads=2 held_small=192 held_map=64 live_small=192 live_map=64 live_spans=6 requested_bytes=184320 mapped_bytes=2097152 span_bytes=98304 rss_kb=3792 reconcile=OK
+MEM threads=2 after_free live_small_delta=0 live_map_delta=0 retained_spans=5 retained_span_bytes=81920 rss_kb=1728 pattern_fail=0 null_fail=0 OK
+MEM threads=4 held_small=384 held_map=128 live_small=384 live_map=128 live_spans=9 requested_bytes=368640 mapped_bytes=4194304 span_bytes=147456 rss_kb=5920 reconcile=OK
+MEM threads=4 after_free live_small_delta=0 live_map_delta=0 retained_spans=5 retained_span_bytes=81920 rss_kb=1760 pattern_fail=0 null_fail=0 OK
+MEM threads=8 held_small=768 held_map=256 live_small=768 live_map=256 live_spans=16 requested_bytes=737280 mapped_bytes=8388608 span_bytes=262144 rss_kb=10192 reconcile=OK
+MEM threads=8 after_free live_small_delta=0 live_map_delta=0 retained_spans=6 retained_span_bytes=98304 rss_kb=1776 pattern_fail=0 null_fail=0 OK
+LAT threads=1 malloc n=2000 mean_ns=378 p50_ns=111 p90_ns=2630 p99_ns=3074 max_ns=8019
+LAT threads=1 free n=2000 mean_ns=367 p50_ns=149 p90_ns=2092 p99_ns=2444 max_ns=3685
+LAT threads=1 pair n=2000 mean_ns=746 p50_ns=259 p90_ns=4722 p99_ns=5388 max_ns=11482
+LAT threads=1 pattern_fail=0 null_fail=0 OK
+LAT threads=2 malloc n=4000 mean_ns=719 p50_ns=129 p90_ns=2926 p99_ns=6129 max_ns=58593
+LAT threads=2 free n=4000 mean_ns=1045 p50_ns=204 p90_ns=4129 p99_ns=8019 max_ns=11574
+LAT threads=2 pair n=4000 mean_ns=1764 p50_ns=370 p90_ns=6907 p99_ns=12166 max_ns=64963
+LAT threads=2 pattern_fail=0 null_fail=0 OK
+LAT threads=4 malloc n=8000 mean_ns=2131 p50_ns=167 p90_ns=3963 p99_ns=14167 max_ns=2840515
+LAT threads=4 free n=8000 mean_ns=2482 p50_ns=296 p90_ns=5686 p99_ns=21482 max_ns=2830533
+LAT threads=4 pair n=8000 mean_ns=4613 p50_ns=574 p90_ns=8778 p99_ns=35278 max_ns=2842144
+LAT threads=4 pattern_fail=0 null_fail=0 OK
+LAT threads=8 malloc n=16000 mean_ns=4449 p50_ns=111 p90_ns=2648 p99_ns=22815 max_ns=4081346
+LAT threads=8 free n=16000 mean_ns=8115 p50_ns=167 p90_ns=2852 p99_ns=34945 max_ns=4142586
+LAT threads=8 pair n=16000 mean_ns=12564 p50_ns=277 p90_ns=5871 p99_ns=56574 max_ns=4142679
+LAT threads=8 pattern_fail=0 null_fail=0 OK
+FINAL retained_spans=6 retained_span_bytes=98304 rss_kb=2496
+RESULT: PASS
+probe_h008_exit:0
+REP 3
+./build/probe_h008
+BASE page_size=16384 rss_kb=1216 live_small=0 live_map=0 live_spans=0
+MEM threads=1 held_small=96 held_map=32 live_small=96 live_map=32 live_spans=4 requested_bytes=92160 mapped_bytes=1048576 span_bytes=65536 rss_kb=2528 reconcile=OK
+MEM threads=1 after_free live_small_delta=0 live_map_delta=0 retained_spans=4 retained_span_bytes=65536 rss_kb=1696 pattern_fail=0 null_fail=0 OK
+MEM threads=2 held_small=192 held_map=64 live_small=192 live_map=64 live_spans=6 requested_bytes=184320 mapped_bytes=2097152 span_bytes=98304 rss_kb=3792 reconcile=OK
+MEM threads=2 after_free live_small_delta=0 live_map_delta=0 retained_spans=5 retained_span_bytes=81920 rss_kb=1728 pattern_fail=0 null_fail=0 OK
+MEM threads=4 held_small=384 held_map=128 live_small=384 live_map=128 live_spans=9 requested_bytes=368640 mapped_bytes=4194304 span_bytes=147456 rss_kb=5920 reconcile=OK
+MEM threads=4 after_free live_small_delta=0 live_map_delta=0 retained_spans=5 retained_span_bytes=81920 rss_kb=1760 pattern_fail=0 null_fail=0 OK
+MEM threads=8 held_small=768 held_map=256 live_small=768 live_map=256 live_spans=16 requested_bytes=737280 mapped_bytes=8388608 span_bytes=262144 rss_kb=10192 reconcile=OK
+MEM threads=8 after_free live_small_delta=0 live_map_delta=0 retained_spans=6 retained_span_bytes=98304 rss_kb=1776 pattern_fail=0 null_fail=0 OK
+LAT threads=1 malloc n=2000 mean_ns=377 p50_ns=111 p90_ns=2592 p99_ns=3037 max_ns=8074
+LAT threads=1 free n=2000 mean_ns=358 p50_ns=149 p90_ns=2019 p99_ns=2296 max_ns=3592
+LAT threads=1 pair n=2000 mean_ns=736 p50_ns=260 p90_ns=4629 p99_ns=5240 max_ns=11666
+LAT threads=1 pattern_fail=0 null_fail=0 OK
+LAT threads=2 malloc n=4000 mean_ns=529 p50_ns=111 p90_ns=2870 p99_ns=4482 max_ns=25074
+LAT threads=2 free n=4000 mean_ns=1024 p50_ns=167 p90_ns=3833 p99_ns=8870 max_ns=108926
+LAT threads=2 pair n=4000 mean_ns=1553 p50_ns=278 p90_ns=6557 p99_ns=12463 max_ns=109019
+LAT threads=2 pattern_fail=0 null_fail=0 OK
+LAT threads=4 malloc n=8000 mean_ns=2502 p50_ns=129 p90_ns=3093 p99_ns=14482 max_ns=4101902
+LAT threads=4 free n=8000 mean_ns=2864 p50_ns=186 p90_ns=4018 p99_ns=19371 max_ns=3915106
+LAT threads=4 pair n=8000 mean_ns=5366 p50_ns=352 p90_ns=7685 p99_ns=32833 max_ns=4102402
+LAT threads=4 pattern_fail=0 null_fail=0 OK
+LAT threads=8 malloc n=16000 mean_ns=5970 p50_ns=111 p90_ns=2741 p99_ns=54593 max_ns=7467453
+LAT threads=8 free n=16000 mean_ns=8066 p50_ns=204 p90_ns=3222 p99_ns=76537 max_ns=7443731
+LAT threads=8 pair n=16000 mean_ns=14037 p50_ns=315 p90_ns=7981 p99_ns=113407 max_ns=7467934
+LAT threads=8 pattern_fail=0 null_fail=0 OK
+FINAL retained_spans=6 retained_span_bytes=98304 rss_kb=2496
+RESULT: PASS
+probe_h008_exit:0
+--- ABI ---
+mkdir -p build/pic
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=default -c src/api/mimir_alloc.c -o build/pic/mimir_alloc_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/core/mimir_core.c -o build/pic/mimir_core_pic.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o build/pic/mimir_platform_pic.o
+cc -shared -Wl,--version-script=src/api/mimir_alloc.map -o build/libmimiralloc.so build/pic/mimir_alloc_pic.o build/pic/mimir_core_pic.o build/pic/mimir_platform_pic.o -pthread
+4
+0000000000000998 T mimir_calloc
+0000000000000964 T mimir_free
+0000000000000934 T mimir_malloc
+00000000000009d0 T mimir_realloc
+--- diffs vs base de53575 (README, public header, src) ---
+0
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/perf/probe_h008.c
+?? tests/perf/recorded_run_h008.txt
+samtal_after:200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+ 04:14:51 up 18 days, 21:28,  4 users,  load average: 1.57, 1.36, 1.17

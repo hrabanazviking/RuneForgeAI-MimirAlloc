@@ -918,3 +918,22 @@ test-h007: $(BUILD)/probe_h007
 	./$(BUILD)/probe_h007
 
 .PHONY: test-h007
+
+# H-008: Phase 8 latency + memory-under-contention probe -
+# tests/perf/probe_h008.c (per-op percentiles, H-002 Phase B
+# shape; held-set memory reconciliation at quiescent barrier
+# points against the E-005/G-003 counters). Standalone via
+# make test-h008; NOT part of make test, whose composition
+# is unchanged. No src/ change. Recorded run:
+# tests/perf/recorded_run_h008.txt; slice record:
+# docs/PHASE_8_LATENCY_MEMORY_H008.md.
+$(BUILD)/probe_h008.o: tests/perf/probe_h008.c include/mimir_alloc.h tests/core/mimir_small_g003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_h008.c -o $@
+
+$(BUILD)/probe_h008: $(LIBOBJS) $(BUILD)/probe_h008.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_h008.o -o $@
+
+test-h008: $(BUILD)/probe_h008
+	./$(BUILD)/probe_h008
+
+.PHONY: test-h008
