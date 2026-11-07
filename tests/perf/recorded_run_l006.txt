@@ -1,0 +1,300 @@
+L-006 recorded run - Phase 12 prefill/decode/teardown allocation profile
+Sat Nov  7 02:22:55 PM EST 2026
+27fa61299e11d48703fde23d7652e769c9bc3f6b
+yrsa/mimiralloc-06
+aarch64
+4
+--- model identity (L-002 S5.1) ---
+-rw-r--r-- 1 pi pi 637699456 Oct 10 05:45 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+da3087fb14aede55fde6eb81a0e55e886810e43509ec82ecdc7aa5d62a03b556  /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+--- free before ---
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+samtal_before: 200
+temp=59.3'C
+throttled=0x0
+--- make test (gate) ---
+make_test_exit=0
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+CHECKS: 4590 run, 0 failed
+RESULT: PASS
+--- run_l006.sh ---
+--- build probe_l006 ---
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -DMIMIR_DEBUG=1 tests/perf/probe_l006.c src/api/mimir_alloc.c src/core/mimir_core.c src/platform/mimir_platform.c -o /tmp/probe_l006
+build exit=0
+9b399cb1a0cb625cc45f9ff921a8506682f81fc54a4c443ad108df2d10127567  tests/perf/probe_l006.c
+5a6da2685cd8b74852ccbac21eaf61db51df38d065d1ae0afd91d7af7e2ad15e  /tmp/probe_l006
+--- probe rep 1: timeout 120 /tmp/probe_l006 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l006 - L-006 prefill/decode/teardown profile harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline (pre-load)
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3040 Rss=128 Pss=112 kB
+  R(file) Size=1936 Rss=1248 Pss=144 kB
+  rollup  Rss=1392 Pss=272 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF version=3 tensors=201 kv=23 file_bytes=637699456
+GATE kv_count_sane: ok
+SNAPSHOT S1 after mmap (W Size jumps, residency ~0)
+  W       Size=622768 Rss=64 Pss=64 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=1520 Pss=337 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE W_size_equals_file_at_S1: ok
+GATE mmap_moves_no_allocator_counter: ok
+GATE metadata_kv_walk_complete: ok
+metadata: architecture=llama name=tinyllama_tinyllama-1.1b-chat-v1.0 alignment=32
+GATE tensor_info_walk_complete: ok
+metadata_end=1709436 data_start=1709440
+GATE gguf_dims_parsed: ok
+dims: layers=22 embd=2048 heads=32 kv_heads=4 head_dim=64 ctx=2048 vocab=32000
+kv_per_token_bytes=45056 (layers x kv_heads x head_dim x 2 x 4, f32 K+V)
+GATE kv_per_token_formula: ok
+touch sink=1262904 (policy: full 32 MiB head, 256 KiB stride beyond)
+SNAPSHOT S2 after metadata walk + weight touch
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=181744 Pss=180561 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE metadata_view_and_touch_move_no_counter: ok
+GATE kv_prompt_slices_alloc: ok
+SNAPSHOT S3 after KV allocation (prompt slices, C1)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=5088 Rss=2192 Pss=2176 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=183792 Pss=182609 kB (cross-check only)
+  C1 counters: requested=1441792 allocated=1572864 mapped=2097152 live_map_bytes=2097152 live_span_bytes=0 live_small=0 live_mappings=32 cached=0 released=0 failures=0
+GATE KV_counter_delta_equals_prompt_slices: ok
+GATE prefill_workspace_alloc: ok
+SNAPSHOT S4 after prefill (C1 prompt buffers + workspace burst)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=6336 Rss=3440 Pss=3424 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=185040 Pss=183857 kB (cross-check only)
+  C1 counters: requested=2621568 allocated=2752640 mapped=3375104 live_map_bytes=3358720 live_span_bytes=16384 live_small=1 live_mappings=37 cached=0 released=0 failures=0
+GATE prefill_C1_delta_equals_harness_requested_sum: ok
+prefill C1 requested sum=1179776 (ids 128 + embed 131072 + ws 4 x 262144)
+SNAPSHOT S4C2 after prefill stdlib workspace (C2)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=6864 Rss=3968 Pss=3952 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=185568 Pss=184385 kB (cross-check only)
+  C1 counters: requested=2621568 allocated=2752640 mapped=3375104 live_map_bytes=3358720 live_span_bytes=16384 live_small=1 live_mappings=37 cached=0 released=0 failures=0
+GATE C2_prefill_step_moves_no_C1_counter: ok
+GATE decode_steps_complete: ok
+SNAPSHOT S5 steady decode (after 32 steps)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=8912 Rss=6016 Pss=6000 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=187616 Pss=186433 kB (cross-check only)
+  C1 counters: requested=8421504 allocated=9044096 mapped=5472256 live_map_bytes=5455872 live_span_bytes=16384 live_small=1 live_mappings=69 cached=0 released=5767168 failures=0
+GATE decode_C1_delta_equals_harness_requested_sum: ok
+decode C1 requested sum=5799936 over 32 steps (per step: kv 45056 + scratch 8192 + logits 128000)
+KV live at S5: 64 slices x 45056 B = 2883584 B held (prompt 32 + decode 32)
+SNAPSHOT S6 after teardown
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3056 Rss=160 Pss=144 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=1472 Pss=289 kB (cross-check only)
+  C1 counters: requested=8421504 allocated=9044096 mapped=16384 live_map_bytes=0 live_span_bytes=16384 live_small=0 live_mappings=0 cached=0 released=11223040 failures=0
+GATE W_returns_to_zero: ok
+GATE C1_live_returns_to_baseline: ok
+teardown: bytes_released delta=11223040 (retained mapped at S6=16384, cached=0, G-005 posture, reported not gated)
+L006 RESULT: PASS (failures=0)
+rep 1 exit=0
+--- probe rep 2: timeout 120 /tmp/probe_l006 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l006 - L-006 prefill/decode/teardown profile harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline (pre-load)
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3040 Rss=128 Pss=112 kB
+  R(file) Size=1936 Rss=1248 Pss=144 kB
+  rollup  Rss=1392 Pss=272 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF version=3 tensors=201 kv=23 file_bytes=637699456
+GATE kv_count_sane: ok
+SNAPSHOT S1 after mmap (W Size jumps, residency ~0)
+  W       Size=622768 Rss=64 Pss=64 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=1520 Pss=337 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE W_size_equals_file_at_S1: ok
+GATE mmap_moves_no_allocator_counter: ok
+GATE metadata_kv_walk_complete: ok
+metadata: architecture=llama name=tinyllama_tinyllama-1.1b-chat-v1.0 alignment=32
+GATE tensor_info_walk_complete: ok
+metadata_end=1709436 data_start=1709440
+GATE gguf_dims_parsed: ok
+dims: layers=22 embd=2048 heads=32 kv_heads=4 head_dim=64 ctx=2048 vocab=32000
+kv_per_token_bytes=45056 (layers x kv_heads x head_dim x 2 x 4, f32 K+V)
+GATE kv_per_token_formula: ok
+touch sink=1262904 (policy: full 32 MiB head, 256 KiB stride beyond)
+SNAPSHOT S2 after metadata walk + weight touch
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=181744 Pss=180561 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE metadata_view_and_touch_move_no_counter: ok
+GATE kv_prompt_slices_alloc: ok
+SNAPSHOT S3 after KV allocation (prompt slices, C1)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=5088 Rss=2192 Pss=2176 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=183792 Pss=182609 kB (cross-check only)
+  C1 counters: requested=1441792 allocated=1572864 mapped=2097152 live_map_bytes=2097152 live_span_bytes=0 live_small=0 live_mappings=32 cached=0 released=0 failures=0
+GATE KV_counter_delta_equals_prompt_slices: ok
+GATE prefill_workspace_alloc: ok
+SNAPSHOT S4 after prefill (C1 prompt buffers + workspace burst)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=6336 Rss=3440 Pss=3424 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=185040 Pss=183857 kB (cross-check only)
+  C1 counters: requested=2621568 allocated=2752640 mapped=3375104 live_map_bytes=3358720 live_span_bytes=16384 live_small=1 live_mappings=37 cached=0 released=0 failures=0
+GATE prefill_C1_delta_equals_harness_requested_sum: ok
+prefill C1 requested sum=1179776 (ids 128 + embed 131072 + ws 4 x 262144)
+SNAPSHOT S4C2 after prefill stdlib workspace (C2)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=6864 Rss=3968 Pss=3952 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=185568 Pss=184385 kB (cross-check only)
+  C1 counters: requested=2621568 allocated=2752640 mapped=3375104 live_map_bytes=3358720 live_span_bytes=16384 live_small=1 live_mappings=37 cached=0 released=0 failures=0
+GATE C2_prefill_step_moves_no_C1_counter: ok
+GATE decode_steps_complete: ok
+SNAPSHOT S5 steady decode (after 32 steps)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=8912 Rss=6016 Pss=6000 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=187616 Pss=186433 kB (cross-check only)
+  C1 counters: requested=8421504 allocated=9044096 mapped=5472256 live_map_bytes=5455872 live_span_bytes=16384 live_small=1 live_mappings=69 cached=0 released=5767168 failures=0
+GATE decode_C1_delta_equals_harness_requested_sum: ok
+decode C1 requested sum=5799936 over 32 steps (per step: kv 45056 + scratch 8192 + logits 128000)
+KV live at S5: 64 slices x 45056 B = 2883584 B held (prompt 32 + decode 32)
+SNAPSHOT S6 after teardown
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3056 Rss=160 Pss=144 kB
+  R(file) Size=1936 Rss=1312 Pss=145 kB
+  rollup  Rss=1472 Pss=289 kB (cross-check only)
+  C1 counters: requested=8421504 allocated=9044096 mapped=16384 live_map_bytes=0 live_span_bytes=16384 live_small=0 live_mappings=0 cached=0 released=11223040 failures=0
+GATE W_returns_to_zero: ok
+GATE C1_live_returns_to_baseline: ok
+teardown: bytes_released delta=11223040 (retained mapped at S6=16384, cached=0, G-005 posture, reported not gated)
+L006 RESULT: PASS (failures=0)
+rep 2 exit=0
+--- probe rep 3: timeout 120 /tmp/probe_l006 /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf ---
+probe_l006 - L-006 prefill/decode/teardown profile harness
+model: /mnt/yggdrasil/models/tinyllama/tinyllama-1.1b-chat-v1.0.Q4_0.gguf
+SNAPSHOT S0 baseline (pre-load)
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3040 Rss=128 Pss=112 kB
+  R(file) Size=1936 Rss=1232 Pss=143 kB
+  rollup  Rss=1376 Pss=272 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE gguf_magic: ok
+GGUF version=3 tensors=201 kv=23 file_bytes=637699456
+GATE kv_count_sane: ok
+SNAPSHOT S1 after mmap (W Size jumps, residency ~0)
+  W       Size=622768 Rss=64 Pss=64 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1296 Pss=144 kB
+  rollup  Rss=1504 Pss=337 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE W_size_equals_file_at_S1: ok
+GATE mmap_moves_no_allocator_counter: ok
+GATE metadata_kv_walk_complete: ok
+metadata: architecture=llama name=tinyllama_tinyllama-1.1b-chat-v1.0 alignment=32
+GATE tensor_info_walk_complete: ok
+metadata_end=1709436 data_start=1709440
+GATE gguf_dims_parsed: ok
+dims: layers=22 embd=2048 heads=32 kv_heads=4 head_dim=64 ctx=2048 vocab=32000
+kv_per_token_bytes=45056 (layers x kv_heads x head_dim x 2 x 4, f32 K+V)
+GATE kv_per_token_formula: ok
+touch sink=1262904 (policy: full 32 MiB head, 256 KiB stride beyond)
+SNAPSHOT S2 after metadata walk + weight touch
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=3040 Rss=144 Pss=128 kB
+  R(file) Size=1936 Rss=1296 Pss=144 kB
+  rollup  Rss=181728 Pss=180561 kB (cross-check only)
+  C1 counters: requested=0 allocated=0 mapped=0 live_map_bytes=0 live_span_bytes=0 live_small=0 live_mappings=0 cached=0 released=0 failures=0
+GATE metadata_view_and_touch_move_no_counter: ok
+GATE kv_prompt_slices_alloc: ok
+SNAPSHOT S3 after KV allocation (prompt slices, C1)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=5088 Rss=2192 Pss=2176 kB
+  R(file) Size=1936 Rss=1296 Pss=144 kB
+  rollup  Rss=183776 Pss=182609 kB (cross-check only)
+  C1 counters: requested=1441792 allocated=1572864 mapped=2097152 live_map_bytes=2097152 live_span_bytes=0 live_small=0 live_mappings=32 cached=0 released=0 failures=0
+GATE KV_counter_delta_equals_prompt_slices: ok
+GATE prefill_workspace_alloc: ok
+SNAPSHOT S4 after prefill (C1 prompt buffers + workspace burst)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=6336 Rss=3440 Pss=3424 kB
+  R(file) Size=1936 Rss=1296 Pss=144 kB
+  rollup  Rss=185024 Pss=183857 kB (cross-check only)
+  C1 counters: requested=2621568 allocated=2752640 mapped=3375104 live_map_bytes=3358720 live_span_bytes=16384 live_small=1 live_mappings=37 cached=0 released=0 failures=0
+GATE prefill_C1_delta_equals_harness_requested_sum: ok
+prefill C1 requested sum=1179776 (ids 128 + embed 131072 + ws 4 x 262144)
+SNAPSHOT S4C2 after prefill stdlib workspace (C2)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=6864 Rss=3968 Pss=3952 kB
+  R(file) Size=1936 Rss=1296 Pss=144 kB
+  rollup  Rss=185552 Pss=184385 kB (cross-check only)
+  C1 counters: requested=2621568 allocated=2752640 mapped=3375104 live_map_bytes=3358720 live_span_bytes=16384 live_small=1 live_mappings=37 cached=0 released=0 failures=0
+GATE C2_prefill_step_moves_no_C1_counter: ok
+GATE decode_steps_complete: ok
+SNAPSHOT S5 steady decode (after 32 steps)
+  W       Size=622768 Rss=180288 Pss=180288 kB
+  ANON    Size=8912 Rss=6016 Pss=6000 kB
+  R(file) Size=1936 Rss=1296 Pss=144 kB
+  rollup  Rss=187600 Pss=186433 kB (cross-check only)
+  C1 counters: requested=8421504 allocated=9044096 mapped=5472256 live_map_bytes=5455872 live_span_bytes=16384 live_small=1 live_mappings=69 cached=0 released=5767168 failures=0
+GATE decode_C1_delta_equals_harness_requested_sum: ok
+decode C1 requested sum=5799936 over 32 steps (per step: kv 45056 + scratch 8192 + logits 128000)
+KV live at S5: 64 slices x 45056 B = 2883584 B held (prompt 32 + decode 32)
+SNAPSHOT S6 after teardown
+  W       Size=0 Rss=0 Pss=0 kB
+  ANON    Size=3056 Rss=160 Pss=144 kB
+  R(file) Size=1936 Rss=1296 Pss=144 kB
+  rollup  Rss=1456 Pss=289 kB (cross-check only)
+  C1 counters: requested=8421504 allocated=9044096 mapped=16384 live_map_bytes=0 live_span_bytes=16384 live_small=0 live_mappings=0 cached=0 released=11223040 failures=0
+GATE W_returns_to_zero: ok
+GATE C1_live_returns_to_baseline: ok
+teardown: bytes_released delta=11223040 (retained mapped at S6=16384, cached=0, G-005 posture, reported not gated)
+L006 RESULT: PASS (failures=0)
+rep 3 exit=0
+--- Aesir KV-cache component leg (test_kv_cache.mojo) ---
+mojo: Mojo 1.1.0 (8189361e)
+kv component build exit=1
+Imported from /home/pi/c2/aesir_engine/core/inference.mojo:11:
+Imported from /home/pi/c2/aesir_engine/core/compute.mojo:24:
+/home/pi/c2/aesir_engine/core/cuda_gate.mojo:39:21: error: use of unknown declaration 'InlineArray'
+        var path1 = InlineArray[Int8, 32](fill=0)
+                    ^~~~~~~~~~~
+/home/pi/mojo-dev/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+kv component: NO BINARY - leg BLOCKED (INC-L003-02), recorded owed
+--- run_l006 done rc=0 ---
+run_l006_exit=0
+--- after ---
+samtal_after: 200
+temp=59.8'C
+throttled=0x0
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
