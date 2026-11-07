@@ -1069,3 +1069,32 @@ test-i007: $(BUILD)/test_i007
 	./$(BUILD)/test_i007
 
 .PHONY: test-i007
+
+# I-008: Phase 9 repeated pressure cycles +
+# responsiveness under pressure test - the test under
+# tests/core/ (test_i008.c) runs 10 stated pressure
+# cycles in one RLIMIT_AS-calibrated child (I-005 form,
+# 128-page headroom, parent-enforced 30 s wall bound):
+# each cycle allocates exactly 1200 x 64 B (5 spans),
+# frees to exactly 5 retained spans, fills large 4096 B
+# blocks to the clean NULL (exactly 61), probes
+# responsiveness under pressure (small alloc + local
+# health check, timing-never-an-oracle), releases and
+# trims back to an exactly reconciled quiescent point;
+# all 10 cycle tuples must be identical (no ratchet).
+# The parent samples Samtal HTTP before, during and
+# after the cycles (G-008 house form). Standalone via
+# `make test-i008`; NOT part of `make test`, whose
+# composition is unchanged. Recorded run:
+# tests/core/recorded_run_i008.txt; slice record:
+# docs/PHASE_9_PRESSURE_CYCLES.md.
+$(BUILD)/test_i008.o: tests/core/test_i008.c include/mimir_alloc.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h tests/core/mimir_small_g003.h tests/abi/mimir_audit_e005.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_i008.c -o $@
+
+$(BUILD)/test_i008: $(LIBOBJS) $(BUILD)/test_i008.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_i008.o -o $@
+
+test-i008: $(BUILD)/test_i008
+	./$(BUILD)/test_i008
+
+.PHONY: test-i008

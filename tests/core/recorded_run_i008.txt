@@ -1,0 +1,311 @@
+MimirAlloc I-008 recorded run - Phase 9 repeated pressure cycles + responsiveness under pressure
+Sat Nov  7 06:50:06 AM EST 2026
+Linux purpleviking1 6.12.112-v8-16k-hailo+ #1 SMP PREEMPT Sat Oct 10 09:05:25 EDT 2026 aarch64 GNU/Linux
+PAGESIZE=16384
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+8f0e8ec I-006 (Phase 9): fragmentation and reclaim-overhead measurement - stated fragmented state (classes 64/256/1024, 3 spans each, odd-index frees, 499 live), F-3 free-but-unusable 70976 B (R-EXT 0.270752), F-1(b) tails 3360 B (R-INT 0.022786), F-2 mapping overhead 54688 B, F-1(a) 360 B workload-record exact (INC-I002-02), cross-class fresh-span vs own-class hole-reuse proof, F-4 reclaim costs with exact span/byte deltas (free-path bound release +3, partial/full/no-op trims, OS anon drop byte-exact), hit median 130 ns vs miss median 2482 ns (timing-never-an-oracle), live blocks byte-identical across every reclaim step; F-5 unmeasurable (no budget, INC-I001-14), F-6 I-005 leg owed; test_i006 120 checks / 0 failures; make test exit 0; nm -D exactly 4; README and public header byte-identical; INC-I006-01..04; Makefile keeper-merged union (banked I-005 block + I-006 block, verified both ways)
+yrsa/mimiralloc-08
+ M Makefile
+?? build/
+?? hidden_files/
+?? tests/core/recorded_run_i008.txt
+?? tests/core/test_i008.c
+Samtal_before: 200
+--- header and README integrity vs base 8f0e8ec ---
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  README.md
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  include/mimir_alloc.h
+bd7f66148fe77b8d465875562373e94a1c35baf51c0df5ba74c8b2b8b9a46702  -
+55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  -
+--- make test-i008 ---
+./build/test_i008
+test_i008: Phase 9 repeated pressure cycles + responsiveness (X9)
+DESIGN cycles=10 headroom_pages=128 n_small=1200 expect_spans=5 expect_large=61 child_wall_bound_ms=30000 probe_liveness_bound_s=5
+PARENT page=16384 small_cutoff=1024 large4096_va_pages=2 span_va_pages=1 class64_per_span=254
+  [ok] 0: page size is 16384 B on this host (stated arithmetic)
+SAMTAL pre-run http=200 ms=16.241
+  [ok] 0: Samtal HTTP 200 before the cycles
+LEG cycles x10 (one child, RLIMIT_AS calibrated)
+  baseline=2637824 limit=4734976 headroom_pages=128
+  [ok] child: retention bound raised to 16 (test-only tune)
+  [ok] child: retention bound reads back 16
+CYCLE 1 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=0 span_ret=0 map_pub=0 map_ret=0
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 1: small successes exactly 1200
+  [ok] cycle 1: span-published delta exactly 5
+  [ok] cycle 1: small patterns intact before free
+  [ok] cycle 1: retained spans exactly 5 after free-all
+  [ok] cycle 1: retained bytes exactly 5 x page
+  [ok] cycle 1: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 1: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 1: mapping-published delta equals large successes
+  [ok] cycle 1: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 1: live large patterns intact at full pressure
+  [ok] cycle 1: live large blocks pairwise non-overlapping
+  [ok] cycle 1: responsiveness probe small alloc served under pressure
+  [ok] cycle 1: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 1: retained spans back to exactly 5 after probe free
+  [ok] cycle 1: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 1: health check inside stated 5 s liveness bound
+  [ok] cycle 1: mapping-retired delta equals large successes
+  [ok] cycle 1: trim released exactly the 5 retained spans
+  [ok] cycle 1: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=5 span_ret=5 map_pub=61 map_ret=61
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=1 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=1093 health_ok=1 health_ns=44944 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 2 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=5 span_ret=5 map_pub=61 map_ret=61
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 2: small successes exactly 1200
+  [ok] cycle 2: span-published delta exactly 5
+  [ok] cycle 2: small patterns intact before free
+  [ok] cycle 2: retained spans exactly 5 after free-all
+  [ok] cycle 2: retained bytes exactly 5 x page
+  [ok] cycle 2: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 2: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 2: mapping-published delta equals large successes
+  [ok] cycle 2: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 2: live large patterns intact at full pressure
+  [ok] cycle 2: live large blocks pairwise non-overlapping
+  [ok] cycle 2: responsiveness probe small alloc served under pressure
+  [ok] cycle 2: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 2: retained spans back to exactly 5 after probe free
+  [ok] cycle 2: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 2: health check inside stated 5 s liveness bound
+  [ok] cycle 2: mapping-retired delta equals large successes
+  [ok] cycle 2: trim released exactly the 5 retained spans
+  [ok] cycle 2: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=10 span_ret=10 map_pub=122 map_ret=122
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=2 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=592 health_ok=1 health_ns=41981 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 3 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=10 span_ret=10 map_pub=122 map_ret=122
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 3: small successes exactly 1200
+  [ok] cycle 3: span-published delta exactly 5
+  [ok] cycle 3: small patterns intact before free
+  [ok] cycle 3: retained spans exactly 5 after free-all
+  [ok] cycle 3: retained bytes exactly 5 x page
+  [ok] cycle 3: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 3: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 3: mapping-published delta equals large successes
+  [ok] cycle 3: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 3: live large patterns intact at full pressure
+  [ok] cycle 3: live large blocks pairwise non-overlapping
+  [ok] cycle 3: responsiveness probe small alloc served under pressure
+  [ok] cycle 3: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 3: retained spans back to exactly 5 after probe free
+  [ok] cycle 3: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 3: health check inside stated 5 s liveness bound
+  [ok] cycle 3: mapping-retired delta equals large successes
+  [ok] cycle 3: trim released exactly the 5 retained spans
+  [ok] cycle 3: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=15 span_ret=15 map_pub=183 map_ret=183
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=3 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=593 health_ok=1 health_ns=35536 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 4 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=15 span_ret=15 map_pub=183 map_ret=183
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 4: small successes exactly 1200
+  [ok] cycle 4: span-published delta exactly 5
+  [ok] cycle 4: small patterns intact before free
+  [ok] cycle 4: retained spans exactly 5 after free-all
+  [ok] cycle 4: retained bytes exactly 5 x page
+  [ok] cycle 4: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 4: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 4: mapping-published delta equals large successes
+  [ok] cycle 4: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 4: live large patterns intact at full pressure
+  [ok] cycle 4: live large blocks pairwise non-overlapping
+  [ok] cycle 4: responsiveness probe small alloc served under pressure
+  [ok] cycle 4: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 4: retained spans back to exactly 5 after probe free
+  [ok] cycle 4: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 4: health check inside stated 5 s liveness bound
+  [ok] cycle 4: mapping-retired delta equals large successes
+  [ok] cycle 4: trim released exactly the 5 retained spans
+  [ok] cycle 4: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=20 span_ret=20 map_pub=244 map_ret=244
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=4 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=648 health_ok=1 health_ns=34056 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 5 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=20 span_ret=20 map_pub=244 map_ret=244
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 5: small successes exactly 1200
+  [ok] cycle 5: span-published delta exactly 5
+  [ok] cycle 5: small patterns intact before free
+  [ok] cycle 5: retained spans exactly 5 after free-all
+  [ok] cycle 5: retained bytes exactly 5 x page
+  [ok] cycle 5: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 5: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 5: mapping-published delta equals large successes
+  [ok] cycle 5: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 5: live large patterns intact at full pressure
+  [ok] cycle 5: live large blocks pairwise non-overlapping
+  [ok] cycle 5: responsiveness probe small alloc served under pressure
+  [ok] cycle 5: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 5: retained spans back to exactly 5 after probe free
+  [ok] cycle 5: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 5: health check inside stated 5 s liveness bound
+  [ok] cycle 5: mapping-retired delta equals large successes
+  [ok] cycle 5: trim released exactly the 5 retained spans
+  [ok] cycle 5: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=25 span_ret=25 map_pub=305 map_ret=305
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=5 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=704 health_ok=1 health_ns=44111 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 6 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=25 span_ret=25 map_pub=305 map_ret=305
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 6: small successes exactly 1200
+  [ok] cycle 6: span-published delta exactly 5
+  [ok] cycle 6: small patterns intact before free
+  [ok] cycle 6: retained spans exactly 5 after free-all
+  [ok] cycle 6: retained bytes exactly 5 x page
+  [ok] cycle 6: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 6: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 6: mapping-published delta equals large successes
+  [ok] cycle 6: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 6: live large patterns intact at full pressure
+  [ok] cycle 6: live large blocks pairwise non-overlapping
+  [ok] cycle 6: responsiveness probe small alloc served under pressure
+  [ok] cycle 6: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 6: retained spans back to exactly 5 after probe free
+  [ok] cycle 6: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 6: health check inside stated 5 s liveness bound
+  [ok] cycle 6: mapping-retired delta equals large successes
+  [ok] cycle 6: trim released exactly the 5 retained spans
+  [ok] cycle 6: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=30 span_ret=30 map_pub=366 map_ret=366
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=6 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=685 health_ok=1 health_ns=52203 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 7 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=30 span_ret=30 map_pub=366 map_ret=366
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 7: small successes exactly 1200
+  [ok] cycle 7: span-published delta exactly 5
+  [ok] cycle 7: small patterns intact before free
+  [ok] cycle 7: retained spans exactly 5 after free-all
+  [ok] cycle 7: retained bytes exactly 5 x page
+  [ok] cycle 7: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 7: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 7: mapping-published delta equals large successes
+  [ok] cycle 7: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 7: live large patterns intact at full pressure
+  [ok] cycle 7: live large blocks pairwise non-overlapping
+  [ok] cycle 7: responsiveness probe small alloc served under pressure
+  [ok] cycle 7: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 7: retained spans back to exactly 5 after probe free
+  [ok] cycle 7: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 7: health check inside stated 5 s liveness bound
+  [ok] cycle 7: mapping-retired delta equals large successes
+  [ok] cycle 7: trim released exactly the 5 retained spans
+  [ok] cycle 7: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=35 span_ret=35 map_pub=427 map_ret=427
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=7 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=686 health_ok=1 health_ns=35444 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 8 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=35 span_ret=35 map_pub=427 map_ret=427
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 8: small successes exactly 1200
+  [ok] cycle 8: span-published delta exactly 5
+  [ok] cycle 8: small patterns intact before free
+  [ok] cycle 8: retained spans exactly 5 after free-all
+  [ok] cycle 8: retained bytes exactly 5 x page
+  [ok] cycle 8: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 8: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 8: mapping-published delta equals large successes
+  [ok] cycle 8: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 8: live large patterns intact at full pressure
+  [ok] cycle 8: live large blocks pairwise non-overlapping
+  [ok] cycle 8: responsiveness probe small alloc served under pressure
+  [ok] cycle 8: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 8: retained spans back to exactly 5 after probe free
+  [ok] cycle 8: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 8: health check inside stated 5 s liveness bound
+  [ok] cycle 8: mapping-retired delta equals large successes
+  [ok] cycle 8: trim released exactly the 5 retained spans
+  [ok] cycle 8: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=40 span_ret=40 map_pub=488 map_ret=488
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=8 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=593 health_ok=1 health_ns=31685 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 9 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=40 span_ret=40 map_pub=488 map_ret=488
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 9: small successes exactly 1200
+  [ok] cycle 9: span-published delta exactly 5
+  [ok] cycle 9: small patterns intact before free
+  [ok] cycle 9: retained spans exactly 5 after free-all
+  [ok] cycle 9: retained bytes exactly 5 x page
+  [ok] cycle 9: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 9: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 9: mapping-published delta equals large successes
+  [ok] cycle 9: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 9: live large patterns intact at full pressure
+  [ok] cycle 9: live large blocks pairwise non-overlapping
+  [ok] cycle 9: responsiveness probe small alloc served under pressure
+  [ok] cycle 9: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 9: retained spans back to exactly 5 after probe free
+  [ok] cycle 9: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 9: health check inside stated 5 s liveness bound
+  [ok] cycle 9: mapping-retired delta equals large successes
+  [ok] cycle 9: trim released exactly the 5 retained spans
+  [ok] cycle 9: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=45 span_ret=45 map_pub=549 map_ret=549
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=9 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=518 health_ok=1 health_ns=34426 trim=5 patterns_ok=1 overlap_ok=1
+CYCLE 10 of 10
+  QUIESCENT cycle-start Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=45 span_ret=45 map_pub=549 map_ret=549
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  [ok] cycle 10: small successes exactly 1200
+  [ok] cycle 10: span-published delta exactly 5
+  [ok] cycle 10: small patterns intact before free
+  [ok] cycle 10: retained spans exactly 5 after free-all
+  [ok] cycle 10: retained bytes exactly 5 x page
+  [ok] cycle 10: Q-MAPPED at retained point exactly 5 x page
+  [ok] cycle 10: large successes before NULL exactly 61 (floor((128-5)/2))
+  [ok] cycle 10: mapping-published delta equals large successes
+  [ok] cycle 10: further large request at pressure exactly NULL (stable failure)
+  [ok] cycle 10: live large patterns intact at full pressure
+  [ok] cycle 10: live large blocks pairwise non-overlapping
+  [ok] cycle 10: responsiveness probe small alloc served under pressure
+  [ok] cycle 10: probe alloc completed inside stated 5 s liveness bound
+  [ok] cycle 10: retained spans back to exactly 5 after probe free
+  [ok] cycle 10: local health check (/proc/self/status) ok under pressure
+  [ok] cycle 10: health check inside stated 5 s liveness bound
+  [ok] cycle 10: mapping-retired delta equals large successes
+  [ok] cycle 10: trim released exactly the 5 retained spans
+  [ok] cycle 10: span-retired delta equals trim count
+  QUIESCENT cycle-end Q-MAPPED=0 Q-RETAINED=0 retained_spans=0 span_pub=50 span_ret=50 map_pub=610 map_ret=610
+  [ok] quiescent: counters reconcile exactly (Q-MAPPED==0, Q-RETAINED==0, published==retired)
+  CYCLE-ROW cycle=10 n_small=1200 span_delta=5 retained_spans=5 retained_bytes=81920 n_large=61 probe_ok=1 probe_alloc_ns=629 health_ok=1 health_ns=28204 trim=5 patterns_ok=1 overlap_ok=1
+  [ok] drift: all 10 cycle tuples identical to cycle 1 (no ratchet, failure behaviour stable)
+  CHILD checks=213 failures=0
+  child wall time approx 40 ms (bound 30000 ms; poll granularity 2 ms, sampler time excluded)
+  [ok] cycles child: all cycles passed
+SAMTAL during-run samples=2 all_http_200=1 ms_min=0.461 ms_max=4.336 (sampler process spanning the cycles window; timing-never-an-oracle, no bound claimed)
+  [ok] parent: Samtal sampled at least once across the cycles window
+  [ok] parent: Samtal HTTP 200 on every during-run sample
+SAMTAL post-run http=200 ms=0.781
+  [ok] parent: Samtal HTTP 200 after the cycles
+LEG F fresh-process health probe (parent, unlimited)
+  [ok] F: parent malloc works after pressure cycles
+  [ok] F: parent pattern intact
+  [ok] F: parent calloc works
+  [ok] F: calloc memory zeroed
+RESULT: PASS (10 checks, 0 failures)
+MAKE_I008_EXIT=0
+Samtal_after: 200
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Swap:             15           1          14
+--- post-run verification (same session, this worktree) ---
+make test: exit 0 (full suite, banked composition unchanged)
+make lib: exit 0; nm -D --defined-only build/libmimiralloc.so = exactly 4:
+0000000000000998 T mimir_calloc
+0000000000000964 T mimir_free
+0000000000000934 T mimir_malloc
+00000000000009d0 T mimir_realloc
+README.md and include/mimir_alloc.h sha256-identical to base 8f0e8ec (see integrity block above)
