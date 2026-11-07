@@ -743,3 +743,29 @@ test-g007: $(BUILD)/test_g007
 	./$(BUILD)/test_g007
 
 .PHONY: test-g007
+
+# G-008: Phase 7 repeated load/unload + multitasking
+# responsiveness record - the harness under tests/core/
+# (test_g008.c) consumes build/libmimiralloc.so ONLY via
+# dlopen/dlsym/dlclose (it links -ldl, never the library
+# objects), running 50 bounded load/unload cycles with a
+# small synthetic workload per cycle, /proc/self/maps +
+# VmRSS state-carry-over evidence, and an orphan probe;
+# its churn mode is driven by the responsiveness probe
+# script tests/core/run_g008_probe.sh (Samtal HTTP +
+# /bin/true latency, baseline vs 2-thread bounded churn).
+# Standalone via `make test-g008`; NOT part of
+# `make test`, whose composition is unchanged. Recorded
+# run: tests/core/recorded_run_g008.txt; slice record:
+# docs/PHASE_7_LOAD_UNLOAD_RESPONSIVENESS_G008.md.
+$(BUILD)/test_g008.o: tests/core/test_g008.c | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_g008.c -o $@
+
+$(BUILD)/test_g008: $(BUILD)/libmimiralloc.so $(BUILD)/test_g008.o
+	$(CC) $(CFLAGS) $(BUILD)/test_g008.o -o $@ -ldl
+
+test-g008: $(BUILD)/test_g008
+	./$(BUILD)/test_g008 $(BUILD)/libmimiralloc.so
+	bash tests/core/run_g008_probe.sh
+
+.PHONY: test-g008
