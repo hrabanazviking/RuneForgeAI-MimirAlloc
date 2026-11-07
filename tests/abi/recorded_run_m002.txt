@@ -1,0 +1,88 @@
+MimirAlloc M-002 recorded run - Phase 13 code review + API/ABI audit
+date (UTC): 2026-11-07T20:11:20Z
+host: purpleviking1 aarch64
+compiler: cc (Debian 12.2.0-14+deb12u1) 12.2.0
+worktree: /home/pi/mimiralloc-team-02 branch: yrsa/mimiralloc-02
+HEAD (base audited): 0b00f088ea6e522631b46c1b3abbdd5b3f9cf59d
+
+== environment before ==
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Samtal http://127.0.0.1:8787/ -> 200
+
+== source line counts (wc -l) ==
+   171 include/mimir_alloc.h
+   144 src/api/mimir_alloc.c
+    29 src/api/mimir_alloc.map
+  2983 src/core/mimir_core.c
+   282 src/core/mimir_core.h
+   156 src/platform/mimir_platform.c
+   104 src/platform/mimir_platform.h
+  3869 total
+
+== make test (fresh, full summary lines) ==
+make test exit: 0
+CHECKS: 29 run, 0 failed
+RESULT: PASS
+CHECKS: 69 run, 0 failed
+RESULT: PASS
+CHECKS: 95 run, 0 failed
+RESULT: PASS
+CHECKS: 23 run, 0 failed
+RESULT: PASS
+CHECKS: 122 run, 0 failed
+RESULT: PASS
+CHECKS: 42 run, 0 failed, 7 skipped-not-yet
+RESULT: PASS
+ALLOC/FREE BALANCE: allocs=2088 frees=2088 ok
+CHECKS: 4590 run, 0 failed
+ALLOCATIONS: 2088 successful, 2088 frees
+RESULT: PASS
+warnings in build log: 0
+
+== make lib (from clean build dir) ==
+make lib exit: 0
+warnings in lib build log: 0
+-rwxr-xr-x 1 pi pi 74528 Nov  7 15:11 build/libmimiralloc.so
+
+== nm -D build/libmimiralloc.so (full) ==
+                 w __cxa_finalize@GLIBC_2.17
+                 U __getauxval@GLIBC_2.17
+                 U getenv@GLIBC_2.17
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U memcpy@GLIBC_2.17
+                 U memset@GLIBC_2.17
+0000000000000b80 T mimir_calloc
+0000000000000b50 T mimir_free
+0000000000000b20 T mimir_malloc
+0000000000000bc0 T mimir_realloc
+                 U mmap@GLIBC_2.17
+                 U munmap@GLIBC_2.17
+                 U pthread_mutex_lock@GLIBC_2.17
+                 U pthread_mutex_unlock@GLIBC_2.17
+                 U sysconf@GLIBC_2.17
+                 U thrd_current@GLIBC_2.28
+                 U write@GLIBC_2.17
+
+== nm -D --defined-only (export proof) ==
+0000000000000b80 T mimir_calloc
+0000000000000b50 T mimir_free
+0000000000000b20 T mimir_malloc
+0000000000000bc0 T mimir_realloc
+defined dynamic symbol count: 4
+
+== SONAME check (readelf -d) ==
+NO SONAME
+
+== environment after ==
+               total        used        free      shared  buff/cache   available
+Mem:              15           2           0           0          13          13
+Samtal http://127.0.0.1:8787/ -> 200
+
+== summary ==
+make test: exit 0, CHECKS 4590 run / 0 failed (see above)
+exports: exactly 4 defined dynamic symbols (mimir_malloc, mimir_free, mimir_calloc, mimir_realloc)
+SONAME: none
+audit doc: docs/PHASE_13_CODE_REVIEW_ABI_AUDIT_M002.md
