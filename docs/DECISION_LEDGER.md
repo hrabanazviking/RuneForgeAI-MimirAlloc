@@ -49,6 +49,7 @@ leaves open. Statuses in this ledger mean:
 | D-006 | Implementation language — C11 core | Adopted | Section 7.2 | A-009 |
 | D-007 | Z13 redesign: TLS cache (Wave 4), per-CCD arenas (Wave 5) | Adopted | Z13 roadmap Z-026 | Z-026 (settler); consumers Z-028, Z-037, Z-039 |
 | D-008 | Z13 Wave 5 second geometry: lock-sharding (geometry B); per-thread arenas NOT taken | Adopted | Z13 roadmap Z-039; Z-039 recorded run decision rule R1-R4 | Z-039 follow-up (settler) |
+| D-009 | Z13 placement policy trial: current policy retained; best-fit NOT taken, first-fit TIE | Adopted | Z13 roadmap Z-059; Z-059 recorded run pre-registered rule (a)-(f) | Z-059 (settler) |
 
 ---
 
@@ -234,6 +235,57 @@ leaves open. Statuses in this ledger mean:
 - **Supersedes:** None. **Status of entry:** Current.
 
 ---
+## D-009 - Z13 placement policy: current policy retained at Z-059
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice Z-059
+  (Wave 7), which names this ledger as the decision's home;
+  the pre-registered decision rule (a)-(f) in
+  tests/perf/probe_z059.c; the banked oracle it applies to
+  is tests/perf/recorded_run_z13_z055.txt (seat c2ed635).
+- **Decision:** (1) The current placement policy - the
+  class's active span first, then a first-fit scan of the
+  span list, then a fresh span, with LIFO free-list reuse
+  inside the span - is RETAINED as the production policy.
+  No placement change is adopted. (2) Best-fit (serve
+  from the can-serve span with the fewest servable slots)
+  is NOT taken: on the Z-055 fragmentation oracle's
+  decision leg (uneven fragmentation, 24 follow-on
+  allocations per class, classes 64 and 256, three runs
+  per policy with bit-identical counters) it LOSES to the
+  current policy at class 256 (follow-ons spread over 3
+  spans vs 2; spans left empty after the originals are
+  freed 1 vs 2) and TIEs at class 64 - pre-registered
+  clauses (b) and (c) fail. Its mechanism is recorded in
+  tests/perf/recorded_run_z13_z059.txt: tightest-first
+  consumes the small holes first and is then forced into
+  the emptiest span, the span it exists to spare. (3)
+  First-fit (ignore the active span, pure list-order
+  scan) TIEs the current policy on every measured
+  quantity in both legs; the active-span shortcut costs
+  nothing measurable on this workload, and no change is
+  made on a tie. (4) Form of the trial, the Z-037/Z-039
+  pattern: both trial policies exist only behind the
+  build flags MIMIR_PLACEMENT_FIRSTFIT and
+  MIMIR_PLACEMENT_BESTFIT in the two mirrored selection
+  sites (small_alloc_locked, tls_take_one_locked); with
+  neither flag defined the core object's .text is
+  byte-identical to the seat's. The flags stay available
+  for a future re-trial. (5) Re-open condition, named
+  only: a pre-registered burst-size sweep at volumes
+  that fit inside the tight holes (e.g. 4..16 at class
+  256), with the best-fit span-scan cost priced by a
+  spans-scanned counter; no such run exists yet, and
+  this entry stands until one supersedes it.
+- **Evidence:** tests/perf/recorded_run_z13_z059.txt
+  (leg A reproduces Z-055 exactly in all three builds:
+  F-3 32064, R-EXT 0.260937, R-INT 0.091146; leg B table
+  and clause record in the same file), with the standing
+  gate green (4988/0/77) on the final tree.
+- **Supersedes:** None. **Status of entry:** Current.
+
+---
+
 ## Notes - roadmap inconsistencies discovered in the A-002 design phase
 
 The following inconsistencies were discovered while designing this slice. Per campaign

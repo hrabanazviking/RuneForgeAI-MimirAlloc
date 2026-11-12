@@ -3022,6 +3022,90 @@ static struct mimir_span_header *find_span_for_free_any_locked(void *ptr)
     return NULL;
 }
 #endif /* MIMIR_LOCK_SHARD */
+/* Z-059 placement policy trial (docs/MIMIRALLOC_Z13_ROADMAP.md
+ * slice Z-059; decision D-009 in docs/DECISION_LEDGER.md).
+ * Two trial span-selection policies behind build flags,
+ * measured against the banked Z-055 fragmentation oracle
+ * by tests/perf/probe_z059.c:
+ *   MIMIR_PLACEMENT_FIRSTFIT - ignore the class's active
+ *     span; serve from the first span in list order that
+ *     can serve (pure first-fit).
+ *   MIMIR_PLACEMENT_BESTFIT - serve from the can-serve
+ *     span with the fewest servable slots (capacity minus
+ *     live minus TLS-binned: the tightest fit), ties
+ *     broken by list order.
+ * With neither flag defined this helper is not compiled
+ * at all and both selection sites run the banked code
+ * verbatim (active span first, then first-fit scan, then
+ * a fresh span). The production default is unchanged by
+ * this slice; see D-009. The two flags are mutually
+ * exclusive. */
+#if defined(MIMIR_PLACEMENT_FIRSTFIT) && defined(MIMIR_PLACEMENT_BESTFIT)
+#error "Z-059: placement trial flags are mutually exclusive"
+#endif
+
+#if defined(MIMIR_PLACEMENT_FIRSTFIT) || defined(MIMIR_PLACEMENT_BESTFIT)
+static struct mimir_span_header *placement_select_locked(
+    size_t class_index
+#ifdef MIMIR_ARENA_CCD
+    , size_t arena
+#endif
+    )
+{
+    struct mimir_span_header *span = mimir_span_head;
+#ifdef MIMIR_PLACEMENT_BESTFIT
+    struct mimir_span_header *best = NULL;
+    size_t best_free = (size_t)-1;
+
+    while (span != NULL) {
+        if (span->class_index == class_index &&
+            span_header_is_live(span) && span_can_serve(span)
+#ifdef MIMIR_ARENA_CCD
+            && arena_of(span) == arena
+#endif
+            ) {
+            /* Servable slots, from the TLS invariant
+             * (free-list nodes + live_count + tally ==
+             * carve_count): servable = free nodes + carve
+             * room = capacity - live - tally. Saturated
+             * at 0: a transient tally skew must never
+             * wrap the size_t. */
+            size_t used = span->live_count +
+                tls_binned_count_locked(span);
+            size_t servable = used < span_capacity(span)
+                ? span_capacity(span) - used : 0;
+            if (servable < best_free) {
+                best_free = servable;
+                best = span;
+            }
+        }
+        span = span->list_next;
+    }
+    span = best;
+#else /* MIMIR_PLACEMENT_FIRSTFIT */
+    while (span != NULL) {
+        if (span->class_index == class_index &&
+            span_header_is_live(span) && span_can_serve(span)
+#ifdef MIMIR_ARENA_CCD
+            && arena_of(span) == arena
+#endif
+            ) {
+            break;
+        }
+        span = span->list_next;
+    }
+#endif
+    if (span == NULL) {
+        span = span_acquire_locked(class_index);
+        if (span == NULL) {
+            return NULL;
+        }
+    }
+    mimir_class_active[class_index] = span;
+    return span;
+}
+#endif /* Z-059 placement trial */
+
 /*
  * Serve one small object from the class path, with the
  * lock held. size is admitted by the caller (1..1024).
@@ -3048,6 +3132,21 @@ static void *small_alloc_locked(size_t size, int zero_user,
     /* Z-037: serve from the calling thread's arena only. */
     size_t arena = arena_select_locked();
 #endif
+#if defined(MIMIR_PLACEMENT_FIRSTFIT) || defined(MIMIR_PLACEMENT_BESTFIT)
+    /* Z-059 trial: policy selection replaces the banked
+     * active-then-first-fit choice below. */
+    struct mimir_span_header *span = placement_select_locked(
+        class_index
+#ifdef MIMIR_ARENA_CCD
+        , arena
+#endif
+        );
+    void *obj;
+
+    if (span == NULL) {
+        return NULL;
+    }
+#else
     struct mimir_span_header *span = mimir_class_active[class_index];
     void *obj;
 
@@ -3073,6 +3172,7 @@ static void *small_alloc_locked(size_t size, int zero_user,
         }
         mimir_class_active[class_index] = span;
     }
+#endif /* Z-059 placement trial */
 
 #ifdef MIMIR_OOL_META
     if (ool_span_is(span)) {
@@ -4061,6 +4161,19 @@ static void *tls_take_one_locked(
 #ifdef MIMIR_LOCK_SHARD
     mimir_shard_hint = shard_of_class(class_index);
 #endif
+#if defined(MIMIR_PLACEMENT_FIRSTFIT) || defined(MIMIR_PLACEMENT_BESTFIT)
+    /* Z-059 trial: policy selection; mirrors small_alloc_locked. */
+    struct mimir_span_header *span = placement_select_locked(
+        class_index
+#ifdef MIMIR_ARENA_CCD
+        , arena
+#endif
+        );
+    void *obj;
+    if (span == NULL) {
+        return NULL;
+    }
+#else
     struct mimir_span_header *span =
         mimir_class_active[class_index];
     void *obj;
@@ -4087,6 +4200,7 @@ static void *tls_take_one_locked(
         }
         mimir_class_active[class_index] = span;
     }
+#endif /* Z-059 placement trial */
     if (span->free_head != NULL &&
         span_free_node_valid(span, span->free_head)) {
         obj = span->free_head;
