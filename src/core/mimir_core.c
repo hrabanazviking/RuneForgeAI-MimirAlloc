@@ -590,7 +590,7 @@ static const char *const mimir_diag_op_names[] = {
 };
 static const char *const mimir_diag_cause_names[] = {
     "none", "backing", "arithmetic", "lock", "page-size",
-    "internal", "metadata"
+    "internal", "metadata", "double-free", "poison"
 };
 #ifdef MIMIR_LOCK_SHARD
 static _Thread_local int mimir_diag_last_cause;
@@ -605,6 +605,73 @@ static int mimir_diag_guard; /* 0 idle, 1 reporting */
 static uint64_t mimir_diag_emitted_count;
 static uint64_t mimir_diag_suppressed_count;
 static uint64_t mimir_diag_max_depth_seen;
+
+/* ---- Z-070: double-free detection (poison + membership) ----
+ * The cheap always-on subset, costed in
+ * tests/perf/recorded_run_z13_z070.txt:
+ *   MEMBER: a second free of a small block is refused.
+ *     The central courses already meet the pointer on its
+ *     span's free list inside find_span_mode_locked (the
+ *     J-006 walk -- that cost predates this slice and is
+ *     unchanged); this slice labels that meeting so the
+ *     entry point can count and report it. The TLS local
+ *     course, which bins a same-thread free WITHOUT
+ *     consulting any list, gains the missing check: a
+ *     scan of the calling thread's own per-class bin
+ *     (at most MIMIR_TLS_BIN_CAPACITY pointer compares
+ *     against a thread-local array) before the block is
+ *     binned a second time.
+ *   POISON: at every small free course, bytes
+ *     [sizeof(void*), class_size) of the freed block are
+ *     filled with MIMIR_DFREE_POISON_BYTE (the first 8
+ *     bytes are the free-list link's home and are never
+ *     poisoned or verified); at every reuse handout the
+ *     same range is verified. A mismatch tallies and
+ *     reports; the handout proceeds (the signal is about
+ *     caller data, not allocator metadata).
+ * Escape hatch: build with -DMIMIR_DFREE_GUARD=0 (or
+ * -DMIMIR_DFREE_MEMBER=0 / -DMIMIR_DFREE_POISON=0 to
+ * disable one half) and every per-op check compiles
+ * out; the tallies then stay 0 and only the two stats
+ * fields remain. Under MIMIR_DEBUG the J-005 poison /
+ * quarantine owns detection and this guard is off;
+ * under MIMIR_OOL_META the Z-034 trial's no-block-byte
+ * invariant owns its spans and this guard is off. */
+#ifndef MIMIR_DFREE_GUARD
+#define MIMIR_DFREE_GUARD 1
+#endif
+#ifndef MIMIR_DFREE_MEMBER
+#define MIMIR_DFREE_MEMBER MIMIR_DFREE_GUARD
+#endif
+#ifndef MIMIR_DFREE_POISON
+#define MIMIR_DFREE_POISON MIMIR_DFREE_GUARD
+#endif
+#if defined(MIMIR_DEBUG) || defined(MIMIR_OOL_META)
+#define MIMIR_DFREE_MEMBER_ON 0
+#define MIMIR_DFREE_POISON_ON 0
+#elif MIMIR_DFREE_GUARD && MIMIR_DFREE_MEMBER
+#define MIMIR_DFREE_MEMBER_ON 1
+#else
+#define MIMIR_DFREE_MEMBER_ON 0
+#endif
+#if !defined(MIMIR_DEBUG) && !defined(MIMIR_OOL_META) && \
+        MIMIR_DFREE_GUARD && MIMIR_DFREE_POISON
+#define MIMIR_DFREE_POISON_ON 1
+#elif !defined(MIMIR_DFREE_POISON_ON)
+#define MIMIR_DFREE_POISON_ON 0
+#endif
+#define MIMIR_DFREE_POISON_BYTE 0xDF
+/* Z-070 measured cap: the poisoned range is
+ * [sizeof(void*), sizeof(void*) + MIMIR_DFREE_POISON_SPAN)
+ * intersected with the class extent -- at most 32 bytes
+ * past the link word. Full-extent poison was measured
+ * first (recorded run Table A) and rejected above 16 B:
+ * its cost grows linearly with class size (+222 ns/pair
+ * at 1024 B, 8.8x the whole pair) while the detection
+ * value does not -- use-after-free writes land at the
+ * start of the block in the common case, and the capped
+ * range covers the first 40 bytes of every class. */
+#define MIMIR_DFREE_POISON_SPAN 32
 
 /* ---- Z-066 (D-12): INC-J006-02 consistent-length detection ----
  * State for the detection wiring documented at
@@ -627,6 +694,17 @@ static _Atomic uint64_t mimir_metadata_collateral_refusals;
 static size_t mimir_z066_last_bad_sum;
 static _Thread_local int mimir_z066_detected;
 
+/* Z-070: detection tallies (atomic; the TLS course takes
+ * no lock, the Z-064/Z-066 pre-lock atomic posture) and
+ * the free-path label, the Z-066 pattern carried to the
+ * J-006 free-list walk: a locked finder sets it when a
+ * for-free walk meets the pointer on its own span's free
+ * list, and mimir_core_free consumes it after unlocking,
+ * once per refused free. */
+static _Atomic uint64_t mimir_dfree_detections;
+static _Atomic uint64_t mimir_poison_detections;
+static _Thread_local int mimir_z070_df_detected;
+
 /* Consume the detection label on the free path, after the
  * caller has unlocked. A span detection is tallied here,
  * once per refused central free (the descriptor audit
@@ -647,6 +725,97 @@ static void z066_free_report(int span_event)
     mimir_core_diag_report(MIMIR_DIAG_OP_FREE,
                            MIMIR_DIAG_CAUSE_METADATA, 0);
 }
+
+/* Z-070: consume the double-free label on the free
+ * path, after the caller has unlocked (the z066_free_
+ * report shape): tally once per refused central free and
+ * report through the diag channel (op free, cause
+ * double-free). */
+static void z070_df_report(void)
+{
+    if (!mimir_z070_df_detected) {
+        return;
+    }
+    mimir_z070_df_detected = 0;
+    __atomic_fetch_add(&mimir_dfree_detections, 1ULL,
+                       __ATOMIC_RELAXED);
+    mimir_core_diag_report(MIMIR_DIAG_OP_FREE,
+                           MIMIR_DIAG_CAUSE_DOUBLE_FREE, 0);
+}
+
+/* Z-070: record one double-free detection at a site that
+ * reports immediately (the TLS bin course: no lock is
+ * held and none is taken; the diag channel is env-gated
+ * and allocation-free, so this is a plain atomic add
+ * plus a normally-closed gate check). */
+#if MIMIR_DFREE_MEMBER_ON
+static void dfree_note_double_free(void)
+{
+    __atomic_fetch_add(&mimir_dfree_detections, 1ULL,
+                       __ATOMIC_RELAXED);
+    mimir_core_diag_report(MIMIR_DIAG_OP_FREE,
+                           MIMIR_DIAG_CAUSE_DOUBLE_FREE, 0);
+}
+#endif /* MIMIR_DFREE_MEMBER_ON */
+
+#if MIMIR_DFREE_POISON_ON
+/* Z-070: poison bytes [sizeof(void*), class_size) of a
+ * freshly freed block. The first 8 bytes are the free-
+ * list link's home (or the caller's last bytes, in a
+ * bin) and are never touched here. */
+static void dfree_poison_fill(void *ptr, size_t class_size)
+{
+    if (class_size > sizeof(void *)) {
+        size_t n = class_size - sizeof(void *);
+        if (n > MIMIR_DFREE_POISON_SPAN) {
+            n = MIMIR_DFREE_POISON_SPAN;
+        }
+        memset((unsigned char *)ptr + sizeof(void *),
+               MIMIR_DFREE_POISON_BYTE, n);
+    }
+}
+
+/* Z-070: verify the poison range at a reuse handout. A
+ * mismatch tallies one poison detection and reports
+ * (op = the serving entry); the handout proceeds. */
+static void dfree_poison_verify(const void *ptr,
+                                size_t class_size, int op)
+{
+    const unsigned char *p = (const unsigned char *)ptr;
+    size_t end = class_size;
+    size_t i;
+    if (end > sizeof(void *) + MIMIR_DFREE_POISON_SPAN) {
+        end = sizeof(void *) + MIMIR_DFREE_POISON_SPAN;
+    }
+    /* Word-wise over the capped range (the block is
+     * 16-byte aligned and the range starts at offset 8,
+     * so every word load is 8-aligned); the tail of a
+     * non-multiple class is checked byte-wise. */
+    for (i = sizeof(void *);
+         i + sizeof(uint64_t) <= end; i += sizeof(uint64_t)) {
+        uint64_t w;
+        memcpy(&w, p + i, sizeof w);
+        if (w != UINT64_C(0xDFDFDFDFDFDFDFDF)) {
+            __atomic_fetch_add(&mimir_poison_detections,
+                               1ULL, __ATOMIC_RELAXED);
+            mimir_core_diag_report(
+                op, MIMIR_DIAG_CAUSE_POISON,
+                (uint64_t)class_size);
+            return;
+        }
+    }
+    for (; i < end; i++) {
+        if (p[i] != MIMIR_DFREE_POISON_BYTE) {
+            __atomic_fetch_add(&mimir_poison_detections,
+                               1ULL, __ATOMIC_RELAXED);
+            mimir_core_diag_report(
+                op, MIMIR_DIAG_CAUSE_POISON,
+                (uint64_t)class_size);
+            return;
+        }
+    }
+}
+#endif /* MIMIR_DFREE_POISON_ON */
 
 /* Record the cause and return NULL from a pointer-returning
  * locked construction path (alloc_locked /
@@ -795,6 +964,18 @@ uint64_t mimir_core_metadata_detections(void)
 uint64_t mimir_core_metadata_collateral_refusals(void)
 {
     return __atomic_load_n(&mimir_metadata_collateral_refusals,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_double_free_detections(void)
+{
+    return __atomic_load_n(&mimir_dfree_detections,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_double_free_poison_detections(void)
+{
+    return __atomic_load_n(&mimir_poison_detections,
                            __ATOMIC_RELAXED);
 }
 
@@ -3335,6 +3516,17 @@ static struct mimir_span_header *find_span_mode_locked(
 
                 while (node != NULL) {
                     if (node == ptr) {
+#if MIMIR_DFREE_MEMBER_ON
+                        /* Z-070: a for-free walk meeting
+                         * the pointer on its own span's
+                         * free list has detected a double
+                         * free; label it for the entry
+                         * point's report (counted once
+                         * there, never here). */
+                        if (for_free) {
+                            mimir_z070_df_detected = 1;
+                        }
+#endif
                         return NULL; /* already freed */
                     }
                     /* The bound is j006_hi - 8: the whole
@@ -3595,6 +3787,12 @@ static void *small_alloc_locked(size_t size, int zero_user,
         span_free_node_valid(span, span->free_head)) {
         obj = span->free_head;
         span->free_head = *(void **)obj;
+#if MIMIR_DFREE_POISON_ON
+        /* Z-070: a reused block's poison verifies before
+         * publication (carved blocks never pass here). */
+        dfree_poison_verify(obj, class_size,
+                            MIMIR_DIAG_OP_MALLOC);
+#endif
 #ifdef MIMIR_DEBUG
         /* J-004: a reused slot's guards were allocator-owned
          * while the slot was free; verify before refilling. */
@@ -3718,6 +3916,10 @@ static void small_free_locked(void *ptr)
 #else
     *(void **)ptr = span->free_head;
     span->free_head = ptr;
+#endif
+#if MIMIR_DFREE_POISON_ON
+    /* Z-070: poison the freed extent past the link. */
+    dfree_poison_fill(ptr, span->class_size);
 #endif
     span->live_count -= 1;
     mimir_live_small_objects -= 1;
@@ -4625,6 +4827,16 @@ static void *tls_take_one_locked(
                        span->carve_count * span->class_size);
         span->carve_count += 1;
     }
+#if MIMIR_DFREE_POISON_ON
+    /* Z-070: every block that enters a bin is poisoned
+     * here if it was not already (a block taken from the
+     * free list was filled at its free; a FRESH CARVE was
+     * never freed, so its poison is established now --
+     * without this, a carved block sitting in a bin
+     * would fail its handout verify on bytes no free
+     * ever wrote). */
+    dfree_poison_fill(obj, span->class_size);
+#endif
     *out_span = span;
     return obj;
 }
@@ -4835,6 +5047,9 @@ static void small_free_tally_locked(void *ptr)
     }
     *(void **)ptr = span->free_head;
     span->free_head = ptr;
+#if MIMIR_DFREE_POISON_ON
+    dfree_poison_fill(ptr, span->class_size);
+#endif
     tally_add(span, -1);
     __atomic_fetch_add(&mimir_audit_small_free, 1UL,
                        __ATOMIC_RELAXED);
@@ -4878,6 +5093,11 @@ static void *tls_take_locked(size_t size, int zero_user)
     }
     block = tls.bins[class_index]
                    [--tls.bin_len[class_index]];
+#if MIMIR_DFREE_POISON_ON
+    dfree_poison_verify(block,
+                        mimir_class_sizes[class_index],
+                        MIMIR_DIAG_OP_REALLOC);
+#endif
     {
         int was_settled =
             tls.bin_settled[class_index]
@@ -4944,6 +5164,11 @@ static void tls_retire_locked(
     tls.bin_settled[class_index][tls.bin_len[class_index]] =
         0;
     tls.bin_len[class_index] += 1;
+#if MIMIR_DFREE_POISON_ON
+    /* Z-070: a retired block enters the bin freed; it
+     * carries the same poison as a tls_free_local block. */
+    dfree_poison_fill(ptr, span->class_size);
+#endif
     span->live_count -= 1;
     mimir_live_small_objects -= 1;
     tally_add(span, 1);
@@ -5020,6 +5245,11 @@ static void *tls_alloc(size_t size, int zero_user,
         struct mimir_span_header *span = NULL;
         uint64_t owner;
         tls.hits += 1;
+#if MIMIR_DFREE_POISON_ON
+        /* Z-070: verify before the calloc memset below
+         * can erase the evidence. */
+        dfree_poison_verify(block, class_size, op);
+#endif
         if (zero_user) {
             memset(block, 0, class_size);
         }
@@ -5156,6 +5386,33 @@ static void tls_free_local(void *ptr,
     size_t class_index = (size_t)span->class_index;
     int handed = tls_owner_is_handed(ptr);
     tls_ensure_init();
+#if MIMIR_DFREE_MEMBER_ON
+    /* Z-070: bin membership -- the double-free check
+     * this course never had. A pointer already in this
+     * thread's bin for its class is already freed;
+     * binning it again would hand the same block out
+     * twice. Refuse BEFORE any accounting moves: the
+     * block stays exactly as freed, no counter moves,
+     * the detection tallies and reports. The scan is
+     * bounded by MIMIR_TLS_BIN_CAPACITY compares
+     * against a thread-local array (no lock, no shared
+     * state). A block drained out of the bin to the
+     * central free list has lost its owner record with
+     * the drain, so a later second free of it routes
+     * to the central course and is refused by the
+     * J-006 walk there -- every residence is covered
+     * exactly once. */
+    {
+        size_t df_i;
+        for (df_i = 0; df_i < tls.bin_len[class_index];
+             df_i++) {
+            if (tls.bins[class_index][df_i] == ptr) {
+                dfree_note_double_free();
+                return;
+            }
+        }
+    }
+#endif
     if (handed) {
         /* A hit handout returning before its conversion:
          * the tally already counts the block and the live
@@ -5252,6 +5509,9 @@ static void tls_free_local(void *ptr,
                        [tls.bin_len[class_index]] =
             (uint8_t)settled_pend;
         tls.bin_len[class_index] += 1;
+#if MIMIR_DFREE_POISON_ON
+        dfree_poison_fill(ptr, span->class_size);
+#endif
     }
     tls.local_frees += 1;
     __atomic_fetch_add(&mimir_audit_small_free, 1UL,
@@ -5990,6 +6250,10 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
     out->live_release_collateral_refusals = __atomic_load_n(
         &mimir_live_release_collateral_refusals,
         __ATOMIC_RELAXED);
+    out->double_free_detections = __atomic_load_n(
+        &mimir_dfree_detections, __ATOMIC_RELAXED);
+    out->poison_detections = __atomic_load_n(
+        &mimir_poison_detections, __ATOMIC_RELAXED);
     for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
         out->span_class_size[i] = (uint64_t)mimir_class_sizes[i];
     }
@@ -6976,6 +7240,7 @@ void mimir_core_free(void *ptr)
      * reported as this call's detection (the Z-066
      * discipline). */
     mimir_z067_detected = 0;
+    mimir_z070_df_detected = 0; /* Z-070: same discipline */
 
 #ifndef MIMIR_DEBUG
     /* Z-029: the owner record routes the free first: the
@@ -7111,6 +7376,7 @@ void mimir_core_free(void *ptr)
          * span reports here (tallied once, diag emitted). */
         z066_free_report(1);
         z067_release_report(MIMIR_DIAG_OP_FREE);
+        z070_df_report(); /* Z-070 */
         return;
 #else /* MIMIR_LOCK_SHARD */
         {
@@ -7131,6 +7397,7 @@ void mimir_core_free(void *ptr)
         /* Z-066: as the non-shard branch above. */
         z066_free_report(1);
         z067_release_report(MIMIR_DIAG_OP_FREE);
+        z070_df_report(); /* Z-070 */
         return;
 #endif /* MIMIR_LOCK_SHARD */
     }

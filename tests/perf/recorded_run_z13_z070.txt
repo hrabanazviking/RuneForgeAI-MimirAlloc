@@ -1,0 +1,236 @@
+MimirAlloc Z13 recorded run - Z-070: Double-free detection economics
+Thu 2026-11-12 EST (host clock 19:07-19:29 UTC during the runs)
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64, page 4096, 128 GB UMA)
+Base: seat main a950f96 (banked Z-001..Z-066), merged into
+  yrsa/mimiralloc-team-03 as cbe8a86 (clean, no conflicts).
+  This slice BUILDS AHEAD: it banks only after Z-067..Z-069 in
+  roadmap order.
+Load state: quiet shared host for every graded run. Table A ran
+  at loadavg 0.26 0.39 0.65 (hidden_files/z070_host_truth.txt);
+  Table B at ~0.31; the standing gate at 0.16. The Aesir /
+  Lifthrasir / Tensile lines were not running heavy work in
+  these windows. All benchmark numbers are this-machine only,
+  medians of 7 processes per leg, probe pinned to core 2
+  (taskset -c 2), 3 warm-up processes per workload discarded,
+  legs interleaved in rotating order (the Z-004 protocol).
+
+S1. Roadmap gate
+Gate (docs/MIMIRALLOC_Z13_ROADMAP.md Z-070): the cheap
+always-on subset (freed-block poison + freelist membership)
+costed the same way; implemented if the numbers support it,
+with the escape hatch documented. Gate: cost table +
+implementation or a recorded rejection.
+Result: cost tables A and B filed below (S4/S5);
+implementation ADOPTED in the form the numbers support --
+membership always-on at full scope, poison always-on with
+its range capped (S3) -- and the escape hatch documented in
+the core header comment and proven by the off leg (S5).
+
+S2. Mechanism (src/core/mimir_core.c/.h)
+MEMBER: a second free of a small block is refused.
+  - TLS course (the gap this slice closes): tls_free_local
+    scans the calling thread's own per-class bin (at most
+    MIMIR_TLS_BIN_CAPACITY pointer compares against a
+    thread-local array, no lock) before binning; a hit
+    tallies and reports, and the free returns before any
+    accounting moves.
+  - Central courses: the J-006 free-list walk inside
+    find_span_mode_locked already met the pointer on its own
+    span's free list (that cost predates this slice); the
+    walk now labels the meeting (thread-local flag) and
+    mimir_core_free consumes the label after unlocking:
+    z070_df_report tallies once per refused central free.
+  A block drained from a bin to the central list loses its
+  owner record with the drain, so a later second free routes
+  central and is refused there -- every residence is covered
+  exactly once.
+POISON: at every small free course, bytes [8, class_size)
+  of the freed block are filled with 0xDF (the first 8 bytes
+  are the free-list link's home, never poisoned or
+  verified); at every reuse handout (central free-list pop,
+  TLS bin pop, TLS refill take) the range is verified
+  word-wise. A mismatch tallies and reports; the handout
+  PROCEEDS (telemetry posture: the signal is about caller
+  data, not allocator metadata). Fresh carves are poisoned
+  as they enter a bin (tls_take_one_locked), so a
+  never-freed block cannot fail its first verify.
+Tallies + wiring: struct mimir_stats gains
+  double_free_detections and poison_detections APPENDED at
+  the end (Z-064 append discipline), copied by the snapshot
+  and readable lock-free via
+  mimir_core_double_free_detections() /
+  mimir_core_double_free_poison_detections() (shape (b),
+  bound local; nm -D on libmimiralloc.so stays exactly 4,
+  verified). Diag causes appended: DOUBLE_FREE (7),
+  POISON (8); no existing enumerator, name, or offset moves.
+Scope exclusions, by design: the guard is off under
+  MIMIR_DEBUG (the J-005 poison/quarantine owns detection)
+  and under MIMIR_OOL_META (the Z-034 no-block-byte
+  invariant owns its spans); large mapping-path blocks are
+  out of scope (S6 leg 4).
+
+S3. The economics ruling (why poison is capped)
+Table A (S4) costed FULL-EXTENT poison. Membership is cheap
+everywhere (+0.25..+2.27 ns/pair in both tables). Poison is
+not: its cost grows linearly with class size -- +8.0 ns/pair
+at class 64, +67.6 at 256, +222.0 at 1024 (8.8x the whole
+pair) -- while its detection value does not grow:
+use-after-free writes land at the start of the block in the
+common case. Full-extent poison therefore FAILED its
+pre-registered adoption bars at classes 64/256/1024 and at
+churnN/churnF class 64 (S4) and was REJECTED in that form.
+Adopted form: the poisoned range is capped at
+MIMIR_DFREE_POISON_SPAN = 32 bytes past the link word --
+bytes [8, 40) of every class, the first 40 bytes of the
+block. Table B (S5) re-measured the as-shipped capped build
+against the same pre-registered bars: ALL NINE BARS PASS,
+full cost flat at +0.9..+4.6 ns/pair from class 16 through
+class 1024. The cap boundary is a tested scope limit, not a
+silent one (S6, poison leg boundary portion: a write at
+offset 40 is NOT detected, by design, and the test pins it).
+
+S4. Table A - full-extent factorial (exploratory build)
+Source: hidden_files/z070_raw.txt (35 RESULT rows per
+workload: 5 legs x 7 reps), summarised by
+tests/perf/summarize_z070.py. Medians, ns per alloc+free
+pair. Checksums EQUAL across legs on every row; A/A drift
+(off vs off2) at most 0.43%.
+  churn1 class 16   off 22.437  member +0.861  poison +1.176  full +1.958 (+8.73%)
+  churn1 class 64   off 23.845  member +0.738  poison +8.030  full +8.752 (+36.70%)
+  churn1 class 256  off 24.565  member +0.821  poison +67.556 full +69.637 (+283.48%)
+  churn1 class 1024 off 25.427  member +0.771  poison +221.982 full +224.031 (+881.08%)
+  churnN class 16   off 249.347 member +2.060  poison +2.575  full +6.147 (+2.47%)
+  churnN class 64   off 249.131 member +1.576  poison +11.018 full +13.552 (+5.44%)
+  churnF class 16   off 252.477 member +1.926  poison +2.559  full +6.287 (+2.49%)
+  churnF class 64   off 262.082 member +1.709  poison +11.176 full +13.812 (+5.27%)
+  xfree  class 16 (n=16/62/250): full +4.389/+5.176/+3.847
+    (attribution only: the J-006 walk is in every leg)
+Adoption bars (pre-registered, fixed before measurement;
+adopt iff delta_full <= max(3 ns, 3% of off); class 1024
+bar max(3 + 0.04*1016 ns, 5%); membership-at-depth bar
+max(3 ns, 5% of off)):
+  churn1/16/full    +1.958  cap 3.000   PASS
+  churn1/64/full    +8.752  cap 3.000   FAIL
+  churn1/256/full   +69.637 cap 3.000   FAIL
+  churn1/1024/full  +224.031 cap 43.640 FAIL
+  churnN/16/full    +6.147  cap 7.480   PASS
+  churnF/16/full    +6.287  cap 7.574   PASS
+  churnN/64/full    +13.552 cap 7.474   FAIL
+  churnF/64/full    +13.812 cap 7.862   FAIL
+  churnF/16/member  +1.926  cap 12.624  PASS
+MISSING-DATA DISCLOSURE: the summary first filed for this
+table (hidden_files/z070_summary.txt, 14:09) reported the
+four churn1 bars as MISSING DATA for key
+('churn1', class, 100000). That was a summariser keying
+defect, not missing measurement: the probe reports churn1
+with n=1 (live-set size; pairs=100000 rides in its own
+field) while the bar lookup keyed n=100000. The raw
+contains all 35 rows per churn1 workload, full leg
+included. The summariser on disk keys the bars at n=1; a
+fresh run over the SAME raw resolves all four bars to the
+values above, and its cost table and factorial sections are
+byte-identical to the first summary (diff verified; fresh
+copy hidden_files/z070_summary_fresh.txt).
+
+S5. Table B - as-shipped capped build (adoption proof)
+Same probe, same protocol, same bars; core built from the
+final tree (poison capped per S3). Source:
+hidden_files/z070_raw_capped.txt, summary
+hidden_files/z070_summary_capped.txt. Checksums EQUAL on
+every row; A/A drift at most 1.26%.
+  churn1 class 16   off 22.690  member +0.522  poison +0.144  full +0.924 (+4.07%)
+  churn1 class 64   off 23.826  member +0.735  poison +1.163  full +2.117 (+8.89%)
+  churn1 class 256  off 24.660  member +0.706  poison +1.062  full +2.080 (+8.43%)
+  churn1 class 1024 off 25.387  member +0.801  poison +1.227  full +2.348 (+9.25%)
+  churnN class 16   off 249.511 member +2.269  poison +1.561  full +3.364 (+1.35%)
+  churnN class 64   off 249.524 member +1.299  poison +2.912  full +4.649 (+1.86%)
+  churnF class 16   off 253.334 member +1.418  poison +1.358  full +2.331 (+0.92%)
+  churnF class 64   off 263.248 member +1.356  poison +2.194  full +4.406 (+1.67%)
+  xfree  class 16 (n=16/62/250): full +1.818/+1.984/+2.590 (attribution only)
+Adoption bars on the shipped build: ALL NINE PASS --
+  churn1/16 +0.924, churn1/64 +2.117, churn1/256 +2.080
+  (cap 3.000); churn1/1024 +2.348 (cap 43.640);
+  churnN/16 +3.364 (cap 7.485), churnF/16 +2.331
+  (cap 7.600); churnN/64 +4.649 (cap 7.486), churnF/64
+  +4.406 (cap 7.897); churnF/16/member +1.418 (cap 12.667).
+Escape hatch: -DMIMIR_DFREE_GUARD=0 compiles every per-op
+check out (tallies stay 0, only the two stats fields
+remain); -DMIMIR_DFREE_MEMBER=0 / -DMIMIR_DFREE_POISON=0
+disable one half each. Object evidence (run script proof
+file): core_off 50632 bytes vs core_full 52488 bytes.
+
+S6. Injection proof (tests/core/test_z070_dfree.c,
+make test-z070, standalone, NOT in make test)
+test_z070_dfree: legs=5 failed=0, RESULT: PASS
+(log hidden_files/z070_test_final2.log)
+  control (135 checks): 2000 same-thread + 64 cross-thread
+    cycles + realloc; tallies 0/0, emitted 0.
+  tls-double-free (11 checks): refused once by bin
+    membership, tally=1 emitted=1, block handed out exactly
+    once afterwards.
+  central-double-free (8 checks): cross-thread first free,
+    main-thread second free refused by the J-006 walk,
+    tally=1 emitted=1, allocator unharmed.
+  poison (11 checks): clean re-handout tallies nothing;
+    UAF write at offset 39 (last byte of the capped range)
+    detected at handout, tally=1 emitted=1, byte intact,
+    handout proceeded; BOUNDARY: UAF write at offset 40
+    (first byte past the cap) NOT detected, tallies
+    unmoved, byte intact -- the cap as tested scope.
+  large-scope (4 checks): mapping-path double free tallies
+    nothing (S8.3 posture: after the first free retires the
+    descriptor, the second free is indistinguishable from
+    a foreign pointer), allocator unharmed.
+DEFECT FOUND AND FIXED IN SCOPE: as landed, the poison leg
+wrote its UAF byte at offset 40 while the adopted capped
+verify covers [8, 40) -- the leg failed 2 checks on the
+final tree (hidden_files/z070_test_final.log). The test
+predated the cap decision. Fix is test-side only: the
+detected write moved to offset 39 (the last covered byte)
+and the offset-40 boundary added as an explicit
+not-detected portion, so the test now pins both edges of
+the adopted range. No allocator code changed for this fix.
+
+S7. Standing gate and neighbours (counts read from logs)
+  scripts/z13/run_gate.sh on the final tree
+  (hidden_files/z070_gate_final.log, loadavg 0.16 at start):
+    GATE COUNTS: checks=4988 failed=0 skips=77 -- GREEN,
+    identical to the merged baseline.
+  make test-z070 PASS (S6).
+  Variant compiles of src/core/mimir_core.c, -Werror clean:
+    MIMIR_LOCK_SHARD, MIMIR_LOCK_HIST, MIMIR_DEBUG,
+    MIMIR_ARENA_CCD, MIMIR_OOL_META.
+  nm -D --defined-only build/libmimiralloc.so: exactly 4
+    (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free).
+
+S8. Review record
+Finishing lead ran the six Mythic Engineering roles
+sequentially itself (platform depth: no sub-agents
+spawned): roadmap traceability (gate text vs mechanism,
+S1/S2), correctness (bin-scan refusal before accounting;
+label consumed once, after unlock; carve poison-fill so
+fresh blocks cannot false-positive), diag/stats contract
+(appends only, nm -D = 4), injection proof (S6, incl. the
+boundary fix), performance (Tables A/B read from raw logs,
+bars applied as pre-registered, FAILs recorded unmassaged),
+honesty/red team (missing-data disclosure in S4; Table A
+is an exploratory-build measurement and is never presented
+as the shipped build's cost -- Table B is).
+
+S9. Files in this slice
+  src/core/mimir_core.c  (membership + capped poison,
+                          tallies, diag causes, escape
+                          hatch, snapshot copies)
+  src/core/mimir_core.h  (stats appends, tally getters,
+                          diag cause appends)
+  Makefile               (test-z070 standalone block)
+  tests/core/test_z070_dfree.c (new; 5-leg proof incl.
+                          cap-boundary portion)
+  tests/perf/probe_z070.c      (new; factorial probe)
+  tests/perf/run_z070.sh       (new; five-leg runner +
+                          escape-hatch object evidence)
+  tests/perf/summarize_z070.py (new; cost table + bars)
+  tests/perf/recorded_run_z13_z070.txt (this file)
+CAMPAIGN_STATE.md updated on disk only, never committed.
+Not pushed: banking is the keeper's job at the seat, in
+roadmap order behind Z-067..Z-069.

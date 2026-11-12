@@ -1526,6 +1526,23 @@ test-z067: $(BUILD)/test_z067_livecount
 
 .PHONY: test-z067
 
+# Z-070: double-free detection evidence
+# (tests/core/test_z070_dfree.c), built against the
+# internal stats / diag surfaces (shape (b) headers
+# under tests/core/). Standalone target
+# `make test-z070`; NOT part of `make test`.
+
+$(BUILD)/test_z070_dfree.o: tests/core/test_z070_dfree.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_diag_j007.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z070_dfree.c -o $@
+
+$(BUILD)/test_z070_dfree: $(LIBOBJS) $(BUILD)/test_z070_dfree.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z070_dfree.o -o $@
+
+test-z070: $(BUILD)/test_z070_dfree
+	./$(BUILD)/test_z070_dfree
+
+.PHONY: test-z070
+
 # J-007: Phase 10 allocation-free diagnostics evidence
 # test - the test under tests/core/ (test_j007.c) verifies
 # the diagnostics channel of docs/PHASE_10_DIAGNOSTICS.md

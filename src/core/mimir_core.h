@@ -341,6 +341,23 @@ struct mimir_stats {
      * Monotone. */
     uint64_t live_release_detections;
     uint64_t live_release_collateral_refusals;
+    /* Z-070: double-free / poison detection tallies,
+     * appended at the END so every earlier field keeps its
+     * offset (the Z-064 append discipline). double_free_
+     * detections counts second frees REFUSED on detection:
+     * the TLS bin-membership course (the block was already
+     * in the calling thread's bin) and the central courses
+     * (the J-006 free-list walk met the pointer on its own
+     * span's free list), each refused free counted exactly
+     * once. poison_detections counts handouts whose freed-
+     * block poison (bytes [8, 40) of the class extent,
+     * filled at free) did not verify -- a write-after-free or corruption
+     * signal about caller data; the handout still proceeds
+     * (telemetry posture, see the Z-070 recorded run).
+     * Monotone; snapshots copy the values, and the lock-
+     * free getters below read them without any lock. */
+    uint64_t double_free_detections;
+    uint64_t poison_detections;
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
 
@@ -383,6 +400,14 @@ uint64_t mimir_core_metadata_collateral_refusals(void);
  * exactly 4). */
 uint64_t mimir_core_live_release_detections(void);
 uint64_t mimir_core_live_release_collateral_refusals(void);
+/* Z-070: lock-free reads of the two detection tallies
+ * above (single atomic loads, the Z-064 getter pattern):
+ * the TLS detection course takes no lock, so its tally
+ * must be readable without one. Internal only,
+ * INC-E001-07 shape (b) exactly like the snapshot; bound
+ * local in the shared library (nm -D stays exactly 4). */
+uint64_t mimir_core_double_free_detections(void);
+uint64_t mimir_core_double_free_poison_detections(void);
 
 #ifdef MIMIR_DEBUG
 /* J-004 on-demand red-zone verification (debug builds only;
@@ -488,10 +513,14 @@ enum mimir_diag_cause {
     MIMIR_DIAG_CAUSE_LOCK       = 3, /* global lock failure */
     MIMIR_DIAG_CAUSE_PAGESIZE   = 4, /* page-size discovery failed */
     MIMIR_DIAG_CAUSE_INTERNAL   = 5, /* layout/publication gate */
-    MIMIR_DIAG_CAUSE_METADATA   = 6  /* Z-066: INC-J006-02 length
+    MIMIR_DIAG_CAUSE_METADATA   = 6, /* Z-066: INC-J006-02 length
                                       * corruption detected; Z-067
                                       * reports INC-J006-06 under
                                       * the same cause */
+    MIMIR_DIAG_CAUSE_DOUBLE_FREE = 7, /* Z-070: a double free
+                                       * detected and refused */
+    MIMIR_DIAG_CAUSE_POISON     = 8  /* Z-070: freed-block poison
+                                      * mismatch at handout */
 };
 void mimir_core_diag_report(int op, int cause, uint64_t requested);
 uint64_t mimir_core_diag_emitted(void);
