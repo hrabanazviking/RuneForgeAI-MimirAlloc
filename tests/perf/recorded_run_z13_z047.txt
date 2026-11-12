@@ -1,0 +1,140 @@
+MimirAlloc Z13 recorded run - Z-047 mapping-cache design
+slice: Z-047 - Mapping-cache design (Wave 6: design for cached dead mappings - size-segregated reuse pool, bounded by bytes and count, Z-015 VMA economics applied; gate: design doc + the invariants the implementation must keep)
+date: 2026-11-12 (probe invocations 07:05 EST / 12:05 UTC; gate runs before the probe window on the merged tree and after it on the final tree)
+base: d1dc803 (branch yrsa/mimiralloc-team-01: merge of seat main 517bbb1, banked Z-001..Z-046, into the team's Z-041 commit 48f602b; clean merge, no conflicts; the merged tree's gate ran GREEN before any slice work, see correctness gate below)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44 (Ubuntu GLIBC 2.44-1ubuntu2)
+artifacts: docs/Z13_MAPPING_CACHE_DESIGN.md (the design + invariants MC-01..MC-16), tests/perf/probe_z047.c, tests/perf/run_z047.sh, tests/perf/summarize_z047.py, this recorded run. No production source changed by this slice. sha256: probe_z047.c 8078ee92e155c6d8..., run_z047.sh f2375f5d431d6d04..., summarize_z047.py 132587e244b70aeb..., built binary b0d16de3b3efc914... (runner logs hidden_files/z047_runner_inv{1,2}.log, team-local).
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004 banked at the seat, adapted like Z-015/Z-046): HOST probe only - raw mmap in exactly MimirAlloc's large-path geometry (mapping_length = page_round_up(4096 + request); user extent at base + 4096); no allocator code is linked, so no number below is an allocator measurement. Timed legs: every process pinned taskset -c 2 (CCD0 physical core); 3 warm-up processes per group discarded; 7 measured processes per group; groups interleaved round-robin within each round; headline = MEDIAN of per-process ns/op; split-half drift bound 8% (protocol s.8), DRIFT-REJECT rows are indicative only. Legs: fresh (mmap + endpoint touch, bench_k002 shape + munmap per op - the banked geometry's sparse price without allocator bookkeeping); poolhit (one exact-length mapping held in a one-entry mock pool; per op = endpoint touch only, NO syscall - the raw hit FLOOR; allocator bookkeeping is not in this number and is priced in the design doc from Z-046's bookkeeping residual, never added here); freshdense (mmap + memset every user byte + munmap); pooldense (pooled mapping already faulted in; per op = memset every byte - re-touch with no faults); pooldontneed (pooled mapping returned with MADV_DONTNEED on the user extent after every op; per op = memset every byte - faults repay in full). Census leg (deterministic VMA counts from /proc/self/maps + VmRSS from /proc/self/status, 3 fresh processes per invocation): base, 8 mappings of 262144 held live, the same 8 pooled (4 fully touched, 4 untouched), DONTNEED applied to the touched half, all evicted. Minor-fault note: rusage is sampled around each whole process run, so the pool legs' minflt/op figures include the one-time pool-fill fault-in amortised over the iteration count (e.g. pooldense 1 MiB: 256 fill faults / 60 iters = 4.3/op); the ns/op timing windows themselves start after the fill for the pool legs. TWO full invocations (07:05 EST both), headline = invocation 1; invocation 2 is the agreement control.
+load state: QUIET WINDOW (shared host, honestly labelled). /proc/loadavg at invocation 1 start 0.17 / 0.30 / 0.73, invocation 2 start 0.09 / 0.27 / 0.71; no co-tenant process visible above noise in the runner snapshots; the Aesir forge shares this host but was idle in this window. Absolute ns/op below are this-machine in this stated window; the census counts are deterministic and load-independent, and the ratios/savings are the stable quantities.
+correctness gate: scripts/z13/run_gate.sh in this worktree - baseline run on the merged tree before slice work (hidden_files/z047_baseline_gate.log) and final run on the finished tree (hidden_files/z047_gate_final.log): both GATE GREEN, 4988 checks (18 smoke + 4970 CHECKS), 0 failed, 77 by-design SKIP lines, make exit 0 - identical counts to the Z-001 baseline. This slice adds no tests to make test; the probe is not part of the suite; the count is unchanged because no production source and no suite file changed (design slice: docs + tests/perf only).
+
+=== VERDICT - THE MAPPING-CACHE DESIGN (roadmap gate) ===
+Gate status: MET. The design doc is filed (docs/Z13_MAPPING_CACHE_DESIGN.md) with the invariants the implementation must keep (MC-01..MC-16, doc section 4), and every load-bearing choice in it is priced by the measurements below or by a banked run it cites.
+Allocator standing: UNCHANGED by this slice, honestly graded - KL-C (a mapping per allocation) remains a LOSS against steady-state glibc per Z-046 (per-decade ratios 315-486x in the middle decades, dense 34-38x at 1-8 MiB). A design claims no WIN; it prices the road Z-048 will be graded on. The design's own findings, graded:
+  (1) Resident pooling is worth building - WIN for the design premise: the sparse gross saving is ~1.46-3.49 us/op at every size, and dense resident reuse saves 94.6% (1 MiB) / 92.2-93.9% (8 MiB, two invocations) of the fresh dense price. The pair and the re-faults - the two terms Z-046 said a cache can reach - are both real money on this host.
+  (2) DONTNEED-on-free pooling is REJECTED with numbers - LOSS for that variant: pooldontneed saves 1.4% / 0.2-1.2% (two invocations); the faults repay in full and only the bare pair is saved. DONTNEED survives only as Z-050's trim tool, where its product is RSS (census: exactly 1024 KiB returned for four 256 KiB touched units), never speed.
+  (3) VMA accounting by count is REFUTED on this host: eight separate mappings held or pooled register +1 VMA, not +8 - adjacent identical mappings merge wholesale (Z-015's merge, at scale). The design therefore budgets the worst case (+1 per unit, cap-bounded at +64) but audits the pool by its own counters, never by /proc/maps arithmetic (design 3.8, MC-03/MC-14).
+
+=== SPARSE PRICING (invocation 1 headline; ns/op, median of 7 processes) ===
+size        fresh     poolhit   gross saved   fresh minflt/op
+2048        1464.39      1.63      1462.76        1.000
+8192        2118.86      1.78      2117.08        3.000
+65536       2577.88      1.96      2575.92        3.001
+262144      2379.17      2.35      2376.82        3.001
+1048576     2600.56      4.65      2595.91        3.004
+4194304     3470.03     12.62      3457.41        3.013
+16777216    3517.32     43.83      3473.49        3.050
+33554432    3561.88     75.32      3486.56        3.080
+Reading: the fresh leg (raw pair + endpoint faults, no allocator bookkeeping) sits BELOW Z-046's op/mimir (1911..4011) by roughly Z-046's bookkeeping residual, as it must - the two probes cross-check. The poolhit floor rises with size (1.6 ns at 2048 to 75 ns at 32 MiB): re-touching endpoints of a large dead mapping pays cache/TLB misses on pages nothing has touched since it died. That rise is inside the hit price any real cache pays too, and it is why the design's buckets are LIFO (design 3.2). poolhit at 8192 was DRIFT-REJECT in invocation 1 (9.3% split-half drift on a 1.78 ns median - a ~0.15 ns wobble); invocation 2 reads the same 1.78 with 0.3% drift. Quoted as ~2 ns floor, indicative at that size only.
+
+=== DENSE PRICING (full re-touch per op; ns/op) ===
+size        freshdense   pooldense    pooldontneed   resident saving
+1048576       108634.00     5909.38      107105.80      94.6%
+8388608       892006.58    70000.92      890135.50      92.2%
+Agreement (invocation 2): freshdense 109009.87 / 898130.50 (agrees 0.3% / 0.7%); pooldontneed 107716.77 / 893716.42 (0.6% / 0.4%); pooldense 5732.22 at 1 MiB (agrees 3.0%) but 55108.08 at 8 MiB against invocation 1's 70000.92 - a REGIME SPLIT: each invocation is internally tight (spreads <=1.6%) but the two disagree by 27% at 8 MiB, the Z-013 write-bandwidth instability at large sizes appearing again. The 8 MiB pooldense absolute is therefore quoted as the range 55.1k..70.0k ns/op and the saving as 92.2-93.9%; no single figure is claimed. pooldense minflt/op 4.300 (1 MiB) / 170.833 (8 MiB) is the amortised pool-fill (see method note), not per-op faulting - the timed windows start after the fill.
+
+=== CENSUS (identical in both invocations; VMA counts deterministic) ===
+stage              VMAs        VmRSS KiB (inv1 / inv2)
+base               25          1908 / 1912
+live8              26 (+1)     2148 / 2152
+pooled8            26 (+1)     3172 / 3176
+pooled8_dontneed   26 (+1)     2148 / 2152
+evicted            25 (+0)     2148 / 2152
+Reading: (a) MERGE - eight separately-mmapped 262144-byte units occupy ONE VMA together (they were placed adjacently and coalesced, exactly Z-015's adjacency finding); pooled or live makes no difference to the count. (b) Untouched units are RSS-free: pooled8 minus live8 is exactly +1024 KiB = the four touched units' extents; the four untouched units add nothing. (c) DONTNEED returns exactly those 1024 KiB with the VMA count unmoved - RSS surgery without VMA surgery, priced for Z-050. (d) Eviction restores the VMA count to base exactly (no VMA leaks), while VmRSS stays at the live8 level (+240 KiB over base) even after every unit is unmapped - process RSS does not fall back through stdio/page-table growth in this census, one more reason RSS claims in this campaign are made with Z-006's smaps method, not VmRSS spot readings.
+
+=== DESIGN DECISIONS THESE NUMBERS FIX (summary; the doc is the record) ===
+Exact-length buckets (key = mapping_length; no best-fit in Z-048); two-tier O(1) bucket structure (direct array to 1 MiB, bounded 32-length table above; LIFO per bucket) so the pool adds no second registry walk (Z-024); caps per-bucket 4 / global 64 units / global 64 MiB, eligibility mapping_length <= 16 MiB, cap-refusal munmaps and never evicts on admission (Z-046 trim lesson: the bound IS the price); resident by default, no madvise in Z-048 (dense evidence above); new descriptor state POOLED with validated reuse, quarantine-not-guess on corruption (J-006 posture); counters conservation identity published - retired == live + pooled + quarantined (MC-03); THP flags bit 0 reserved for Z-049 per Z-013's 2 MiB+ WIN; drain drains the pool (H-001 completeness); unscrubbed malloc reuse named as a decision with calloc zeroing untouched (MC-06).
+
+=== AGREEMENT SUMMARY (invocation 2 vs headline) ===
+Sparse fresh medians agree within 0.5% (2048) to 8.5% (4194304: 3470.03 vs 3777.59; spreads overlap - 3286..3597 vs 3543..5308) and 8.1% at 1048576 (2600.56 vs 2821.26, that group DRIFT-REJECT in invocation 2 at 9.5%); all other fresh groups within 5.6%. poolhit medians agree within noise except the known ~ns-scale drift rows (262144, 4194304, 16777216 DRIFT-REJECT in invocation 2 at 10-11% on medians of 2.6-47 ns - absolute wobbles of 0.3-14 ns; the floor claim is order-of-magnitude, not per-size). Checksums: exactly one per (leg, size) group in both invocations, identical across invocations. Census: byte-identical VMA sequence and RSS to within 4 KiB. The savings percentages and every design conclusion are unchanged under invocation 2.
+
+Bugs found/fixed in this slice's own work (no production bug was discovered; no production file is changed): (a) the summariser's first draft carried a dead census-grouping block that computed an unused structure - removed before any run; its output was verified line-by-line against the raw CSVs of both invocations. (b) the rusage sampling window in the probe spans the pool fill for the pool legs (see the method note) - a labelling defect in minflt/op for those legs only, found on reading invocation 1; the recorded run states the correct interpretation and no number was re-taken, because the timed windows themselves are unaffected. Future probes should snapshot rusage at the timed window; recorded here as the lesson.
+Team structure: 1 lead running the six Mythic Engineering roles sequentially itself (platform depth limit - no sub-agents spawned, per the muster order for this run): method/evidence audit (Z-015/Z-046/Z-013/Z-024/Z-006 + core geometry), probe design, probe code, design doc, gate verification, risk review (merge/VMA audit, corruption course, RSS honesty). The merge-hazard and DONTNEED questions the risk role raised are answered by the census and pooldontneed legs respectively, inside the run, not by assertion.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured 2026-11-12 07:05 EST in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T12:05:04Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5175707
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 60%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.17 0.30 0.73
+
+=== SUMMARISER OUTPUT (summarize_z047.py on invocation 1 raw + census, verbatim) ===
+Z-047 mapping-cache design summary (ns/op; headline = median of processes)
+drift bound 8% (Z-004 s.8); DRIFT-REJECT = indicative only
+
+=== per-process medians by group ===
+  op fresh        size=    2048  med=   1464.39  spread 1450.86..1517.88  drift 0.6%  n=7  minflt/op=1.000  checksums=[1285000]
+  op poolhit      size=    2048  med=      1.63  spread 1.62..1.63  drift 0.6%  n=7  minflt/op=0.001  checksums=[161775332]
+  op fresh        size=    8192  med=   2118.86  spread 2095.29..2161.98  drift 1.1%  n=7  minflt/op=3.000  checksums=[1285000]
+  op poolhit      size=    8192  med=      1.78  spread 1.77..2.36  drift 9.3%  n=7  minflt/op=0.001  checksums=[161775332]  DRIFT-REJECT
+  op fresh        size=   65536  med=   2577.88  spread 2546.57..3011.97  drift 1.2%  n=7  minflt/op=3.001  checksums=[771000]
+  op poolhit      size=   65536  med=      1.96  spread 1.91..2.15  drift 3.3%  n=7  minflt/op=0.002  checksums=[96647420]
+  op fresh        size=  262144  med=   2379.17  spread 2363.89..2432.44  drift 1.2%  n=7  minflt/op=3.001  checksums=[385500]
+  op poolhit      size=  262144  med=      2.35  spread 2.30..2.56  drift 1.5%  n=7  minflt/op=0.003  checksums=[48190070]
+  op fresh        size= 1048576  med=   2600.56  spread 2438.20..3116.35  drift 2.6%  n=7  minflt/op=3.004  checksums=[128500]
+  op freshdense   size= 1048576  med= 108634.00  spread 108076.28..108829.87  drift 0.3%  n=7  minflt/op=256.033  checksums=[3540]
+  op pooldense    size= 1048576  med=   5909.38  spread 5711.52..6128.97  drift 4.7%  n=7  minflt/op=4.300  checksums=[3630]
+  op pooldontneed size= 1048576  med= 107105.80  spread 106467.43..107463.63  drift 0.2%  n=7  minflt/op=260.300  checksums=[3630]
+  op poolhit      size= 1048576  med=      4.65  spread 4.05..4.89  drift 3.4%  n=7  minflt/op=0.010  checksums=[16070210]
+  op fresh        size= 4194304  med=   3470.03  spread 3286.15..3597.47  drift 0.5%  n=7  minflt/op=3.013  checksums=[38550]
+  op poolhit      size= 4194304  med=     12.62  spread 11.89..13.83  drift 6.1%  n=7  minflt/op=0.033  checksums=[2910525]
+  op freshdense   size= 8388608  med= 892006.58  spread 890613.08..898492.83  drift 0.2%  n=7  minflt/op=2048.167  checksums=[132]
+  op pooldense    size= 8388608  med=  70000.92  spread 69950.00..71209.83  drift 0.0%  n=7  minflt/op=170.833  checksums=[222]
+  op pooldontneed size= 8388608  med= 890135.50  spread 887645.83..893739.75  drift 0.1%  n=7  minflt/op=2218.833  checksums=[222]
+  op fresh        size= 16777216  med=   3517.32  spread 3386.35..3635.80  drift 1.2%  n=7  minflt/op=3.050  checksums=[10280]
+  op poolhit      size= 16777216  med=     43.83  spread 43.33..45.35  drift 2.9%  n=7  minflt/op=0.125  checksums=[210740]
+  op fresh        size= 33554432  med=   3561.88  spread 3414.80..3826.36  drift 4.5%  n=7  minflt/op=3.080  checksums=[6425]
+  op poolhit      size= 33554432  med=     75.32  spread 68.96..81.36  drift 7.5%  n=7  minflt/op=0.200  checksums=[83525]
+
+=== sparse pricing: fresh vs pool-hit floor ===
+  (poolhit is the raw no-syscall floor: touch only;
+   allocator bookkeeping is priced separately in the
+   design doc from Z-046's residual, never added here)
+  size=    2048  fresh=  1464.39  poolhit=    1.63  syscall+fault share=99.9%  saved=  1462.76 ns/op
+  size=    8192  fresh=  2118.86  poolhit=    1.78  syscall+fault share=99.9%  saved=  2117.08 ns/op
+  size=   65536  fresh=  2577.88  poolhit=    1.96  syscall+fault share=99.9%  saved=  2575.92 ns/op
+  size=  262144  fresh=  2379.17  poolhit=    2.35  syscall+fault share=99.9%  saved=  2376.82 ns/op
+  size= 1048576  fresh=  2600.56  poolhit=    4.65  syscall+fault share=99.8%  saved=  2595.91 ns/op
+  size= 4194304  fresh=  3470.03  poolhit=   12.62  syscall+fault share=99.6%  saved=  3457.41 ns/op
+  size= 16777216  fresh=  3517.32  poolhit=   43.83  syscall+fault share=98.8%  saved=  3473.49 ns/op
+  size= 33554432  fresh=  3561.88  poolhit=   75.32  syscall+fault share=97.9%  saved=  3486.56 ns/op
+
+=== dense pricing (full re-touch per op) ===
+  size= 1048576  freshdense=  108634.00  pooldense=    5909.38  pooldontneed=  107105.80
+             resident reuse saves 94.6% vs fresh dense; DONTNEED reuse saves 1.4%
+  size= 8388608  freshdense=  892006.58  pooldense=   70000.92  pooldontneed=  890135.50
+             resident reuse saves 92.2% vs fresh dense; DONTNEED reuse saves 0.2%
+
+=== census (VMA counts deterministic; RSS KiB as read) ===
+  base               vmas=[25, 25, 25]  rss_kib=[1908, 1912, 1908]  (process_start)
+  live8              vmas=[26, 26, 26]  rss_kib=[2148, 2152, 2148]  (8_mappings_of_262144_held_live)
+  pooled8            vmas=[26, 26, 26]  rss_kib=[3172, 3176, 3172]  (4_touched_4_untouched_dead_mappings_kept)
+  pooled8_dontneed   vmas=[26, 26, 26]  rss_kib=[2148, 2152, 2148]  (touched_half_DONTNEED_applied)
+  evicted            vmas=[25, 25, 25]  rss_kib=[2148, 2152, 2148]  (all_pool_mappings_unmapped)
+  delta vs base: live8              +1 VMAs (median)
+  delta vs base: pooled8            +1 VMAs (median)
+  delta vs base: pooled8_dontneed   +1 VMAs (median)
+  delta vs base: evicted            +0 VMAs (median)
+
+SUMMARIZER OK
