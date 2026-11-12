@@ -1,0 +1,64 @@
+MimirAlloc Z13 recorded run - Z-073 Aligned allocation: contract first
+slice: Z-073 - U-series contract for mimir_aligned_alloc and a posix_memalign-shaped entry (mimir_posix_memalign): alignment domain, size domain, failure behaviour, written before code (docs/Z13_ALIGNED_ALLOCATION_CONTRACT.md)
+date_utc: 2026-11-12T20:13:06Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+branch_head_at_run: 911881103c470c235016d44b4377e4034884e82b (merge of seat main a9553e3, Z-001..Z-070, into yrsa/mimiralloc-team-02; slice commit follows this run)
+loadavg_at_run: 0.16 0.25 0.31 - QUIET window (no sibling heavy work observed); the contract suite is deterministic correctness with no timing assertions, so load moves no count; recorded for honesty
+artifact_sha256:
+  docs/Z13_ALIGNED_ALLOCATION_CONTRACT.md  77422e25460829d98561c6e3fdca58a21f3e49a3ed615611ba27817e6b8005d9
+  tests/contract/mimir_aligned_z073.h      7ae189e8b5bc3ca8b468281939d84f0d289572fb8e8ab38d04a881439f80ee44
+  tests/contract/test_z073_aligned_contract.c  04f35dba7adf3a8a88e664fa1a0d7bfe12bd62de3df7bded6e0a11c69e490332
+  tests/contract/run_z073.sh               4b8a9b122ceb24a2045ca24e80679bc5f89e787cf3a1a253726624c354248586
+
+=== VERDICT ===
+Roadmap gate: contract text in docs/contracts.md style + red tests.
+Contract text: docs/Z13_ALIGNED_ALLOCATION_CONTRACT.md - YES (rows AL-073-01..06, -10..12, -20..21, -30..34; decisions D-Z073-1 validity-is-form, D-Z073-2 NO size-multiple rule, D-Z073-3 return-value-only error model; U-11 and U-14 SETTLED for this surface on this target; U-09/U-10 interim postures pinned and named interim, final closure owned by Z-078)
+Red on the old core: CHECKS: 130 run, 125 failed, RESULT: FAIL, exit 1 - YES, RED BY DESIGN (details below; the 5 passes are exactly the P7 public-regression leg)
+Green-by-design review: docs/Z13_ALIGNED_ALLOCATION_CONTRACT.md S8 - RECORDED (every clause has a suite leg; the only conditional leg is P6 beyond-page, conditional because AL-073-06 is)
+Standing gate (Z-008): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, make exit 0 (hidden_files/z073_gate_final.log) - the contract suite is NOT wired into make test, counts unchanged
+Determinism: suite run 3 times direct plus twice via the runner on the final build, identical output every time (CHECKS: 130 run, 125 failed / RESULT: FAIL); direct exit code 1
+Bugs found: none in the banked core. One bug in this slice's own evidence probe (the lead's /tmp glibc baseline probe missed <stddef.h> for max_align_t and failed to compile); fixed before any measurement was taken - no recorded number came from the broken build. No allocator code was touched by this slice.
+
+=== GLIBC BASELINE (measured on this host for S1 of the contract; probe /tmp/glibc_align_probe.c, glibc 2.44, load 0.17 0.33 0.34) ===
+posix_memalign align=0 rc=22(EINVAL) memptr_unchanged=1 errno=0
+posix_memalign align=1 rc=22 memptr_unchanged=1 errno=0
+posix_memalign align=2 rc=22 memptr_unchanged=1 errno=0
+posix_memalign align=4 rc=22 memptr_unchanged=1 errno=0
+posix_memalign align=8 rc=0 (pointer 8-aligned)
+posix_memalign align=16 rc=0 (pointer 16-aligned)
+posix_memalign align=24 rc=22 memptr_unchanged=1 errno=0
+posix_memalign align=100 rc=22 memptr_unchanged=1 errno=0
+aligned_alloc align=0 ptr=NULL errno=22; align=3 ptr=NULL errno=22; align=24 ptr=NULL errno=22
+aligned_alloc align=8,16,256 ptr non-null, requested alignment honoured
+aligned_alloc(256,100) SUCCEEDS, pointer 256-aligned - size-multiple rule NOT enforced by glibc on this host
+aligned_alloc(64,0) returns a unique freeable pointer; posix_memalign(64,0) rc=0 unique pointer (the zero-size behaviour this family deliberately diverges from, contract S5)
+posix_memalign(16,SIZE_MAX) rc=12(ENOMEM) memptr_unchanged=1
+sizeof(void*)=8, _Alignof(max_align_t)=16, pagesize=4096
+
+=== NM ABSENCE PROOF ===
+-- library objects (expect no mimir_aligned_alloc / mimir_posix_memalign):
+(none found - grep exit 1, surface absent from the core)
+-- suite binary (expect both symbols weak, w):
+                 w mimir_aligned_alloc
+                 w mimir_posix_memalign
+
+=== CONTRACT RUN (tests/contract/run_z073.sh, full log) ===
+# Z-073 contract run: 2026-11-12T20:13:06Z
+# host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+# head: 911881103c470c235016d44b4377e4034884e82b
+# loadavg: 0.16 0.25 0.31 1/1204 1019169
+make: 'build/mimir_alloc.o' is up to date.
+make: 'build/mimir_core.o' is up to date.
+make: 'build/mimir_platform.o' is up to date.
+FAIL: P0 mimir_aligned_alloc symbol present
+FAIL: P0 mimir_posix_memalign symbol present
+FAIL: P0 full aligned surface present
+FAIL: P1 alignment domain: 38 planned checks failed (aligned surface absent)
+FAIL: P2 posix domain: 35 planned checks failed (aligned surface absent)
+FAIL: P3 size domain: 35 planned checks failed (aligned surface absent)
+FAIL: P4 lifecycle: 5 planned checks failed (aligned surface absent)
+FAIL: P5 distinctness: 5 planned checks failed (aligned surface absent)
+FAIL: P6 large alignment: 4 planned checks failed (aligned surface absent)
+CHECKS: 130 run, 125 failed
+RESULT: FAIL
+# contract exit code: 1
