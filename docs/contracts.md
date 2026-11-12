@@ -916,10 +916,35 @@ a symbol is exported, will be exported, or is in scope. Final set:
 | `malloc_usable_size` | Introspection | [COND: target requires it and semantics defined per target] (§2.9) | Unassigned |
 | C++ `operator new` / `operator new[]` (throwing, nothrow, aligned forms) | C++ allocation | [COND: C++ integration requires the variant] (§2.10; U-06) | Unassigned |
 | C++ `operator delete` / `operator delete[]` (unsized, sized, aligned forms) | C++ allocation | [COND: C++ integration requires the variant] (§2.10; U-06) | Unassigned |
-| `mimir_malloc` | Namespaced API (Roadmap §7.1) | [UNRESOLVED: U-03] — not in §6 scope | Unassigned |
-| `mimir_free` | Namespaced API (Roadmap §7.1) | [UNRESOLVED: U-03] — not in §6 scope | Unassigned |
-| Statistics / trim functions (names not specified in the roadmap) | Namespaced API (Roadmap §7.1) | [UNRESOLVED: U-03] — not in §6 scope | Unassigned |
+| `mimir_malloc` | Namespaced API (Roadmap §7.1) — namespaced form of §2.2 | [UNRESOLVED: U-03] — not in §6 scope; as-built surface of record inventoried by Z-081 (see the Z-081 note below) | Unassigned |
+| `mimir_free` | Namespaced API (Roadmap §7.1) — namespaced form of §2.3 | [UNRESOLVED: U-03] — not in §6 scope; as-built surface of record inventoried by Z-081 | Unassigned |
+| `mimir_calloc` | Namespaced API (Roadmap §7.1) — namespaced form of §2.4 | [UNRESOLVED: U-03] — not in §6 scope; as-built surface of record inventoried by Z-081. This row discharges INC-M002-03 for `calloc` | Unassigned |
+| `mimir_realloc` | Namespaced API (Roadmap §7.1) — namespaced form of §2.5 | [UNRESOLVED: U-03] — not in §6 scope; as-built surface of record inventoried by Z-081. This row discharges INC-M002-03 for `realloc` | Unassigned |
+| `mimir_aligned_alloc` | Namespaced API — namespaced form of §2.6 | [UNRESOLVED: U-03] — not in §6 scope; contract of record is docs/Z13_ALIGNED_ALLOCATION_CONTRACT.md (Z-073), implemented by Z-074; inventoried by Z-081 | Unassigned |
+| `mimir_posix_memalign` | Namespaced API — namespaced form of §2.7 | [UNRESOLVED: U-03] — not in §6 scope; contract of record is docs/Z13_ALIGNED_ALLOCATION_CONTRACT.md (Z-073), implemented by Z-074; inventoried by Z-081 | Unassigned |
+| `mimir_usable_size` | Namespaced API — namespaced form of §2.9 | [UNRESOLVED: U-03] — not in §6 scope; naming and semantics of record are decision D-012 (Z-075); the standard name `malloc_usable_size` is NOT declared or exported (D-012); inventoried by Z-081 | Unassigned |
+| `mimir_stats_snapshot` | Namespaced API (Roadmap §7.1 statistics; name and versioned struct `mimir_stats_v1` specified by Z-076) | [UNRESOLVED: U-03] — not in §6 scope; surface of record is docs/Z13_PUBLIC_STATISTICS.md (Z-076); inventoried by Z-081 | Unassigned |
+| `mimir_trim` | Namespaced API (Roadmap §7.1 trim; name specified by Z-077) | [UNRESOLVED: U-03] — not in §6 scope; surface of record is docs/Z13_Z077_TRIM_REALLOCARRAY.md (Z-077); inventoried by Z-081 | Unassigned |
+| `mimir_reallocarray` | Namespaced API — namespaced form of §2.8 | [UNRESOLVED: U-03] — not in §6 scope; surface of record is docs/Z13_Z077_TRIM_REALLOCARRAY.md (Z-077); inventoried by Z-081 | Unassigned |
 | `memalign`, `valloc`, `pvalloc` | Legacy aligned allocation | Not named in Roadmap §6.1 — no candidacy asserted; recorded here only so their absence from §2 is a visible non-decision, not an oversight | Unassigned |
+
+**[Z-081 amendment — as-built inventory, 2026-11-12]** Slice
+Z-081 (Contracts appendix and ABI audit, D-10) re-ran the
+M-002-style ABI audit over the widened Wave 9 surface on the
+Z13 host (purpleraider, x86-64, 4 KiB pages); the report is
+filed as docs/Z13_Z081_ABI_AUDIT.md
+(`docs/Z13_Z081_ABI_AUDIT.md`). The audit found the exported
+surface — exactly ten dynamic symbols — in exact three-way
+agreement across the public header, the version script, and
+the shared library's `.dynsym`, but found eight of the ten
+namespaced symbols missing from this appendix (only
+`mimir_malloc` and `mimir_free` were inventoried; the
+statistics/trim row named no function). The ten
+`mimir_*` rows above now inventory the whole as-built
+surface of record, and INC-M002-03 is discharged. This
+inventory is **not** a promotion: U-01 and U-03 remain open,
+no ABI version is assigned, and the stability class of every
+entry stays **Unassigned** (§5.5).
 
 Functions named only in the recorded exclusion-list gap (§7.1(e)) —
 e.g. `mallopt`, `mallinfo`, `strdup` — are **not** listed as
@@ -935,3 +960,4 @@ document, not versions of an ABI.
 | Date | Slice / issue | Description |
 |---|---|---|
 | 2026-11-06 | A-008 — initial Proposed issue | Initial issue of *MimirAlloc — Core API / ABI Contract Specification* in Proposed status. No implementation exists; none is claimed. No ABI version assigned. |
+| 2026-11-12 | Z-081 — Contracts appendix and ABI audit (D-10) | Appendix A amended to inventory the whole as-built namespaced surface: `mimir_calloc` and `mimir_realloc` added (discharging INC-M002-03), the Wave 9 surface added by name (`mimir_aligned_alloc`, `mimir_posix_memalign`, `mimir_usable_size`, `mimir_stats_snapshot`, `mimir_trim`, `mimir_reallocarray`), and the unnamed statistics/trim row replaced by its two named functions. Audit report: docs/Z13_Z081_ABI_AUDIT.md. No status, scope, or stability change: U-01/U-03 remain open and every entry remains Unassigned. |

@@ -1,0 +1,179 @@
+=== Z-081 ABI recorded run (contracts appendix + ABI audit) ===
+date_utc: 2026-11-12T23:33:35Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: 135ca29342d5ca19d57ab2024dd4f842ad6a4001
+branch: yrsa/mimiralloc-team-01
+loadavg: 0.23 1.01 0.88 1/1231 3493118
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + z081 consumers (log hidden_files/z081_build.log)
+=== S2 shared library exports (nm -D) - exactly the 10 public symbols ===
+00000000000063e0 T mimir_aligned_alloc
+0000000000006230 T mimir_calloc
+00000000000058f0 T mimir_free
+00000000000058d0 T mimir_malloc
+0000000000006400 T mimir_posix_memalign
+00000000000063c0 T mimir_realloc
+0000000000006f50 T mimir_reallocarray
+00000000000065e0 T mimir_stats_snapshot
+0000000000006da0 T mimir_trim
+0000000000006480 T mimir_usable_size
+defined dynamic symbol count: 10
+  [ok] count == 10
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_usable_size
+  [ok] exported: mimir_stats_snapshot
+  [ok] exported: mimir_trim
+  [ok] exported: mimir_reallocarray
+=== S3 absence proofs - nothing undocumented, nothing leaked ===
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+  [ok] no mimir_audit_ name anywhere in .dynsym (counters bound local)
+  [ok] no standard-name interposition symbol exported
+  [ok] no C++ mangled symbol exported (no operator new/delete)
+=== S4 three-way agreement: header declarations and version script ===
+  [ok] declared in include/mimir_alloc.h: mimir_malloc
+  [ok] listed in src/api/mimir_alloc.map global: mimir_malloc
+  [ok] declared in include/mimir_alloc.h: mimir_free
+  [ok] listed in src/api/mimir_alloc.map global: mimir_free
+  [ok] declared in include/mimir_alloc.h: mimir_calloc
+  [ok] listed in src/api/mimir_alloc.map global: mimir_calloc
+  [ok] declared in include/mimir_alloc.h: mimir_realloc
+  [ok] listed in src/api/mimir_alloc.map global: mimir_realloc
+  [ok] declared in include/mimir_alloc.h: mimir_aligned_alloc
+  [ok] listed in src/api/mimir_alloc.map global: mimir_aligned_alloc
+  [ok] declared in include/mimir_alloc.h: mimir_posix_memalign
+  [ok] listed in src/api/mimir_alloc.map global: mimir_posix_memalign
+  [ok] declared in include/mimir_alloc.h: mimir_usable_size
+  [ok] listed in src/api/mimir_alloc.map global: mimir_usable_size
+  [ok] declared in include/mimir_alloc.h: mimir_stats_snapshot
+  [ok] listed in src/api/mimir_alloc.map global: mimir_stats_snapshot
+  [ok] declared in include/mimir_alloc.h: mimir_trim
+  [ok] listed in src/api/mimir_alloc.map global: mimir_trim
+  [ok] declared in include/mimir_alloc.h: mimir_reallocarray
+  [ok] listed in src/api/mimir_alloc.map global: mimir_reallocarray
+header function declarations: 10
+  [ok] header declares exactly 10 functions
+=== S5 consumers bind to the .so (DT_NEEDED + undefined symbols) ===
+-- test_z081_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z081_dyn DT_NEEDED names libmimiralloc.so
+                 U mimir_aligned_alloc
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_posix_memalign
+                 U mimir_realloc
+                 U mimir_reallocarray
+                 U mimir_stats_snapshot
+                 U mimir_trim
+                 U mimir_usable_size
+  [ok] test_z081_dyn references mimir_malloc as undefined (U)
+  [ok] test_z081_dyn references mimir_free as undefined (U)
+  [ok] test_z081_dyn references mimir_calloc as undefined (U)
+  [ok] test_z081_dyn references mimir_realloc as undefined (U)
+  [ok] test_z081_dyn references mimir_aligned_alloc as undefined (U)
+  [ok] test_z081_dyn references mimir_posix_memalign as undefined (U)
+  [ok] test_z081_dyn references mimir_usable_size as undefined (U)
+  [ok] test_z081_dyn references mimir_stats_snapshot as undefined (U)
+  [ok] test_z081_dyn references mimir_trim as undefined (U)
+  [ok] test_z081_dyn references mimir_reallocarray as undefined (U)
+  [ok] test_z081_dyn does not define any mimir_ symbol (not statically absorbed)
+-- test_z081_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z081_cpp DT_NEEDED names libmimiralloc.so
+                 U mimir_aligned_alloc
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_posix_memalign
+                 U mimir_realloc
+                 U mimir_reallocarray
+                 U mimir_stats_snapshot
+                 U mimir_trim
+                 U mimir_usable_size
+  [ok] test_z081_cpp references mimir_malloc as undefined (U)
+  [ok] test_z081_cpp references mimir_free as undefined (U)
+  [ok] test_z081_cpp references mimir_calloc as undefined (U)
+  [ok] test_z081_cpp references mimir_realloc as undefined (U)
+  [ok] test_z081_cpp references mimir_aligned_alloc as undefined (U)
+  [ok] test_z081_cpp references mimir_posix_memalign as undefined (U)
+  [ok] test_z081_cpp references mimir_usable_size as undefined (U)
+  [ok] test_z081_cpp references mimir_stats_snapshot as undefined (U)
+  [ok] test_z081_cpp references mimir_trim as undefined (U)
+  [ok] test_z081_cpp references mimir_reallocarray as undefined (U)
+  [ok] test_z081_cpp does not define any mimir_ symbol (not statically absorbed)
+-- C++ consumer object: unmangled references --
+                 U mimir_aligned_alloc
+                 U mimir_calloc
+                 U mimir_free
+                 U mimir_malloc
+                 U mimir_posix_memalign
+                 U mimir_realloc
+                 U mimir_reallocarray
+                 U mimir_stats_snapshot
+                 U mimir_trim
+                 U mimir_usable_size
+  [ok] test_z081_cpp.o undefined references are the unmangled C names
+=== S6 header-only translation units (compile-only) ===
+-rw-r--r-- 1 volmarr volmarr 7064 Nov 12 18:33 build/header_only_z081_c.o
+-rw-r--r-- 1 volmarr volmarr 2288 Nov 12 18:33 build/header_only_z081_cpp.o
+  [ok] header-only C and C++ objects built (all ten prototypes, exact types)
+=== S7 static audit test ===
+=== test_z081: contracts appendix + ABI audit (D-10) ===
+-- S1 core four --
+-- S2 aligned pair --
+-- S3 usable size --
+-- S4 statistics snapshot --
+-- S5 trim --
+-- S6 reallocarray --
+-- S7 audit-counter reconciliation (ten counters) --
+malloc calls: 4, calloc calls: 1, realloc calls: 1, reallocarray calls: 3, aligned calls: 3, posix calls: 2, usable calls: 4, stats calls: 2, trim calls: 2, free calls: 8
+test_z081: 300 checks, 0 failed
+RESULT: PASS
+  [ok] test_z081 exit 0
+=== S8 dynamic consumers ===
+test_z081_dyn: PASS
+  [ok] test_z081_dyn exit 0
+test_z081_cpp: PASS
+  [ok] test_z081_cpp exit 0
+=== S9 documentation gate: Appendix A inventories every exported symbol ===
+  [ok] Appendix A inventories: mimir_malloc
+  [ok] Appendix A inventories: mimir_free
+  [ok] Appendix A inventories: mimir_calloc
+  [ok] Appendix A inventories: mimir_realloc
+  [ok] Appendix A inventories: mimir_aligned_alloc
+  [ok] Appendix A inventories: mimir_posix_memalign
+  [ok] Appendix A inventories: mimir_usable_size
+  [ok] Appendix A inventories: mimir_stats_snapshot
+  [ok] Appendix A inventories: mimir_trim
+  [ok] Appendix A inventories: mimir_reallocarray
+  [ok] contracts.md points at the Z-081 audit report
+  [ok] audit report filed: docs/Z13_Z081_ABI_AUDIT.md
+  [ok] audit report accounts for: mimir_malloc
+  [ok] audit report accounts for: mimir_free
+  [ok] audit report accounts for: mimir_calloc
+  [ok] audit report accounts for: mimir_realloc
+  [ok] audit report accounts for: mimir_aligned_alloc
+  [ok] audit report accounts for: mimir_posix_memalign
+  [ok] audit report accounts for: mimir_usable_size
+  [ok] audit report accounts for: mimir_stats_snapshot
+  [ok] audit report accounts for: mimir_trim
+  [ok] audit report accounts for: mimir_reallocarray
+=== S10 versioning state of record (informational, not a gate) ===
+SONAME entries in build/libmimiralloc.so: 0
+note: this tree predates Z-080 banking; the SONAME / install discharge
+is Z-080's slice (team-06 0a48239), queued immediately ahead of Z-081
+in banking order. This audit records the state, it does not claim it.
+=== S11 neighbour evidence ===
+  [ok] make test-e005 still passes (log hidden_files/z081_test_e005.log)
+  [ok] make test-z078 still passes (log hidden_files/z081_test_z078.log)
+=== Z-081 ABI RUN RESULT: PASS ===
