@@ -1,0 +1,2336 @@
+Z-033 - Size-class retune (conditional) - RECORDED RUN
+STATUS: CONDITION-PENDING - NOT A RETUNE
+Z-032 ADOPTED TABLE: ABSENT / NOT APPLIED
+PRODUCTION CODE CHANGED: NONE
+DO NOT CLOSE Z-033; RETUNE STILL REQUIRED WHEN Z-032 LANDS
+NO size-class table was adopted, implemented, or
+reverted in this slice, because the condition it
+depends on does not exist on disk yet. Read the
+condition section before citing any number below as
+a retune result.
+
+== CONDITION STATE (checked 2026-11-12, first-hand) ==
+Roadmap Z-033: "Implement Z-032's adopted table;
+fragmentation suite + oracle legs. Gate: standing gate
+green; fragmentation and latency deltas recorded."
+Z-032 (Size-class spacing study, team-01) gate
+requires: class-by-class table + retune proposal OR a
+recorded no-change verdict. Evidence search at build
+time:
+- seat main banked through Z-020 (c84f021, merged into
+  this branch as 8db3ca2 before this slice);
+- team-01 worktree HEAD is still its Z-024 commit
+  (06f6e8d); no Z-032 commit, probe, or recorded run
+  exists in team-01, the seat, or this worktree;
+- seat WAVE_PLAN.md names Z-032 only as team-01's next
+  assignment. No adopted table, no proposal, and no
+  no-change verdict exists anywhere on disk.
+MISSING, exactly: (a) Z-032 BANKED at the seat in
+roadmap order, its recorded run carrying the exact
+class-by-class table values verbatim (the banked
+Z-032 commit is authoritative; WAVE_PLAN / memory-map
+entries corroborate, never substitute); (b) its
+retune proposal or no-change verdict; (c) the adoption
+decision recorded at the seat (WAVE_PLAN /
+PROJECT_MEMORY_MAP) - a proposal alone is not an
+adoption. A no-change verdict satisfies (c) by itself:
+the adopted table IS the current table, AFTER legs are
+identical to the BEFORE legs below by construction,
+and this run then closes the condition in full.
+If a new table is adopted, the follow-up is: implement
+it in src/core/mimir_core.c (mimir_class_sizes[]),
+re-run this harness for the AFTER legs (probe extended
+to the UNION of both tables' boundary sizes so every
+BEFORE size pairs like-for-like; deltas computed as
+median per-rep paired deltas), record fragmentation
+and latency deltas (either sign), and revert instead
+if the numbers say so (roadmap: an adopted-then-
+reverted table is a valid outcome, banked and
+explained). NOTE: that follow-up lands as a SECOND
+Z-033 commit - a recorded exception to the
+one-slice-per-commit rule, forced by the condition;
+this commit is the harness + BEFORE commit only and
+is NOT the slice-closing commit.
+
+== WHAT THIS SLICE BUILT (condition-independent) ==
+- tests/perf/probe_z033.c - dual-leg harness (glibc
+  leg -DLEG_GLIBC; mimir leg linked with production
+  libmimiralloc.a). TABLECHECK binds the probe's
+  mirror table to the compiled core behaviourally over
+  the FULL size sweep 1..1024: the core realloc rule
+  (mimir_core.c: new_size <= span class returns ptr;
+  otherwise alloc_any_locked runs BEFORE
+  small_free_locked, so the new block is allocated
+  while the old is live and the pointer must differ)
+  makes stay/move an exact class test at every size.
+  FRAGCLASS prints exact internal-fragmentation
+  arithmetic for the table. LAT CHURN (alloc + touch
+  ends + free, one block recycled) and LAT LIVESET
+  (timed alloc phase, 512 blocks held) at every
+  boundary size (class-1, class, class+1, plus 1 and
+  1025), both legs = the oracle legs. Volatile
+  function pointers; checksums read only bytes the
+  probe wrote via pat() first, summed over both end
+  bytes, a pure function of size; the volatile sink is
+  printed on the DONE line so no timed loop can be
+  eliminated. Patterns and iteration counts are fixed
+  constants - no seeds, no time dependence.
+- tests/perf/run_z033.sh - Z-004 protocol runner:
+  fresh builds, stale outputs deleted first, fails
+  closed on any build/probe failure, 3 warm-up
+  processes per leg discarded, 7 measured per leg
+  interleaved (fixed mimir-first order, house
+  protocol; verdicts below rest on ~50x+ effects, not
+  small deltas, so order bias cannot carry them),
+  taskset -c 2 (CCD0), load recorded start/end.
+- tests/perf/summarize_z033.py - fails closed: !=7
+  distinct PIDs per leg, TABLECHECK not OK in every
+  mimir process, checksum disagreement, or FRAGCLASS
+  rows disagreeing with arithmetic recomputed from
+  the TABLE line all exit nonzero.
+- This recorded run: verbatim runner log + full raw
+  CSV for both legs below (per-process values in
+  execution order).
+BEFORE-leg pinning: probe sha256 8f43d2bf... (full
+hashes of all three files in the runner log), cc
+(Ubuntu 15.3.0-4ubuntu1) 15.3.0, flags -std=c11 -Wall
+-Wextra -Werror -pthread -Iinclude -Isrc -O2 for both
+legs, tree HEAD 8db3ca2 at run time.
+
+== STANDING GATE ==
+scripts/z13/run_gate.sh, log hidden_files/z033_gate.log:
+GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT
+GREEN, exit 0 - identical to the Z-001 baseline. The
+count is unchanged BECAUSE this slice integrates
+nothing into make test or production code (delta 0 by
+design); the probe's own evidence is the runner log
+below, not the gate. Gate provenance: run on this
+branch at merge 8db3ca2 (seat c84f021 over Z-025
+7d3e37d).
+
+== LOAD STATE ==
+Quiet window: load 0.30 at runner start and at end;
+the ps snapshot in the log shows no co-tenant above
+1% of one core. No Aesir/Tensile/ladder load present.
+Numbers below are this-machine under that recorded
+load.
+
+== RESULTS (BEFORE legs - current table vs glibc) ==
+TABLECHECK: mimir OK in 7/7 processes over the full
+1..1024 sweep - the mirror table IS the compiled
+core's table, proven behaviourally at every size, not
+assumed. glibc leg SKIP (own classes).
+FRAGMENTATION (exact arithmetic under a uniform
+1..1024 request distribution - computed, not
+measured, not workload-representative; INTERNAL
+size-class-only fragmentation: excludes header /
+metadata cost and the >1024 mapping path): worst
+waste 127 B in each of the four 128-step classes
+(640/768/896/1024); width-weighted uniform-mean waste
+= 42.50 bytes/request; aggregate scores for later
+table-to-table deltas: total waste 43520 B = 8.29% of
+total requested bytes, 7.66% of total class bytes.
+Boundary-weighted mean (equal weight per class,
+secondary diagnostic only, non-representative):
+25.10 B/class. Waste-% denominators, both ways, for
+the headline classes (worst waste is at request = lo,
+the smallest served size): class 640: 127 B = 19.84%
+of class, 24.76% of the 513 B request; class 768:
+16.53% of class, 19.81% of 641 B; class 896: 14.17%
+of class, 16.52% of 769 B; class 1024: 12.40% of
+class, 14.16% of 897 B. The per-class table's pct
+column is % of CLASS (the stable denominator; % of
+request reaches 1500% at size 1 in class 16 and is
+quoted only where it informs). Full per-class table
+in the summary below. These are the figures an
+adopted table must beat or knowingly keep.
+LATENCY (median of 7 processes, ns/op; full table +
+per-process raw values below):
+- CHURN: mimir medians 97..1934 vs glibc 2..4 = LOSS
+  at every boundary size (ratios ~50x..115x at small
+  sizes); at 1025 (mapping path) mimir 1934.0 vs
+  glibc 2.0 = 967.00x - the ~1.9 us regime agrees with
+  Z-025's independently measured 1025 malloc step
+  (1901.50 ns), a cross-slice consistency check.
+- CHURN sawtooth (observed, mechanism NOT claimed in
+  this slice): at the smallest classes the class-1
+  and class sizes cost ~2-2.7x the class+1 size
+  (15/16: 460/459 ns vs 17: 171 ns; 31/32: 230 vs 33:
+  171), stable across processes (spreads <= 0.05 on
+  those rows). Filed for Z-032/Z-034 attention as-is.
+- LIVESET: mimir 16..1196 ns/op growing with size vs
+  glibc 4..70 = LOSS at every size (2.29x at size 1
+  up to 17.85x at 1025).
+- DRIFT-FLAG rows (spread = (max-min)/median > 0.25):
+  15 rows, every one driven by the glibc leg's spread
+  (0.28..0.62) on 2..18 ns medians - timer
+  granularity; mimir spreads <= 0.14 on all rows.
+  Flags kept, medians reported, flagged rows excluded
+  from every headline above; no row is a baseline.
+VERDICT: BEFORE legs recorded and cross-checked;
+adoption delta NONE EXISTS (condition pending above).
+Latency grade of the CURRENT table vs glibc: LOSS on
+both workloads at every measured size - consistent
+with the Z-009/Z-031 line; the retune question Z-032
+must answer is whether spacing, not the path cost
+(Z-019/Z-024 own that), can move any of it.
+
+== KEEPER BANKING INSTRUCTION ==
+Z-033 is CONDITION-PENDING. Bank this commit only as
+the harness + BEFORE legs, with Z-033 remaining OPEN,
+or hold it unbanked behind Z-032 - never as a
+completed retune. Banking order caution: bank Z-025
+(7d3e37d) FIRST from its own commit (its Makefile hunk
+lands exactly once), then this slice as a
+single-commit diff - never branch-merge this branch
+into the seat (the merge 8db3ca2 must not be dragged
+in twice).
+
+== BUGS ==
+None in the allocator. One harness defect found and
+fixed in scope before the run of record: the glibc
+leg failed to build (tablecheck/fragclass defined but
+unused under -Werror in that leg); the runner failed
+closed on it, the definitions were guarded to the
+mimir leg, and TABLECHECK was upgraded from
+boundary-only to the full 1..1024 sweep in the same
+pass (review fold-in). The filed run is the fresh
+full run after the fix. The failed attempt's log was
+overwritten by the later run at the same path; its
+build error is quoted verbatim in team-02's
+CAMPAIGN_STATE.md.
+
+== FILES ==
+probe_z033.c, run_z033.sh, summarize_z033.py, and
+this recorded run. NO production change, NO Makefile
+change, CAMPAIGN_STATE.md not committed. Commit queues
+behind Z-021..Z-032 in roadmap order; banking only at
+the seat, only as @yrsafreydisdottir.
+
+== VERBATIM RUNNER LOG (hidden_files/z033_run.log) ==
+=== Z-033 Size-class retune (conditional) - BEFORE legs ===
+2026-11-12T04:32:07-05:00
+Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+3413f71a4a861bd83bb094d65261435ee5d45a85
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T09:32:07Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2879465
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 66%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.30 0.36 0.90
+--- load (start) ---
+ 04:32:07 up  2:50,  1 user,  load average: 0.30, 0.36, 0.90
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+volmarr  1301430 23.4  0.0  76628 63428 ?        S    04:32   0:00 python3 -m pytest tests/ -q
+root        1453  0.8  0.0  12988  9404 ?        Ss   01:41   1:30 /usr/lib/systemd/systemd-logind
+volmarr    16353  0.5  0.0 355892 37428 ?        Ssl  01:54   0:49 openrazer-daemon
+root        2418  0.3  0.0 427148 53196 ?        Ssl  01:41   0:31 /opt/musegadget/venv/bin/python /opt/musegadget/venv/bin/musegadget run
+volmarr    20454  0.2  0.0 2408508 57028 ?       Sl   01:55   0:26 /home/volmarr/.local/bin/eww open gungnir-gauges
+--- build (fresh; stale outputs deleted first) ---
+glibc leg build exit=0
+mimir leg build exit=0
+-rwxr-xr-x 1 volmarr volmarr 16456 Nov 12 04:32 /tmp/probe_z033_glibc
+-rwxr-xr-x 1 volmarr volmarr 28584 Nov 12 04:32 /tmp/probe_z033_mimir
+8f43d2bf9b315684a0da74ea897680735df8b1a0fea81d3e17fc4b15867ef909  tests/perf/probe_z033.c
+7b20fadca0d9d5b2292ff8ffef073329fedc0fe093e0a392e35a879cfff89abf  tests/perf/run_z033.sh
+cff991f266247543467742527034b23fe2bdcf87727c2d3fbf8cfd260cede913  tests/perf/summarize_z033.py
+--- warm-ups (3 per leg, discarded) ---
+warmup 1 done
+warmup 2 done
+warmup 3 done
+--- measured (7 per leg, interleaved) ---
+rep 1 done (load: 0.30 0.36 0.90)
+rep 2 done (load: 0.30 0.36 0.90)
+rep 3 done (load: 0.30 0.36 0.90)
+rep 4 done (load: 0.30 0.36 0.90)
+rep 5 done (load: 0.30 0.36 0.90)
+rep 6 done (load: 0.30 0.36 0.90)
+rep 7 done (load: 0.30 0.36 0.90)
+probe exit fail flag: 0
+--- load (end) ---
+ 04:32:09 up  2:50,  1 user,  load average: 0.30, 0.36, 0.90
+--- summary ---
+TABLECHECK: mimir OK in 7/7 processes; glibc SKIP (own classes)
+
+FRAGMENTATION (current table, exact arithmetic; BEFORE)
+class lo hi count worst mean pct_at_lo
+16 1 16 16 15 7.50 93.75
+32 17 32 16 15 7.50 46.87
+48 33 48 16 15 7.50 31.25
+64 49 64 16 15 7.50 23.43
+80 65 80 16 15 7.50 18.75
+96 81 96 16 15 7.50 15.62
+112 97 112 16 15 7.50 13.39
+128 113 128 16 15 7.50 11.71
+160 129 160 32 31 15.50 19.37
+192 161 192 32 31 15.50 16.14
+224 193 224 32 31 15.50 13.83
+256 225 256 32 31 15.50 12.10
+320 257 320 64 63 31.50 19.68
+384 321 384 64 63 31.50 16.40
+448 385 448 64 63 31.50 14.06
+512 449 512 64 63 31.50 12.30
+640 513 640 128 127 63.50 19.84
+768 641 768 128 127 63.50 16.53
+896 769 896 128 127 63.50 14.17
+1024 897 1024 128 127 63.50 12.40
+uniform mean waste over 1..1024: 42.5000 bytes/request
+waste % denominators: pct_at_lo = worst waste as % of CLASS size;
+mean waste is per-request over the class's own range [lo, class].
+
+LATENCY ns/op (median of 7 processes; BEFORE; spread = (max-min)/median)
+work size mimir glibc ratio mimir_spread glibc_spread flag
+CHURN 1 167.0 2.0 83.50x 0.02 0.00 
+CHURN 15 460.0 4.0 115.00x 0.01 0.00 
+CHURN 16 459.0 4.0 114.75x 0.02 0.00 
+CHURN 17 171.0 2.0 85.50x 0.01 0.00 
+CHURN 31 230.0 2.0 115.00x 0.02 0.00 
+CHURN 32 230.0 2.0 115.00x 0.02 0.00 
+CHURN 33 171.0 2.0 85.50x 0.04 0.00 
+CHURN 47 165.0 2.0 82.50x 0.02 0.00 
+CHURN 48 165.0 2.0 82.50x 0.02 0.00 
+CHURN 49 172.0 2.0 86.00x 0.03 0.00 
+CHURN 63 137.0 2.0 68.50x 0.04 0.50 DRIFT-FLAG
+CHURN 64 137.0 2.0 68.50x 0.05 0.00 
+CHURN 65 175.0 2.0 87.50x 0.03 0.00 
+CHURN 79 123.0 2.0 61.50x 0.08 0.00 
+CHURN 80 122.0 2.0 61.00x 0.02 0.00 
+CHURN 81 179.0 2.0 89.50x 0.03 0.00 
+CHURN 95 113.0 2.0 56.50x 0.04 0.00 
+CHURN 96 112.0 2.0 56.00x 0.04 0.00 
+CHURN 97 180.0 2.0 90.00x 0.05 0.00 
+CHURN 111 109.0 2.0 54.50x 0.04 0.00 
+CHURN 112 110.0 2.0 55.00x 0.01 0.50 DRIFT-FLAG
+CHURN 113 182.0 2.0 91.00x 0.02 0.00 
+CHURN 127 105.0 2.0 52.50x 0.05 0.00 
+CHURN 128 106.0 2.0 53.00x 0.08 0.00 
+CHURN 129 185.0 2.0 92.50x 0.02 0.50 DRIFT-FLAG
+CHURN 159 104.0 2.0 52.00x 0.03 0.50 DRIFT-FLAG
+CHURN 160 105.0 2.0 52.50x 0.02 0.00 
+CHURN 161 189.0 2.0 94.50x 0.03 0.00 
+CHURN 191 101.0 2.0 50.50x 0.06 0.00 
+CHURN 192 101.0 2.0 50.50x 0.03 0.00 
+CHURN 193 191.0 2.0 95.50x 0.03 0.00 
+CHURN 223 101.0 2.0 50.50x 0.09 0.00 
+CHURN 224 103.0 2.0 51.50x 0.08 0.00 
+CHURN 225 192.0 2.0 96.00x 0.04 0.00 
+CHURN 255 104.0 2.0 52.00x 0.11 0.00 
+CHURN 256 103.0 2.0 51.50x 0.11 0.00 
+CHURN 257 195.0 2.0 97.50x 0.03 0.00 
+CHURN 319 107.0 2.0 53.50x 0.05 0.00 
+CHURN 320 106.0 2.0 53.00x 0.05 0.00 
+CHURN 321 201.0 2.0 100.50x 0.02 0.00 
+CHURN 383 97.0 2.0 48.50x 0.14 0.00 
+CHURN 384 98.0 2.0 49.00x 0.07 0.00 
+CHURN 385 203.0 2.0 101.50x 0.02 0.00 
+CHURN 447 102.0 2.0 51.00x 0.10 0.00 
+CHURN 448 101.0 2.0 50.50x 0.10 0.00 
+CHURN 449 204.0 2.0 102.00x 0.01 0.00 
+CHURN 511 104.0 2.0 52.00x 0.11 0.00 
+CHURN 512 105.0 2.0 52.50x 0.09 0.00 
+CHURN 513 209.0 2.0 104.50x 0.04 0.00 
+CHURN 639 110.0 2.0 55.00x 0.03 0.00 
+CHURN 640 110.0 2.0 55.00x 0.03 0.00 
+CHURN 641 214.0 2.0 107.00x 0.02 0.00 
+CHURN 767 105.0 2.0 52.50x 0.11 0.00 
+CHURN 768 107.0 2.0 53.50x 0.12 0.00 
+CHURN 769 216.0 2.0 108.00x 0.03 0.00 
+CHURN 895 109.0 2.0 54.50x 0.08 0.00 
+CHURN 896 106.0 2.0 53.00x 0.09 0.00 
+CHURN 897 217.0 2.0 108.50x 0.03 0.00 
+CHURN 1023 112.0 2.0 56.00x 0.11 0.00 
+CHURN 1024 115.0 2.0 57.50x 0.07 0.00 
+CHURN 1025 1934.0 2.0 967.00x 0.07 0.00 
+LIVESET 1 16.0 7.0 2.29x 0.06 0.43 DRIFT-FLAG
+LIVESET 15 16.0 5.0 3.20x 0.06 0.20 
+LIVESET 16 15.0 4.0 3.75x 0.13 0.25 
+LIVESET 17 20.0 4.0 5.00x 0.15 0.25 
+LIVESET 31 19.0 6.0 3.17x 0.05 0.00 
+LIVESET 32 18.0 5.0 3.60x 0.06 0.20 
+LIVESET 33 23.0 4.0 5.75x 0.22 0.25 
+LIVESET 47 21.0 6.0 3.50x 0.14 0.33 DRIFT-FLAG
+LIVESET 48 22.0 4.0 5.50x 0.09 0.25 
+LIVESET 49 26.0 4.0 6.50x 0.04 0.00 
+LIVESET 63 25.0 6.0 4.17x 0.12 0.50 DRIFT-FLAG
+LIVESET 64 25.0 4.0 6.25x 0.12 0.25 
+LIVESET 65 30.0 4.0 7.50x 0.07 0.00 
+LIVESET 79 28.0 6.0 4.67x 0.11 0.17 
+LIVESET 80 28.0 4.0 7.00x 0.07 0.25 
+LIVESET 81 35.0 4.0 8.75x 0.11 0.25 
+LIVESET 95 31.0 6.0 5.17x 0.06 0.00 
+LIVESET 96 32.0 4.0 8.00x 0.19 0.25 
+LIVESET 97 38.0 4.0 9.50x 0.05 0.25 
+LIVESET 111 35.0 6.0 5.83x 0.11 0.33 DRIFT-FLAG
+LIVESET 112 36.0 4.0 9.00x 0.08 0.00 
+LIVESET 113 40.0 4.0 10.00x 0.07 0.00 
+LIVESET 127 40.0 6.0 6.67x 0.05 0.17 
+LIVESET 128 38.0 4.0 9.50x 0.08 0.00 
+LIVESET 129 49.0 4.0 12.25x 0.10 0.00 
+LIVESET 159 47.0 7.0 6.71x 0.04 0.29 DRIFT-FLAG
+LIVESET 160 47.0 4.0 11.75x 0.06 0.00 
+LIVESET 161 58.0 4.0 14.50x 0.05 0.00 
+LIVESET 191 57.0 8.0 7.12x 0.02 0.62 DRIFT-FLAG
+LIVESET 192 57.0 4.0 14.25x 0.04 0.00 
+LIVESET 193 67.0 4.0 16.75x 0.03 0.00 
+LIVESET 223 65.0 9.0 7.22x 0.06 0.22 
+LIVESET 224 65.0 4.0 16.25x 0.05 0.25 
+LIVESET 225 76.0 4.0 19.00x 0.03 0.00 
+LIVESET 255 74.0 11.0 6.73x 0.05 0.55 DRIFT-FLAG
+LIVESET 256 73.0 7.0 10.43x 0.01 0.29 DRIFT-FLAG
+LIVESET 257 92.0 6.0 15.33x 0.03 0.50 DRIFT-FLAG
+LIVESET 319 89.0 12.0 7.42x 0.02 0.17 
+LIVESET 320 89.0 13.0 6.85x 0.03 0.15 
+LIVESET 321 110.0 12.0 9.17x 0.03 0.33 DRIFT-FLAG
+LIVESET 383 109.0 18.0 6.06x 0.04 0.28 DRIFT-FLAG
+LIVESET 384 109.0 17.0 6.41x 0.05 0.12 
+LIVESET 385 136.0 15.0 9.07x 0.04 0.20 
+LIVESET 447 134.0 23.0 5.83x 0.03 0.09 
+LIVESET 448 133.0 21.0 6.33x 0.02 0.14 
+LIVESET 449 158.0 21.0 7.52x 0.03 0.10 
+LIVESET 511 156.0 29.0 5.38x 0.03 0.07 
+LIVESET 512 156.0 27.0 5.78x 0.03 0.07 
+LIVESET 513 184.0 26.0 7.08x 0.02 0.12 
+LIVESET 639 183.0 38.0 4.82x 0.06 0.13 
+LIVESET 640 183.0 37.0 4.95x 0.05 0.05 
+LIVESET 641 226.0 37.0 6.11x 0.01 0.11 
+LIVESET 767 223.0 50.0 4.46x 0.01 0.14 
+LIVESET 768 224.0 47.0 4.77x 0.01 0.04 
+LIVESET 769 290.0 47.0 6.17x 0.04 0.04 
+LIVESET 895 287.0 60.0 4.78x 0.05 0.08 
+LIVESET 896 288.0 58.0 4.97x 0.12 0.05 
+LIVESET 897 408.0 57.0 7.16x 0.05 0.04 
+LIVESET 1023 402.0 71.0 5.66x 0.03 0.13 
+LIVESET 1024 403.0 67.0 6.01x 0.03 0.01 
+LIVESET 1025 1196.0 67.0 17.85x 0.09 0.01 
+
+SUMMARY OK: all checksums agree; TABLECHECK OK; FRAGCLASS verified
+summary exit=0
+--- run_z033 done ---
+
+== RAW CSV - mimir leg (hidden_files/z033_raw/leg_mimir.csv) ==
+mimir,PID,1301595
+mimir,TABLECHECK,OK
+mimir,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+mimir,FRAGCLASS,16,1,16,16,15,750,9375
+mimir,FRAGCLASS,32,17,32,16,15,750,4687
+mimir,FRAGCLASS,48,33,48,16,15,750,3125
+mimir,FRAGCLASS,64,49,64,16,15,750,2343
+mimir,FRAGCLASS,80,65,80,16,15,750,1875
+mimir,FRAGCLASS,96,81,96,16,15,750,1562
+mimir,FRAGCLASS,112,97,112,16,15,750,1339
+mimir,FRAGCLASS,128,113,128,16,15,750,1171
+mimir,FRAGCLASS,160,129,160,32,31,1550,1937
+mimir,FRAGCLASS,192,161,192,32,31,1550,1614
+mimir,FRAGCLASS,224,193,224,32,31,1550,1383
+mimir,FRAGCLASS,256,225,256,32,31,1550,1210
+mimir,FRAGCLASS,320,257,320,64,63,3150,1968
+mimir,FRAGCLASS,384,321,384,64,63,3150,1640
+mimir,FRAGCLASS,448,385,448,64,63,3150,1406
+mimir,FRAGCLASS,512,449,512,64,63,3150,1230
+mimir,FRAGCLASS,640,513,640,128,127,6350,1984
+mimir,FRAGCLASS,768,641,768,128,127,6350,1653
+mimir,FRAGCLASS,896,769,896,128,127,6350,1417
+mimir,FRAGCLASS,1024,897,1024,128,127,6350,1240
+mimir,LAT,CHURN,1,167,759985
+mimir,LAT,LIVESET,1,16,147456
+mimir,LAT,CHURN,15,459,279988
+mimir,LAT,LIVESET,15,16,109568
+mimir,LAT,CHURN,16,461,539988
+mimir,LAT,LIVESET,16,16,116224
+mimir,LAT,CHURN,17,171,799988
+mimir,LAT,LIVESET,17,22,122880
+mimir,LAT,CHURN,31,230,439976
+mimir,LAT,LIVESET,31,18,216064
+mimir,LAT,CHURN,32,230,579991
+mimir,LAT,LIVESET,32,18,91648
+mimir,LAT,CHURN,33,171,959976
+mimir,LAT,LIVESET,33,23,229376
+mimir,LAT,CHURN,47,168,359994
+mimir,LAT,LIVESET,47,21,60416
+mimir,LAT,CHURN,48,165,739979
+mimir,LAT,LIVESET,48,22,198144
+mimir,LAT,CHURN,49,172,879994
+mimir,LAT,LIVESET,49,27,73728
+mimir,LAT,CHURN,63,137,519982
+mimir,LAT,LIVESET,63,27,166912
+mimir,LAT,CHURN,64,138,779982
+mimir,LAT,LIVESET,64,25,173568
+mimir,LAT,CHURN,65,176,919997
+mimir,LAT,LIVESET,65,30,49152
+mimir,LAT,CHURN,79,120,559985
+mimir,LAT,LIVESET,79,31,142336
+mimir,LAT,CHURN,80,122,819985
+mimir,LAT,LIVESET,80,28,148992
+mimir,LAT,CHURN,81,175,79982
+mimir,LAT,LIVESET,81,33,155648
+mimir,LAT,CHURN,95,114,599988
+mimir,LAT,LIVESET,95,33,117760
+mimir,LAT,CHURN,96,111,859988
+mimir,LAT,LIVESET,96,32,124416
+mimir,LAT,CHURN,97,180,119985
+mimir,LAT,LIVESET,97,37,131072
+mimir,LAT,CHURN,111,107,759976
+mimir,LAT,LIVESET,111,38,224256
+mimir,LAT,CHURN,112,109,899991
+mimir,LAT,LIVESET,112,35,99840
+mimir,LAT,CHURN,113,179,279973
+mimir,LAT,LIVESET,113,43,237568
+mimir,LAT,CHURN,127,104,679994
+mimir,LAT,LIVESET,127,38,68608
+mimir,LAT,CHURN,128,102,939994
+mimir,LAT,LIVESET,128,41,75264
+mimir,LAT,CHURN,129,187,199991
+mimir,LAT,LIVESET,129,47,81920
+mimir,LAT,CHURN,159,103,879985
+mimir,LAT,LIVESET,159,47,150528
+mimir,LAT,CHURN,160,105,139982
+mimir,LAT,LIVESET,160,48,157184
+mimir,LAT,CHURN,161,188,399982
+mimir,LAT,LIVESET,161,56,163840
+mimir,LAT,CHURN,191,102,79973
+mimir,LAT,LIVESET,191,56,232448
+mimir,LAT,CHURN,192,102,219988
+mimir,LAT,LIVESET,192,57,108032
+mimir,LAT,CHURN,193,192,479988
+mimir,LAT,LIVESET,193,67,114688
+mimir,LAT,CHURN,223,101,39994
+mimir,LAT,LIVESET,223,66,52224
+mimir,LAT,CHURN,224,98,419979
+mimir,LAT,LIVESET,224,66,189952
+mimir,LAT,CHURN,225,192,559994
+mimir,LAT,LIVESET,225,75,65536
+mimir,LAT,CHURN,255,104,239985
+mimir,LAT,LIVESET,255,74,134144
+mimir,LAT,CHURN,256,101,380000
+mimir,LAT,LIVESET,256,73,9728
+mimir,LAT,CHURN,257,197,303994
+mimir,LAT,LIVESET,257,91,147456
+mimir,LAT,CHURN,319,107,607994
+mimir,LAT,LIVESET,319,90,166912
+mimir,LAT,CHURN,320,105,711994
+mimir,LAT,LIVESET,320,89,173568
+mimir,LAT,CHURN,321,200,768000
+mimir,LAT,LIVESET,321,112,49152
+mimir,LAT,CHURN,383,90,71997
+mimir,LAT,LIVESET,383,110,68608
+mimir,LAT,CHURN,384,98,175997
+mimir,LAT,LIVESET,384,111,75264
+mimir,LAT,CHURN,385,203,279997
+mimir,LAT,LIVESET,385,135,81920
+mimir,LAT,CHURN,447,102,631991
+mimir,LAT,LIVESET,447,133,232448
+mimir,LAT,CHURN,448,101,687997
+mimir,LAT,LIVESET,448,133,108032
+mimir,LAT,CHURN,449,204,791997
+mimir,LAT,LIVESET,449,156,114688
+mimir,LAT,CHURN,511,99,95994
+mimir,LAT,LIVESET,511,156,134144
+mimir,LAT,CHURN,512,106,152000
+mimir,LAT,LIVESET,512,153,9728
+mimir,LAT,CHURN,513,210,303994
+mimir,LAT,LIVESET,513,185,147456
+mimir,LAT,CHURN,639,110,71997
+mimir,LAT,LIVESET,639,181,68608
+mimir,LAT,CHURN,640,109,175997
+mimir,LAT,LIVESET,640,183,75264
+mimir,LAT,CHURN,641,216,279997
+mimir,LAT,LIVESET,641,225,81920
+mimir,LAT,CHURN,767,101,95994
+mimir,LAT,LIVESET,767,224,134144
+mimir,LAT,CHURN,768,107,152000
+mimir,LAT,LIVESET,768,224,9728
+mimir,LAT,CHURN,769,217,303994
+mimir,LAT,LIVESET,769,290,147456
+mimir,LAT,CHURN,895,109,71997
+mimir,LAT,LIVESET,895,286,68608
+mimir,LAT,CHURN,896,104,175997
+mimir,LAT,LIVESET,896,289,75264
+mimir,LAT,CHURN,897,217,279997
+mimir,LAT,LIVESET,897,416,81920
+mimir,LAT,CHURN,1023,112,95994
+mimir,LAT,LIVESET,1023,396,134144
+mimir,LAT,CHURN,1024,116,152000
+mimir,LAT,LIVESET,1024,398,9728
+mimir,LAT,CHURN,1025,1954,432000
+mimir,LAT,LIVESET,1025,1268,147456
+mimir,DONE,230356736
+mimir,PID,1301602
+mimir,TABLECHECK,OK
+mimir,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+mimir,FRAGCLASS,16,1,16,16,15,750,9375
+mimir,FRAGCLASS,32,17,32,16,15,750,4687
+mimir,FRAGCLASS,48,33,48,16,15,750,3125
+mimir,FRAGCLASS,64,49,64,16,15,750,2343
+mimir,FRAGCLASS,80,65,80,16,15,750,1875
+mimir,FRAGCLASS,96,81,96,16,15,750,1562
+mimir,FRAGCLASS,112,97,112,16,15,750,1339
+mimir,FRAGCLASS,128,113,128,16,15,750,1171
+mimir,FRAGCLASS,160,129,160,32,31,1550,1937
+mimir,FRAGCLASS,192,161,192,32,31,1550,1614
+mimir,FRAGCLASS,224,193,224,32,31,1550,1383
+mimir,FRAGCLASS,256,225,256,32,31,1550,1210
+mimir,FRAGCLASS,320,257,320,64,63,3150,1968
+mimir,FRAGCLASS,384,321,384,64,63,3150,1640
+mimir,FRAGCLASS,448,385,448,64,63,3150,1406
+mimir,FRAGCLASS,512,449,512,64,63,3150,1230
+mimir,FRAGCLASS,640,513,640,128,127,6350,1984
+mimir,FRAGCLASS,768,641,768,128,127,6350,1653
+mimir,FRAGCLASS,896,769,896,128,127,6350,1417
+mimir,FRAGCLASS,1024,897,1024,128,127,6350,1240
+mimir,LAT,CHURN,1,168,759985
+mimir,LAT,LIVESET,1,17,147456
+mimir,LAT,CHURN,15,464,279988
+mimir,LAT,LIVESET,15,16,109568
+mimir,LAT,CHURN,16,459,539988
+mimir,LAT,LIVESET,16,15,116224
+mimir,LAT,CHURN,17,171,799988
+mimir,LAT,LIVESET,17,20,122880
+mimir,LAT,CHURN,31,231,439976
+mimir,LAT,LIVESET,31,18,216064
+mimir,LAT,CHURN,32,233,579991
+mimir,LAT,LIVESET,32,19,91648
+mimir,LAT,CHURN,33,174,959976
+mimir,LAT,LIVESET,33,23,229376
+mimir,LAT,CHURN,47,167,359994
+mimir,LAT,LIVESET,47,24,60416
+mimir,LAT,CHURN,48,168,739979
+mimir,LAT,LIVESET,48,23,198144
+mimir,LAT,CHURN,49,171,879994
+mimir,LAT,LIVESET,49,26,73728
+mimir,LAT,CHURN,63,140,519982
+mimir,LAT,LIVESET,63,24,166912
+mimir,LAT,CHURN,64,141,779982
+mimir,LAT,LIVESET,64,25,173568
+mimir,LAT,CHURN,65,178,919997
+mimir,LAT,LIVESET,65,31,49152
+mimir,LAT,CHURN,79,127,559985
+mimir,LAT,LIVESET,79,28,142336
+mimir,LAT,CHURN,80,124,819985
+mimir,LAT,LIVESET,80,28,148992
+mimir,LAT,CHURN,81,180,79982
+mimir,LAT,LIVESET,81,35,155648
+mimir,LAT,CHURN,95,116,599988
+mimir,LAT,LIVESET,95,32,117760
+mimir,LAT,CHURN,96,114,859988
+mimir,LAT,LIVESET,96,31,124416
+mimir,LAT,CHURN,97,182,119985
+mimir,LAT,LIVESET,97,38,131072
+mimir,LAT,CHURN,111,109,759976
+mimir,LAT,LIVESET,111,35,224256
+mimir,LAT,CHURN,112,110,899991
+mimir,LAT,LIVESET,112,37,99840
+mimir,LAT,CHURN,113,182,279973
+mimir,LAT,LIVESET,113,40,237568
+mimir,LAT,CHURN,127,108,679994
+mimir,LAT,LIVESET,127,40,68608
+mimir,LAT,CHURN,128,109,939994
+mimir,LAT,LIVESET,128,39,75264
+mimir,LAT,CHURN,129,187,199991
+mimir,LAT,LIVESET,129,49,81920
+mimir,LAT,CHURN,159,106,879985
+mimir,LAT,LIVESET,159,46,150528
+mimir,LAT,CHURN,160,106,139982
+mimir,LAT,LIVESET,160,47,157184
+mimir,LAT,CHURN,161,192,399982
+mimir,LAT,LIVESET,161,59,163840
+mimir,LAT,CHURN,191,106,79973
+mimir,LAT,LIVESET,191,57,232448
+mimir,LAT,CHURN,192,104,219988
+mimir,LAT,LIVESET,192,55,108032
+mimir,LAT,CHURN,193,195,479988
+mimir,LAT,LIVESET,193,67,114688
+mimir,LAT,CHURN,223,106,39994
+mimir,LAT,LIVESET,223,67,52224
+mimir,LAT,CHURN,224,106,419979
+mimir,LAT,LIVESET,224,66,189952
+mimir,LAT,CHURN,225,195,559994
+mimir,LAT,LIVESET,225,76,65536
+mimir,LAT,CHURN,255,108,239985
+mimir,LAT,LIVESET,255,74,134144
+mimir,LAT,CHURN,256,109,380000
+mimir,LAT,LIVESET,256,73,9728
+mimir,LAT,CHURN,257,200,303994
+mimir,LAT,LIVESET,257,94,147456
+mimir,LAT,CHURN,319,107,607994
+mimir,LAT,LIVESET,319,90,166912
+mimir,LAT,CHURN,320,107,711994
+mimir,LAT,LIVESET,320,88,173568
+mimir,LAT,CHURN,321,202,768000
+mimir,LAT,LIVESET,321,111,49152
+mimir,LAT,CHURN,383,104,71997
+mimir,LAT,LIVESET,383,109,68608
+mimir,LAT,CHURN,384,104,175997
+mimir,LAT,LIVESET,384,107,75264
+mimir,LAT,CHURN,385,206,279997
+mimir,LAT,LIVESET,385,136,81920
+mimir,LAT,CHURN,447,104,631991
+mimir,LAT,LIVESET,447,134,232448
+mimir,LAT,CHURN,448,103,687997
+mimir,LAT,LIVESET,448,134,108032
+mimir,LAT,CHURN,449,203,791997
+mimir,LAT,LIVESET,449,159,114688
+mimir,LAT,CHURN,511,108,95994
+mimir,LAT,LIVESET,511,157,134144
+mimir,LAT,CHURN,512,108,152000
+mimir,LAT,LIVESET,512,156,9728
+mimir,LAT,CHURN,513,212,303994
+mimir,LAT,LIVESET,513,186,147456
+mimir,LAT,CHURN,639,111,71997
+mimir,LAT,LIVESET,639,192,68608
+mimir,LAT,CHURN,640,110,175997
+mimir,LAT,LIVESET,640,186,75264
+mimir,LAT,CHURN,641,214,279997
+mimir,LAT,LIVESET,641,227,81920
+mimir,LAT,CHURN,767,112,95994
+mimir,LAT,LIVESET,767,224,134144
+mimir,LAT,CHURN,768,112,152000
+mimir,LAT,LIVESET,768,224,9728
+mimir,LAT,CHURN,769,218,303994
+mimir,LAT,LIVESET,769,300,147456
+mimir,LAT,CHURN,895,113,71997
+mimir,LAT,LIVESET,895,290,68608
+mimir,LAT,CHURN,896,114,175997
+mimir,LAT,LIVESET,896,288,75264
+mimir,LAT,CHURN,897,221,279997
+mimir,LAT,LIVESET,897,408,81920
+mimir,LAT,CHURN,1023,118,95994
+mimir,LAT,LIVESET,1023,407,134144
+mimir,LAT,CHURN,1024,115,152000
+mimir,LAT,LIVESET,1024,404,9728
+mimir,LAT,CHURN,1025,1954,432000
+mimir,LAT,LIVESET,1025,1214,147456
+mimir,DONE,230356736
+mimir,PID,1301605
+mimir,TABLECHECK,OK
+mimir,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+mimir,FRAGCLASS,16,1,16,16,15,750,9375
+mimir,FRAGCLASS,32,17,32,16,15,750,4687
+mimir,FRAGCLASS,48,33,48,16,15,750,3125
+mimir,FRAGCLASS,64,49,64,16,15,750,2343
+mimir,FRAGCLASS,80,65,80,16,15,750,1875
+mimir,FRAGCLASS,96,81,96,16,15,750,1562
+mimir,FRAGCLASS,112,97,112,16,15,750,1339
+mimir,FRAGCLASS,128,113,128,16,15,750,1171
+mimir,FRAGCLASS,160,129,160,32,31,1550,1937
+mimir,FRAGCLASS,192,161,192,32,31,1550,1614
+mimir,FRAGCLASS,224,193,224,32,31,1550,1383
+mimir,FRAGCLASS,256,225,256,32,31,1550,1210
+mimir,FRAGCLASS,320,257,320,64,63,3150,1968
+mimir,FRAGCLASS,384,321,384,64,63,3150,1640
+mimir,FRAGCLASS,448,385,448,64,63,3150,1406
+mimir,FRAGCLASS,512,449,512,64,63,3150,1230
+mimir,FRAGCLASS,640,513,640,128,127,6350,1984
+mimir,FRAGCLASS,768,641,768,128,127,6350,1653
+mimir,FRAGCLASS,896,769,896,128,127,6350,1417
+mimir,FRAGCLASS,1024,897,1024,128,127,6350,1240
+mimir,LAT,CHURN,1,167,759985
+mimir,LAT,LIVESET,1,16,147456
+mimir,LAT,CHURN,15,458,279988
+mimir,LAT,LIVESET,15,16,109568
+mimir,LAT,CHURN,16,456,539988
+mimir,LAT,LIVESET,16,15,116224
+mimir,LAT,CHURN,17,172,799988
+mimir,LAT,LIVESET,17,19,122880
+mimir,LAT,CHURN,31,227,439976
+mimir,LAT,LIVESET,31,19,216064
+mimir,LAT,CHURN,32,228,579991
+mimir,LAT,LIVESET,32,18,91648
+mimir,LAT,CHURN,33,172,959976
+mimir,LAT,LIVESET,33,25,229376
+mimir,LAT,CHURN,47,165,359994
+mimir,LAT,LIVESET,47,21,60416
+mimir,LAT,CHURN,48,165,739979
+mimir,LAT,LIVESET,48,21,198144
+mimir,LAT,CHURN,49,169,879994
+mimir,LAT,LIVESET,49,26,73728
+mimir,LAT,CHURN,63,138,519982
+mimir,LAT,LIVESET,63,25,166912
+mimir,LAT,CHURN,64,137,779982
+mimir,LAT,LIVESET,64,26,173568
+mimir,LAT,CHURN,65,177,919997
+mimir,LAT,LIVESET,65,29,49152
+mimir,LAT,CHURN,79,130,559985
+mimir,LAT,LIVESET,79,28,142336
+mimir,LAT,CHURN,80,122,819985
+mimir,LAT,LIVESET,80,28,148992
+mimir,LAT,CHURN,81,179,79982
+mimir,LAT,LIVESET,81,35,155648
+mimir,LAT,CHURN,95,111,599988
+mimir,LAT,LIVESET,95,31,117760
+mimir,LAT,CHURN,96,114,859988
+mimir,LAT,LIVESET,96,37,124416
+mimir,LAT,CHURN,97,180,119985
+mimir,LAT,LIVESET,97,37,131072
+mimir,LAT,CHURN,111,109,759976
+mimir,LAT,LIVESET,111,35,224256
+mimir,LAT,CHURN,112,110,899991
+mimir,LAT,LIVESET,112,36,99840
+mimir,LAT,CHURN,113,183,279973
+mimir,LAT,LIVESET,113,40,237568
+mimir,LAT,CHURN,127,107,679994
+mimir,LAT,LIVESET,127,40,68608
+mimir,LAT,CHURN,128,100,939994
+mimir,LAT,LIVESET,128,38,75264
+mimir,LAT,CHURN,129,184,199991
+mimir,LAT,LIVESET,129,52,81920
+mimir,LAT,CHURN,159,104,879985
+mimir,LAT,LIVESET,159,47,150528
+mimir,LAT,CHURN,160,105,139982
+mimir,LAT,LIVESET,160,45,157184
+mimir,LAT,CHURN,161,189,399982
+mimir,LAT,LIVESET,161,58,163840
+mimir,LAT,CHURN,191,100,79973
+mimir,LAT,LIVESET,191,57,232448
+mimir,LAT,CHURN,192,101,219988
+mimir,LAT,LIVESET,192,57,108032
+mimir,LAT,CHURN,193,191,479988
+mimir,LAT,LIVESET,193,68,114688
+mimir,LAT,CHURN,223,104,39994
+mimir,LAT,LIVESET,223,64,52224
+mimir,LAT,CHURN,224,104,419979
+mimir,LAT,LIVESET,224,65,189952
+mimir,LAT,CHURN,225,190,559994
+mimir,LAT,LIVESET,225,77,65536
+mimir,LAT,CHURN,255,104,239985
+mimir,LAT,LIVESET,255,77,134144
+mimir,LAT,CHURN,256,98,380000
+mimir,LAT,LIVESET,256,74,9728
+mimir,LAT,CHURN,257,195,303994
+mimir,LAT,LIVESET,257,91,147456
+mimir,LAT,CHURN,319,105,607994
+mimir,LAT,LIVESET,319,88,166912
+mimir,LAT,CHURN,320,106,711994
+mimir,LAT,LIVESET,320,91,173568
+mimir,LAT,CHURN,321,201,768000
+mimir,LAT,LIVESET,321,110,49152
+mimir,LAT,CHURN,383,97,71997
+mimir,LAT,LIVESET,383,108,68608
+mimir,LAT,CHURN,384,98,175997
+mimir,LAT,LIVESET,384,109,75264
+mimir,LAT,CHURN,385,203,279997
+mimir,LAT,LIVESET,385,136,81920
+mimir,LAT,CHURN,447,102,631991
+mimir,LAT,LIVESET,447,134,232448
+mimir,LAT,CHURN,448,94,687997
+mimir,LAT,LIVESET,448,134,108032
+mimir,LAT,CHURN,449,203,791997
+mimir,LAT,LIVESET,449,158,114688
+mimir,LAT,CHURN,511,106,95994
+mimir,LAT,LIVESET,511,156,134144
+mimir,LAT,CHURN,512,99,152000
+mimir,LAT,LIVESET,512,156,9728
+mimir,LAT,CHURN,513,210,303994
+mimir,LAT,LIVESET,513,184,147456
+mimir,LAT,CHURN,639,110,71997
+mimir,LAT,LIVESET,639,184,68608
+mimir,LAT,CHURN,640,110,175997
+mimir,LAT,LIVESET,640,191,75264
+mimir,LAT,CHURN,641,214,279997
+mimir,LAT,LIVESET,641,227,81920
+mimir,LAT,CHURN,767,100,95994
+mimir,LAT,LIVESET,767,224,134144
+mimir,LAT,CHURN,768,109,152000
+mimir,LAT,LIVESET,768,224,9728
+mimir,LAT,CHURN,769,213,303994
+mimir,LAT,LIVESET,769,290,147456
+mimir,LAT,CHURN,895,112,71997
+mimir,LAT,LIVESET,895,299,68608
+mimir,LAT,CHURN,896,104,175997
+mimir,LAT,LIVESET,896,288,75264
+mimir,LAT,CHURN,897,215,279997
+mimir,LAT,LIVESET,897,405,81920
+mimir,LAT,CHURN,1023,116,95994
+mimir,LAT,LIVESET,1023,401,134144
+mimir,LAT,CHURN,1024,117,152000
+mimir,LAT,LIVESET,1024,404,9728
+mimir,LAT,CHURN,1025,1934,432000
+mimir,LAT,LIVESET,1025,1165,147456
+mimir,DONE,230356736
+mimir,PID,1301608
+mimir,TABLECHECK,OK
+mimir,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+mimir,FRAGCLASS,16,1,16,16,15,750,9375
+mimir,FRAGCLASS,32,17,32,16,15,750,4687
+mimir,FRAGCLASS,48,33,48,16,15,750,3125
+mimir,FRAGCLASS,64,49,64,16,15,750,2343
+mimir,FRAGCLASS,80,65,80,16,15,750,1875
+mimir,FRAGCLASS,96,81,96,16,15,750,1562
+mimir,FRAGCLASS,112,97,112,16,15,750,1339
+mimir,FRAGCLASS,128,113,128,16,15,750,1171
+mimir,FRAGCLASS,160,129,160,32,31,1550,1937
+mimir,FRAGCLASS,192,161,192,32,31,1550,1614
+mimir,FRAGCLASS,224,193,224,32,31,1550,1383
+mimir,FRAGCLASS,256,225,256,32,31,1550,1210
+mimir,FRAGCLASS,320,257,320,64,63,3150,1968
+mimir,FRAGCLASS,384,321,384,64,63,3150,1640
+mimir,FRAGCLASS,448,385,448,64,63,3150,1406
+mimir,FRAGCLASS,512,449,512,64,63,3150,1230
+mimir,FRAGCLASS,640,513,640,128,127,6350,1984
+mimir,FRAGCLASS,768,641,768,128,127,6350,1653
+mimir,FRAGCLASS,896,769,896,128,127,6350,1417
+mimir,FRAGCLASS,1024,897,1024,128,127,6350,1240
+mimir,LAT,CHURN,1,167,759985
+mimir,LAT,LIVESET,1,17,147456
+mimir,LAT,CHURN,15,459,279988
+mimir,LAT,LIVESET,15,15,109568
+mimir,LAT,CHURN,16,457,539988
+mimir,LAT,LIVESET,16,15,116224
+mimir,LAT,CHURN,17,170,799988
+mimir,LAT,LIVESET,17,20,122880
+mimir,LAT,CHURN,31,231,439976
+mimir,LAT,LIVESET,31,19,216064
+mimir,LAT,CHURN,32,230,579991
+mimir,LAT,LIVESET,32,18,91648
+mimir,LAT,CHURN,33,171,959976
+mimir,LAT,LIVESET,33,22,229376
+mimir,LAT,CHURN,47,165,359994
+mimir,LAT,LIVESET,47,21,60416
+mimir,LAT,CHURN,48,165,739979
+mimir,LAT,LIVESET,48,23,198144
+mimir,LAT,CHURN,49,172,879994
+mimir,LAT,LIVESET,49,26,73728
+mimir,LAT,CHURN,63,136,519982
+mimir,LAT,LIVESET,63,25,166912
+mimir,LAT,CHURN,64,137,779982
+mimir,LAT,LIVESET,64,24,173568
+mimir,LAT,CHURN,65,172,919997
+mimir,LAT,LIVESET,65,31,49152
+mimir,LAT,CHURN,79,122,559985
+mimir,LAT,LIVESET,79,28,142336
+mimir,LAT,CHURN,80,122,819985
+mimir,LAT,LIVESET,80,28,148992
+mimir,LAT,CHURN,81,177,79982
+mimir,LAT,LIVESET,81,35,155648
+mimir,LAT,CHURN,95,113,599988
+mimir,LAT,LIVESET,95,31,117760
+mimir,LAT,CHURN,96,112,859988
+mimir,LAT,LIVESET,96,31,124416
+mimir,LAT,CHURN,97,173,119985
+mimir,LAT,LIVESET,97,38,131072
+mimir,LAT,CHURN,111,111,759976
+mimir,LAT,LIVESET,111,34,224256
+mimir,LAT,CHURN,112,110,899991
+mimir,LAT,LIVESET,112,36,99840
+mimir,LAT,CHURN,113,179,279973
+mimir,LAT,LIVESET,113,40,237568
+mimir,LAT,CHURN,127,105,679994
+mimir,LAT,LIVESET,127,40,68608
+mimir,LAT,CHURN,128,107,939994
+mimir,LAT,LIVESET,128,38,75264
+mimir,LAT,CHURN,129,183,199991
+mimir,LAT,LIVESET,129,49,81920
+mimir,LAT,CHURN,159,105,879985
+mimir,LAT,LIVESET,159,45,150528
+mimir,LAT,CHURN,160,104,139982
+mimir,LAT,LIVESET,160,47,157184
+mimir,LAT,CHURN,161,191,399982
+mimir,LAT,LIVESET,161,58,163840
+mimir,LAT,CHURN,191,101,79973
+mimir,LAT,LIVESET,191,57,232448
+mimir,LAT,CHURN,192,101,219988
+mimir,LAT,LIVESET,192,55,108032
+mimir,LAT,CHURN,193,191,479988
+mimir,LAT,LIVESET,193,67,114688
+mimir,LAT,CHURN,223,100,39994
+mimir,LAT,LIVESET,223,65,52224
+mimir,LAT,CHURN,224,98,419979
+mimir,LAT,LIVESET,224,65,189952
+mimir,LAT,CHURN,225,191,559994
+mimir,LAT,LIVESET,225,75,65536
+mimir,LAT,CHURN,255,105,239985
+mimir,LAT,LIVESET,255,73,134144
+mimir,LAT,CHURN,256,105,380000
+mimir,LAT,LIVESET,256,73,9728
+mimir,LAT,CHURN,257,195,303994
+mimir,LAT,LIVESET,257,93,147456
+mimir,LAT,CHURN,319,107,607994
+mimir,LAT,LIVESET,319,89,166912
+mimir,LAT,CHURN,320,107,711994
+mimir,LAT,LIVESET,320,88,173568
+mimir,LAT,CHURN,321,201,768000
+mimir,LAT,LIVESET,321,110,49152
+mimir,LAT,CHURN,383,97,71997
+mimir,LAT,LIVESET,383,108,68608
+mimir,LAT,CHURN,384,97,175997
+mimir,LAT,LIVESET,384,106,75264
+mimir,LAT,CHURN,385,202,279997
+mimir,LAT,LIVESET,385,134,81920
+mimir,LAT,CHURN,447,94,631991
+mimir,LAT,LIVESET,447,133,232448
+mimir,LAT,CHURN,448,101,687997
+mimir,LAT,LIVESET,448,132,108032
+mimir,LAT,CHURN,449,205,791997
+mimir,LAT,LIVESET,449,158,114688
+mimir,LAT,CHURN,511,98,95994
+mimir,LAT,LIVESET,511,154,134144
+mimir,LAT,CHURN,512,101,152000
+mimir,LAT,LIVESET,512,155,9728
+mimir,LAT,CHURN,513,209,303994
+mimir,LAT,LIVESET,513,183,147456
+mimir,LAT,CHURN,639,109,71997
+mimir,LAT,LIVESET,639,183,68608
+mimir,LAT,CHURN,640,110,175997
+mimir,LAT,LIVESET,640,181,75264
+mimir,LAT,CHURN,641,215,279997
+mimir,LAT,LIVESET,641,225,81920
+mimir,LAT,CHURN,767,107,95994
+mimir,LAT,LIVESET,767,222,134144
+mimir,LAT,CHURN,768,106,152000
+mimir,LAT,LIVESET,768,223,9728
+mimir,LAT,CHURN,769,216,303994
+mimir,LAT,LIVESET,769,291,147456
+mimir,LAT,CHURN,895,106,71997
+mimir,LAT,LIVESET,895,285,68608
+mimir,LAT,CHURN,896,113,175997
+mimir,LAT,LIVESET,896,286,75264
+mimir,LAT,CHURN,897,217,279997
+mimir,LAT,LIVESET,897,410,81920
+mimir,LAT,CHURN,1023,115,95994
+mimir,LAT,LIVESET,1023,403,134144
+mimir,LAT,CHURN,1024,115,152000
+mimir,LAT,LIVESET,1024,403,9728
+mimir,LAT,CHURN,1025,1930,432000
+mimir,LAT,LIVESET,1025,1160,147456
+mimir,DONE,230356736
+mimir,PID,1301611
+mimir,TABLECHECK,OK
+mimir,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+mimir,FRAGCLASS,16,1,16,16,15,750,9375
+mimir,FRAGCLASS,32,17,32,16,15,750,4687
+mimir,FRAGCLASS,48,33,48,16,15,750,3125
+mimir,FRAGCLASS,64,49,64,16,15,750,2343
+mimir,FRAGCLASS,80,65,80,16,15,750,1875
+mimir,FRAGCLASS,96,81,96,16,15,750,1562
+mimir,FRAGCLASS,112,97,112,16,15,750,1339
+mimir,FRAGCLASS,128,113,128,16,15,750,1171
+mimir,FRAGCLASS,160,129,160,32,31,1550,1937
+mimir,FRAGCLASS,192,161,192,32,31,1550,1614
+mimir,FRAGCLASS,224,193,224,32,31,1550,1383
+mimir,FRAGCLASS,256,225,256,32,31,1550,1210
+mimir,FRAGCLASS,320,257,320,64,63,3150,1968
+mimir,FRAGCLASS,384,321,384,64,63,3150,1640
+mimir,FRAGCLASS,448,385,448,64,63,3150,1406
+mimir,FRAGCLASS,512,449,512,64,63,3150,1230
+mimir,FRAGCLASS,640,513,640,128,127,6350,1984
+mimir,FRAGCLASS,768,641,768,128,127,6350,1653
+mimir,FRAGCLASS,896,769,896,128,127,6350,1417
+mimir,FRAGCLASS,1024,897,1024,128,127,6350,1240
+mimir,LAT,CHURN,1,164,759985
+mimir,LAT,LIVESET,1,16,147456
+mimir,LAT,CHURN,15,460,279988
+mimir,LAT,LIVESET,15,16,109568
+mimir,LAT,CHURN,16,460,539988
+mimir,LAT,LIVESET,16,15,116224
+mimir,LAT,CHURN,17,170,799988
+mimir,LAT,LIVESET,17,19,122880
+mimir,LAT,CHURN,31,227,439976
+mimir,LAT,LIVESET,31,18,216064
+mimir,LAT,CHURN,32,230,579991
+mimir,LAT,LIVESET,32,18,91648
+mimir,LAT,CHURN,33,167,959976
+mimir,LAT,LIVESET,33,25,229376
+mimir,LAT,CHURN,47,164,359994
+mimir,LAT,LIVESET,47,21,60416
+mimir,LAT,CHURN,48,164,739979
+mimir,LAT,LIVESET,48,21,198144
+mimir,LAT,CHURN,49,173,879994
+mimir,LAT,LIVESET,49,26,73728
+mimir,LAT,CHURN,63,135,519982
+mimir,LAT,LIVESET,63,25,166912
+mimir,LAT,CHURN,64,134,779982
+mimir,LAT,LIVESET,64,26,173568
+mimir,LAT,CHURN,65,175,919997
+mimir,LAT,LIVESET,65,29,49152
+mimir,LAT,CHURN,79,123,559985
+mimir,LAT,LIVESET,79,28,142336
+mimir,LAT,CHURN,80,122,819985
+mimir,LAT,LIVESET,80,28,148992
+mimir,LAT,CHURN,81,179,79982
+mimir,LAT,LIVESET,81,37,155648
+mimir,LAT,CHURN,95,113,599988
+mimir,LAT,LIVESET,95,31,117760
+mimir,LAT,CHURN,96,115,859988
+mimir,LAT,LIVESET,96,33,124416
+mimir,LAT,CHURN,97,177,119985
+mimir,LAT,LIVESET,97,36,131072
+mimir,LAT,CHURN,111,109,759976
+mimir,LAT,LIVESET,111,35,224256
+mimir,LAT,CHURN,112,110,899991
+mimir,LAT,LIVESET,112,36,99840
+mimir,LAT,CHURN,113,182,279973
+mimir,LAT,LIVESET,113,40,237568
+mimir,LAT,CHURN,127,104,679994
+mimir,LAT,LIVESET,127,40,68608
+mimir,LAT,CHURN,128,104,939994
+mimir,LAT,LIVESET,128,38,75264
+mimir,LAT,CHURN,129,186,199991
+mimir,LAT,LIVESET,129,49,81920
+mimir,LAT,CHURN,159,105,879985
+mimir,LAT,LIVESET,159,47,150528
+mimir,LAT,CHURN,160,105,139982
+mimir,LAT,LIVESET,160,45,157184
+mimir,LAT,CHURN,161,189,399982
+mimir,LAT,LIVESET,161,58,163840
+mimir,LAT,CHURN,191,100,79973
+mimir,LAT,LIVESET,191,56,232448
+mimir,LAT,CHURN,192,101,219988
+mimir,LAT,LIVESET,192,57,108032
+mimir,LAT,CHURN,193,190,479988
+mimir,LAT,LIVESET,193,68,114688
+mimir,LAT,CHURN,223,101,39994
+mimir,LAT,LIVESET,223,63,52224
+mimir,LAT,CHURN,224,103,419979
+mimir,LAT,LIVESET,224,65,189952
+mimir,LAT,CHURN,225,188,559994
+mimir,LAT,LIVESET,225,77,65536
+mimir,LAT,CHURN,255,104,239985
+mimir,LAT,LIVESET,255,74,134144
+mimir,LAT,CHURN,256,102,380000
+mimir,LAT,LIVESET,256,74,9728
+mimir,LAT,CHURN,257,195,303994
+mimir,LAT,LIVESET,257,91,147456
+mimir,LAT,CHURN,319,102,607994
+mimir,LAT,LIVESET,319,89,166912
+mimir,LAT,CHURN,320,102,711994
+mimir,LAT,LIVESET,320,90,173568
+mimir,LAT,CHURN,321,202,768000
+mimir,LAT,LIVESET,321,109,49152
+mimir,LAT,CHURN,383,99,71997
+mimir,LAT,LIVESET,383,109,68608
+mimir,LAT,CHURN,384,98,175997
+mimir,LAT,LIVESET,384,109,75264
+mimir,LAT,CHURN,385,201,279997
+mimir,LAT,LIVESET,385,140,81920
+mimir,LAT,CHURN,447,103,631991
+mimir,LAT,LIVESET,447,134,232448
+mimir,LAT,CHURN,448,104,687997
+mimir,LAT,LIVESET,448,134,108032
+mimir,LAT,CHURN,449,203,791997
+mimir,LAT,LIVESET,449,161,114688
+mimir,LAT,CHURN,511,104,95994
+mimir,LAT,LIVESET,511,155,134144
+mimir,LAT,CHURN,512,105,152000
+mimir,LAT,LIVESET,512,157,9728
+mimir,LAT,CHURN,513,207,303994
+mimir,LAT,LIVESET,513,184,147456
+mimir,LAT,CHURN,639,108,71997
+mimir,LAT,LIVESET,639,183,68608
+mimir,LAT,CHURN,640,110,175997
+mimir,LAT,LIVESET,640,184,75264
+mimir,LAT,CHURN,641,214,279997
+mimir,LAT,LIVESET,641,226,81920
+mimir,LAT,CHURN,767,105,95994
+mimir,LAT,LIVESET,767,222,134144
+mimir,LAT,CHURN,768,99,152000
+mimir,LAT,LIVESET,768,225,9728
+mimir,LAT,CHURN,769,216,303994
+mimir,LAT,LIVESET,769,289,147456
+mimir,LAT,CHURN,895,106,71997
+mimir,LAT,LIVESET,895,288,68608
+mimir,LAT,CHURN,896,106,175997
+mimir,LAT,LIVESET,896,290,75264
+mimir,LAT,CHURN,897,218,279997
+mimir,LAT,LIVESET,897,404,81920
+mimir,LAT,CHURN,1023,106,95994
+mimir,LAT,LIVESET,1023,401,134144
+mimir,LAT,CHURN,1024,112,152000
+mimir,LAT,LIVESET,1024,402,9728
+mimir,LAT,CHURN,1025,1928,432000
+mimir,LAT,LIVESET,1025,1181,147456
+mimir,DONE,230356736
+mimir,PID,1301614
+mimir,TABLECHECK,OK
+mimir,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+mimir,FRAGCLASS,16,1,16,16,15,750,9375
+mimir,FRAGCLASS,32,17,32,16,15,750,4687
+mimir,FRAGCLASS,48,33,48,16,15,750,3125
+mimir,FRAGCLASS,64,49,64,16,15,750,2343
+mimir,FRAGCLASS,80,65,80,16,15,750,1875
+mimir,FRAGCLASS,96,81,96,16,15,750,1562
+mimir,FRAGCLASS,112,97,112,16,15,750,1339
+mimir,FRAGCLASS,128,113,128,16,15,750,1171
+mimir,FRAGCLASS,160,129,160,32,31,1550,1937
+mimir,FRAGCLASS,192,161,192,32,31,1550,1614
+mimir,FRAGCLASS,224,193,224,32,31,1550,1383
+mimir,FRAGCLASS,256,225,256,32,31,1550,1210
+mimir,FRAGCLASS,320,257,320,64,63,3150,1968
+mimir,FRAGCLASS,384,321,384,64,63,3150,1640
+mimir,FRAGCLASS,448,385,448,64,63,3150,1406
+mimir,FRAGCLASS,512,449,512,64,63,3150,1230
+mimir,FRAGCLASS,640,513,640,128,127,6350,1984
+mimir,FRAGCLASS,768,641,768,128,127,6350,1653
+mimir,FRAGCLASS,896,769,896,128,127,6350,1417
+mimir,FRAGCLASS,1024,897,1024,128,127,6350,1240
+mimir,LAT,CHURN,1,167,759985
+mimir,LAT,LIVESET,1,16,147456
+mimir,LAT,CHURN,15,460,279988
+mimir,LAT,LIVESET,15,16,109568
+mimir,LAT,CHURN,16,458,539988
+mimir,LAT,LIVESET,16,15,116224
+mimir,LAT,CHURN,17,170,799988
+mimir,LAT,LIVESET,17,19,122880
+mimir,LAT,CHURN,31,230,439976
+mimir,LAT,LIVESET,31,19,216064
+mimir,LAT,CHURN,32,232,579991
+mimir,LAT,LIVESET,32,18,91648
+mimir,LAT,CHURN,33,168,959976
+mimir,LAT,LIVESET,33,22,229376
+mimir,LAT,CHURN,47,166,359994
+mimir,LAT,LIVESET,47,21,60416
+mimir,LAT,CHURN,48,166,739979
+mimir,LAT,LIVESET,48,23,198144
+mimir,LAT,CHURN,49,175,879994
+mimir,LAT,LIVESET,49,26,73728
+mimir,LAT,CHURN,63,137,519982
+mimir,LAT,LIVESET,63,24,166912
+mimir,LAT,CHURN,64,136,779982
+mimir,LAT,LIVESET,64,25,173568
+mimir,LAT,CHURN,65,173,919997
+mimir,LAT,LIVESET,65,31,49152
+mimir,LAT,CHURN,79,129,559985
+mimir,LAT,LIVESET,79,28,142336
+mimir,LAT,CHURN,80,123,819985
+mimir,LAT,LIVESET,80,28,148992
+mimir,LAT,CHURN,81,178,79982
+mimir,LAT,LIVESET,81,35,155648
+mimir,LAT,CHURN,95,114,599988
+mimir,LAT,LIVESET,95,31,117760
+mimir,LAT,CHURN,96,112,859988
+mimir,LAT,LIVESET,96,31,124416
+mimir,LAT,CHURN,97,180,119985
+mimir,LAT,LIVESET,97,38,131072
+mimir,LAT,CHURN,111,107,759976
+mimir,LAT,LIVESET,111,34,224256
+mimir,LAT,CHURN,112,109,899991
+mimir,LAT,LIVESET,112,36,99840
+mimir,LAT,CHURN,113,182,279973
+mimir,LAT,LIVESET,113,40,237568
+mimir,LAT,CHURN,127,107,679994
+mimir,LAT,LIVESET,127,40,68608
+mimir,LAT,CHURN,128,106,939994
+mimir,LAT,LIVESET,128,38,75264
+mimir,LAT,CHURN,129,185,199991
+mimir,LAT,LIVESET,129,48,81920
+mimir,LAT,CHURN,159,104,879985
+mimir,LAT,LIVESET,159,45,150528
+mimir,LAT,CHURN,160,105,139982
+mimir,LAT,LIVESET,160,47,157184
+mimir,LAT,CHURN,161,188,399982
+mimir,LAT,LIVESET,161,58,163840
+mimir,LAT,CHURN,191,102,79973
+mimir,LAT,LIVESET,191,57,232448
+mimir,LAT,CHURN,192,101,219988
+mimir,LAT,LIVESET,192,56,108032
+mimir,LAT,CHURN,193,189,479988
+mimir,LAT,LIVESET,193,66,114688
+mimir,LAT,CHURN,223,101,39994
+mimir,LAT,LIVESET,223,65,52224
+mimir,LAT,CHURN,224,100,419979
+mimir,LAT,LIVESET,224,65,189952
+mimir,LAT,CHURN,225,193,559994
+mimir,LAT,LIVESET,225,75,65536
+mimir,LAT,CHURN,255,97,239985
+mimir,LAT,LIVESET,255,73,134144
+mimir,LAT,CHURN,256,103,380000
+mimir,LAT,LIVESET,256,73,9728
+mimir,LAT,CHURN,257,195,303994
+mimir,LAT,LIVESET,257,92,147456
+mimir,LAT,CHURN,319,105,607994
+mimir,LAT,LIVESET,319,88,166912
+mimir,LAT,CHURN,320,105,711994
+mimir,LAT,LIVESET,320,88,173568
+mimir,LAT,CHURN,321,203,768000
+mimir,LAT,LIVESET,321,110,49152
+mimir,LAT,CHURN,383,91,71997
+mimir,LAT,LIVESET,383,112,68608
+mimir,LAT,CHURN,384,98,175997
+mimir,LAT,LIVESET,384,110,75264
+mimir,LAT,CHURN,385,201,279997
+mimir,LAT,LIVESET,385,134,81920
+mimir,LAT,CHURN,447,94,631991
+mimir,LAT,LIVESET,447,132,232448
+mimir,LAT,CHURN,448,101,687997
+mimir,LAT,LIVESET,448,132,108032
+mimir,LAT,CHURN,449,204,791997
+mimir,LAT,LIVESET,449,158,114688
+mimir,LAT,CHURN,511,106,95994
+mimir,LAT,LIVESET,511,154,134144
+mimir,LAT,CHURN,512,105,152000
+mimir,LAT,LIVESET,512,157,9728
+mimir,LAT,CHURN,513,204,303994
+mimir,LAT,LIVESET,513,187,147456
+mimir,LAT,CHURN,639,108,71997
+mimir,LAT,LIVESET,639,182,68608
+mimir,LAT,CHURN,640,107,175997
+mimir,LAT,LIVESET,640,181,75264
+mimir,LAT,CHURN,641,211,279997
+mimir,LAT,LIVESET,641,226,81920
+mimir,LAT,CHURN,767,100,95994
+mimir,LAT,LIVESET,767,223,134144
+mimir,LAT,CHURN,768,104,152000
+mimir,LAT,LIVESET,768,222,9728
+mimir,LAT,CHURN,769,215,303994
+mimir,LAT,LIVESET,769,290,147456
+mimir,LAT,CHURN,895,104,71997
+mimir,LAT,LIVESET,895,286,68608
+mimir,LAT,CHURN,896,110,175997
+mimir,LAT,LIVESET,896,286,75264
+mimir,LAT,CHURN,897,219,279997
+mimir,LAT,LIVESET,897,426,81920
+mimir,LAT,CHURN,1023,107,95994
+mimir,LAT,LIVESET,1023,402,134144
+mimir,LAT,CHURN,1024,113,152000
+mimir,LAT,LIVESET,1024,409,9728
+mimir,LAT,CHURN,1025,1932,432000
+mimir,LAT,LIVESET,1025,1196,147456
+mimir,DONE,230356736
+mimir,PID,1301618
+mimir,TABLECHECK,OK
+mimir,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+mimir,FRAGCLASS,16,1,16,16,15,750,9375
+mimir,FRAGCLASS,32,17,32,16,15,750,4687
+mimir,FRAGCLASS,48,33,48,16,15,750,3125
+mimir,FRAGCLASS,64,49,64,16,15,750,2343
+mimir,FRAGCLASS,80,65,80,16,15,750,1875
+mimir,FRAGCLASS,96,81,96,16,15,750,1562
+mimir,FRAGCLASS,112,97,112,16,15,750,1339
+mimir,FRAGCLASS,128,113,128,16,15,750,1171
+mimir,FRAGCLASS,160,129,160,32,31,1550,1937
+mimir,FRAGCLASS,192,161,192,32,31,1550,1614
+mimir,FRAGCLASS,224,193,224,32,31,1550,1383
+mimir,FRAGCLASS,256,225,256,32,31,1550,1210
+mimir,FRAGCLASS,320,257,320,64,63,3150,1968
+mimir,FRAGCLASS,384,321,384,64,63,3150,1640
+mimir,FRAGCLASS,448,385,448,64,63,3150,1406
+mimir,FRAGCLASS,512,449,512,64,63,3150,1230
+mimir,FRAGCLASS,640,513,640,128,127,6350,1984
+mimir,FRAGCLASS,768,641,768,128,127,6350,1653
+mimir,FRAGCLASS,896,769,896,128,127,6350,1417
+mimir,FRAGCLASS,1024,897,1024,128,127,6350,1240
+mimir,LAT,CHURN,1,167,759985
+mimir,LAT,LIVESET,1,16,147456
+mimir,LAT,CHURN,15,461,279988
+mimir,LAT,LIVESET,15,16,109568
+mimir,LAT,CHURN,16,465,539988
+mimir,LAT,LIVESET,16,17,116224
+mimir,LAT,CHURN,17,171,799988
+mimir,LAT,LIVESET,17,21,122880
+mimir,LAT,CHURN,31,227,439976
+mimir,LAT,LIVESET,31,19,216064
+mimir,LAT,CHURN,32,229,579991
+mimir,LAT,LIVESET,32,18,91648
+mimir,LAT,CHURN,33,172,959976
+mimir,LAT,LIVESET,33,27,229376
+mimir,LAT,CHURN,47,165,359994
+mimir,LAT,LIVESET,47,22,60416
+mimir,LAT,CHURN,48,165,739979
+mimir,LAT,LIVESET,48,21,198144
+mimir,LAT,CHURN,49,173,879994
+mimir,LAT,LIVESET,49,26,73728
+mimir,LAT,CHURN,63,137,519982
+mimir,LAT,LIVESET,63,24,166912
+mimir,LAT,CHURN,64,139,779982
+mimir,LAT,LIVESET,64,27,173568
+mimir,LAT,CHURN,65,175,919997
+mimir,LAT,LIVESET,65,30,49152
+mimir,LAT,CHURN,79,121,559985
+mimir,LAT,LIVESET,79,29,142336
+mimir,LAT,CHURN,80,123,819985
+mimir,LAT,LIVESET,80,30,148992
+mimir,LAT,CHURN,81,179,79982
+mimir,LAT,LIVESET,81,33,155648
+mimir,LAT,CHURN,95,111,599988
+mimir,LAT,LIVESET,95,32,117760
+mimir,LAT,CHURN,96,112,859988
+mimir,LAT,LIVESET,96,35,124416
+mimir,LAT,CHURN,97,180,119985
+mimir,LAT,LIVESET,97,38,131072
+mimir,LAT,CHURN,111,111,759976
+mimir,LAT,LIVESET,111,35,224256
+mimir,LAT,CHURN,112,109,899991
+mimir,LAT,LIVESET,112,38,99840
+mimir,LAT,CHURN,113,183,279973
+mimir,LAT,LIVESET,113,40,237568
+mimir,LAT,CHURN,127,103,679994
+mimir,LAT,LIVESET,127,40,68608
+mimir,LAT,CHURN,128,106,939994
+mimir,LAT,LIVESET,128,39,75264
+mimir,LAT,CHURN,129,185,199991
+mimir,LAT,LIVESET,129,49,81920
+mimir,LAT,CHURN,159,104,879985
+mimir,LAT,LIVESET,159,47,150528
+mimir,LAT,CHURN,160,104,139982
+mimir,LAT,LIVESET,160,45,157184
+mimir,LAT,CHURN,161,187,399982
+mimir,LAT,LIVESET,161,58,163840
+mimir,LAT,CHURN,191,100,79973
+mimir,LAT,LIVESET,191,56,232448
+mimir,LAT,CHURN,192,103,219988
+mimir,LAT,LIVESET,192,57,108032
+mimir,LAT,CHURN,193,189,479988
+mimir,LAT,LIVESET,193,67,114688
+mimir,LAT,CHURN,223,97,39994
+mimir,LAT,LIVESET,223,66,52224
+mimir,LAT,CHURN,224,104,419979
+mimir,LAT,LIVESET,224,63,189952
+mimir,LAT,CHURN,225,194,559994
+mimir,LAT,LIVESET,225,77,65536
+mimir,LAT,CHURN,255,102,239985
+mimir,LAT,LIVESET,255,73,134144
+mimir,LAT,CHURN,256,106,380000
+mimir,LAT,LIVESET,256,73,9728
+mimir,LAT,CHURN,257,194,303994
+mimir,LAT,LIVESET,257,92,147456
+mimir,LAT,CHURN,319,107,607994
+mimir,LAT,LIVESET,319,88,166912
+mimir,LAT,CHURN,320,107,711994
+mimir,LAT,LIVESET,320,90,173568
+mimir,LAT,CHURN,321,199,768000
+mimir,LAT,LIVESET,321,109,49152
+mimir,LAT,CHURN,383,93,71997
+mimir,LAT,LIVESET,383,108,68608
+mimir,LAT,CHURN,384,98,175997
+mimir,LAT,LIVESET,384,108,75264
+mimir,LAT,CHURN,385,203,279997
+mimir,LAT,LIVESET,385,137,81920
+mimir,LAT,CHURN,447,102,631991
+mimir,LAT,LIVESET,447,136,232448
+mimir,LAT,CHURN,448,103,687997
+mimir,LAT,LIVESET,448,132,108032
+mimir,LAT,CHURN,449,206,791997
+mimir,LAT,LIVESET,449,158,114688
+mimir,LAT,CHURN,511,97,95994
+mimir,LAT,LIVESET,511,159,134144
+mimir,LAT,CHURN,512,104,152000
+mimir,LAT,LIVESET,512,157,9728
+mimir,LAT,CHURN,513,209,303994
+mimir,LAT,LIVESET,513,184,147456
+mimir,LAT,CHURN,639,110,71997
+mimir,LAT,LIVESET,639,183,68608
+mimir,LAT,CHURN,640,109,175997
+mimir,LAT,LIVESET,640,183,75264
+mimir,LAT,CHURN,641,214,279997
+mimir,LAT,LIVESET,641,226,81920
+mimir,LAT,CHURN,767,107,95994
+mimir,LAT,LIVESET,767,223,134144
+mimir,LAT,CHURN,768,108,152000
+mimir,LAT,LIVESET,768,224,9728
+mimir,LAT,CHURN,769,211,303994
+mimir,LAT,LIVESET,769,288,147456
+mimir,LAT,CHURN,895,113,71997
+mimir,LAT,LIVESET,895,287,68608
+mimir,LAT,CHURN,896,106,175997
+mimir,LAT,LIVESET,896,321,75264
+mimir,LAT,CHURN,897,216,279997
+mimir,LAT,LIVESET,897,406,81920
+mimir,LAT,CHURN,1023,111,95994
+mimir,LAT,LIVESET,1023,406,134144
+mimir,LAT,CHURN,1024,109,152000
+mimir,LAT,LIVESET,1024,402,9728
+mimir,LAT,CHURN,1025,2068,432000
+mimir,LAT,LIVESET,1025,1238,147456
+mimir,DONE,230356736
+
+== RAW CSV - glibc leg (hidden_files/z033_raw/leg_glibc.csv) ==
+glibc,PID,1301600
+glibc,TABLECHECK,SKIP
+glibc,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+glibc,LAT,CHURN,1,2,759985
+glibc,LAT,LIVESET,1,7,147456
+glibc,LAT,CHURN,15,4,279988
+glibc,LAT,LIVESET,15,4,109568
+glibc,LAT,CHURN,16,4,539988
+glibc,LAT,LIVESET,16,4,116224
+glibc,LAT,CHURN,17,2,799988
+glibc,LAT,LIVESET,17,4,122880
+glibc,LAT,CHURN,31,2,439976
+glibc,LAT,LIVESET,31,6,216064
+glibc,LAT,CHURN,32,2,579991
+glibc,LAT,LIVESET,32,4,91648
+glibc,LAT,CHURN,33,2,959976
+glibc,LAT,LIVESET,33,4,229376
+glibc,LAT,CHURN,47,2,359994
+glibc,LAT,LIVESET,47,6,60416
+glibc,LAT,CHURN,48,2,739979
+glibc,LAT,LIVESET,48,4,198144
+glibc,LAT,CHURN,49,2,879994
+glibc,LAT,LIVESET,49,4,73728
+glibc,LAT,CHURN,63,3,519982
+glibc,LAT,LIVESET,63,9,166912
+glibc,LAT,CHURN,64,2,779982
+glibc,LAT,LIVESET,64,4,173568
+glibc,LAT,CHURN,65,2,919997
+glibc,LAT,LIVESET,65,4,49152
+glibc,LAT,CHURN,79,2,559985
+glibc,LAT,LIVESET,79,7,142336
+glibc,LAT,CHURN,80,2,819985
+glibc,LAT,LIVESET,80,4,148992
+glibc,LAT,CHURN,81,2,79982
+glibc,LAT,LIVESET,81,4,155648
+glibc,LAT,CHURN,95,2,599988
+glibc,LAT,LIVESET,95,6,117760
+glibc,LAT,CHURN,96,2,859988
+glibc,LAT,LIVESET,96,4,124416
+glibc,LAT,CHURN,97,2,119985
+glibc,LAT,LIVESET,97,4,131072
+glibc,LAT,CHURN,111,2,759976
+glibc,LAT,LIVESET,111,7,224256
+glibc,LAT,CHURN,112,2,899991
+glibc,LAT,LIVESET,112,4,99840
+glibc,LAT,CHURN,113,2,279973
+glibc,LAT,LIVESET,113,4,237568
+glibc,LAT,CHURN,127,2,679994
+glibc,LAT,LIVESET,127,7,68608
+glibc,LAT,CHURN,128,2,939994
+glibc,LAT,LIVESET,128,4,75264
+glibc,LAT,CHURN,129,2,199991
+glibc,LAT,LIVESET,129,4,81920
+glibc,LAT,CHURN,159,2,879985
+glibc,LAT,LIVESET,159,7,150528
+glibc,LAT,CHURN,160,2,139982
+glibc,LAT,LIVESET,160,4,157184
+glibc,LAT,CHURN,161,2,399982
+glibc,LAT,LIVESET,161,4,163840
+glibc,LAT,CHURN,191,2,79973
+glibc,LAT,LIVESET,191,12,232448
+glibc,LAT,CHURN,192,2,219988
+glibc,LAT,LIVESET,192,4,108032
+glibc,LAT,CHURN,193,2,479988
+glibc,LAT,LIVESET,193,4,114688
+glibc,LAT,CHURN,223,2,39994
+glibc,LAT,LIVESET,223,9,52224
+glibc,LAT,CHURN,224,2,419979
+glibc,LAT,LIVESET,224,4,189952
+glibc,LAT,CHURN,225,2,559994
+glibc,LAT,LIVESET,225,4,65536
+glibc,LAT,CHURN,255,2,239985
+glibc,LAT,LIVESET,255,11,134144
+glibc,LAT,CHURN,256,2,380000
+glibc,LAT,LIVESET,256,6,9728
+glibc,LAT,CHURN,257,2,303994
+glibc,LAT,LIVESET,257,9,147456
+glibc,LAT,CHURN,319,2,607994
+glibc,LAT,LIVESET,319,12,166912
+glibc,LAT,CHURN,320,2,711994
+glibc,LAT,LIVESET,320,13,173568
+glibc,LAT,CHURN,321,2,768000
+glibc,LAT,LIVESET,321,12,49152
+glibc,LAT,CHURN,383,2,71997
+glibc,LAT,LIVESET,383,18,68608
+glibc,LAT,CHURN,384,2,175997
+glibc,LAT,LIVESET,384,17,75264
+glibc,LAT,CHURN,385,2,279997
+glibc,LAT,LIVESET,385,14,81920
+glibc,LAT,CHURN,447,2,631991
+glibc,LAT,LIVESET,447,22,232448
+glibc,LAT,CHURN,448,2,687997
+glibc,LAT,LIVESET,448,22,108032
+glibc,LAT,CHURN,449,2,791997
+glibc,LAT,LIVESET,449,20,114688
+glibc,LAT,CHURN,511,2,95994
+glibc,LAT,LIVESET,511,30,134144
+glibc,LAT,CHURN,512,2,152000
+glibc,LAT,LIVESET,512,26,9728
+glibc,LAT,CHURN,513,2,303994
+glibc,LAT,LIVESET,513,26,147456
+glibc,LAT,CHURN,639,2,71997
+glibc,LAT,LIVESET,639,38,68608
+glibc,LAT,CHURN,640,2,175997
+glibc,LAT,LIVESET,640,38,75264
+glibc,LAT,CHURN,641,2,279997
+glibc,LAT,LIVESET,641,37,81920
+glibc,LAT,CHURN,767,2,95994
+glibc,LAT,LIVESET,767,55,134144
+glibc,LAT,CHURN,768,2,152000
+glibc,LAT,LIVESET,768,46,9728
+glibc,LAT,CHURN,769,2,303994
+glibc,LAT,LIVESET,769,46,147456
+glibc,LAT,CHURN,895,2,71997
+glibc,LAT,LIVESET,895,60,68608
+glibc,LAT,CHURN,896,2,175997
+glibc,LAT,LIVESET,896,58,75264
+glibc,LAT,CHURN,897,2,279997
+glibc,LAT,LIVESET,897,56,81920
+glibc,LAT,CHURN,1023,2,95994
+glibc,LAT,LIVESET,1023,71,134144
+glibc,LAT,CHURN,1024,2,152000
+glibc,LAT,LIVESET,1024,66,9728
+glibc,LAT,CHURN,1025,2,432000
+glibc,LAT,LIVESET,1025,66,147456
+glibc,DONE,230356736
+glibc,PID,1301603
+glibc,TABLECHECK,SKIP
+glibc,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+glibc,LAT,CHURN,1,2,759985
+glibc,LAT,LIVESET,1,10,147456
+glibc,LAT,CHURN,15,4,279988
+glibc,LAT,LIVESET,15,5,109568
+glibc,LAT,CHURN,16,4,539988
+glibc,LAT,LIVESET,16,5,116224
+glibc,LAT,CHURN,17,2,799988
+glibc,LAT,LIVESET,17,5,122880
+glibc,LAT,CHURN,31,2,439976
+glibc,LAT,LIVESET,31,6,216064
+glibc,LAT,CHURN,32,2,579991
+glibc,LAT,LIVESET,32,5,91648
+glibc,LAT,CHURN,33,2,959976
+glibc,LAT,LIVESET,33,4,229376
+glibc,LAT,CHURN,47,2,359994
+glibc,LAT,LIVESET,47,6,60416
+glibc,LAT,CHURN,48,2,739979
+glibc,LAT,LIVESET,48,5,198144
+glibc,LAT,CHURN,49,2,879994
+glibc,LAT,LIVESET,49,4,73728
+glibc,LAT,CHURN,63,2,519982
+glibc,LAT,LIVESET,63,6,166912
+glibc,LAT,CHURN,64,2,779982
+glibc,LAT,LIVESET,64,4,173568
+glibc,LAT,CHURN,65,2,919997
+glibc,LAT,LIVESET,65,4,49152
+glibc,LAT,CHURN,79,2,559985
+glibc,LAT,LIVESET,79,6,142336
+glibc,LAT,CHURN,80,2,819985
+glibc,LAT,LIVESET,80,4,148992
+glibc,LAT,CHURN,81,2,79982
+glibc,LAT,LIVESET,81,4,155648
+glibc,LAT,CHURN,95,2,599988
+glibc,LAT,LIVESET,95,6,117760
+glibc,LAT,CHURN,96,2,859988
+glibc,LAT,LIVESET,96,4,124416
+glibc,LAT,CHURN,97,2,119985
+glibc,LAT,LIVESET,97,4,131072
+glibc,LAT,CHURN,111,2,759976
+glibc,LAT,LIVESET,111,5,224256
+glibc,LAT,CHURN,112,2,899991
+glibc,LAT,LIVESET,112,4,99840
+glibc,LAT,CHURN,113,2,279973
+glibc,LAT,LIVESET,113,4,237568
+glibc,LAT,CHURN,127,2,679994
+glibc,LAT,LIVESET,127,6,68608
+glibc,LAT,CHURN,128,2,939994
+glibc,LAT,LIVESET,128,4,75264
+glibc,LAT,CHURN,129,2,199991
+glibc,LAT,LIVESET,129,4,81920
+glibc,LAT,CHURN,159,3,879985
+glibc,LAT,LIVESET,159,7,150528
+glibc,LAT,CHURN,160,2,139982
+glibc,LAT,LIVESET,160,4,157184
+glibc,LAT,CHURN,161,2,399982
+glibc,LAT,LIVESET,161,4,163840
+glibc,LAT,CHURN,191,2,79973
+glibc,LAT,LIVESET,191,8,232448
+glibc,LAT,CHURN,192,2,219988
+glibc,LAT,LIVESET,192,4,108032
+glibc,LAT,CHURN,193,2,479988
+glibc,LAT,LIVESET,193,4,114688
+glibc,LAT,CHURN,223,2,39994
+glibc,LAT,LIVESET,223,11,52224
+glibc,LAT,CHURN,224,2,419979
+glibc,LAT,LIVESET,224,5,189952
+glibc,LAT,CHURN,225,2,559994
+glibc,LAT,LIVESET,225,4,65536
+glibc,LAT,CHURN,255,2,239985
+glibc,LAT,LIVESET,255,16,134144
+glibc,LAT,CHURN,256,2,380000
+glibc,LAT,LIVESET,256,7,9728
+glibc,LAT,CHURN,257,2,303994
+glibc,LAT,LIVESET,257,6,147456
+glibc,LAT,CHURN,319,2,607994
+glibc,LAT,LIVESET,319,12,166912
+glibc,LAT,CHURN,320,2,711994
+glibc,LAT,LIVESET,320,13,173568
+glibc,LAT,CHURN,321,2,768000
+glibc,LAT,LIVESET,321,13,49152
+glibc,LAT,CHURN,383,2,71997
+glibc,LAT,LIVESET,383,17,68608
+glibc,LAT,CHURN,384,2,175997
+glibc,LAT,LIVESET,384,17,75264
+glibc,LAT,CHURN,385,2,279997
+glibc,LAT,LIVESET,385,15,81920
+glibc,LAT,CHURN,447,2,631991
+glibc,LAT,LIVESET,447,23,232448
+glibc,LAT,CHURN,448,2,687997
+glibc,LAT,LIVESET,448,21,108032
+glibc,LAT,CHURN,449,2,791997
+glibc,LAT,LIVESET,449,22,114688
+glibc,LAT,CHURN,511,2,95994
+glibc,LAT,LIVESET,511,29,134144
+glibc,LAT,CHURN,512,2,152000
+glibc,LAT,LIVESET,512,27,9728
+glibc,LAT,CHURN,513,2,303994
+glibc,LAT,LIVESET,513,26,147456
+glibc,LAT,CHURN,639,2,71997
+glibc,LAT,LIVESET,639,38,68608
+glibc,LAT,CHURN,640,2,175997
+glibc,LAT,LIVESET,640,38,75264
+glibc,LAT,CHURN,641,2,279997
+glibc,LAT,LIVESET,641,39,81920
+glibc,LAT,CHURN,767,2,95994
+glibc,LAT,LIVESET,767,51,134144
+glibc,LAT,CHURN,768,2,152000
+glibc,LAT,LIVESET,768,48,9728
+glibc,LAT,CHURN,769,2,303994
+glibc,LAT,LIVESET,769,48,147456
+glibc,LAT,CHURN,895,2,71997
+glibc,LAT,LIVESET,895,60,68608
+glibc,LAT,CHURN,896,2,175997
+glibc,LAT,LIVESET,896,59,75264
+glibc,LAT,CHURN,897,2,279997
+glibc,LAT,LIVESET,897,57,81920
+glibc,LAT,CHURN,1023,2,95994
+glibc,LAT,LIVESET,1023,72,134144
+glibc,LAT,CHURN,1024,2,152000
+glibc,LAT,LIVESET,1024,67,9728
+glibc,LAT,CHURN,1025,2,432000
+glibc,LAT,LIVESET,1025,67,147456
+glibc,DONE,230356736
+glibc,PID,1301606
+glibc,TABLECHECK,SKIP
+glibc,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+glibc,LAT,CHURN,1,2,759985
+glibc,LAT,LIVESET,1,7,147456
+glibc,LAT,CHURN,15,4,279988
+glibc,LAT,LIVESET,15,4,109568
+glibc,LAT,CHURN,16,4,539988
+glibc,LAT,LIVESET,16,4,116224
+glibc,LAT,CHURN,17,2,799988
+glibc,LAT,LIVESET,17,4,122880
+glibc,LAT,CHURN,31,2,439976
+glibc,LAT,LIVESET,31,6,216064
+glibc,LAT,CHURN,32,2,579991
+glibc,LAT,LIVESET,32,4,91648
+glibc,LAT,CHURN,33,2,959976
+glibc,LAT,LIVESET,33,4,229376
+glibc,LAT,CHURN,47,2,359994
+glibc,LAT,LIVESET,47,6,60416
+glibc,LAT,CHURN,48,2,739979
+glibc,LAT,LIVESET,48,4,198144
+glibc,LAT,CHURN,49,2,879994
+glibc,LAT,LIVESET,49,4,73728
+glibc,LAT,CHURN,63,2,519982
+glibc,LAT,LIVESET,63,6,166912
+glibc,LAT,CHURN,64,2,779982
+glibc,LAT,LIVESET,64,4,173568
+glibc,LAT,CHURN,65,2,919997
+glibc,LAT,LIVESET,65,4,49152
+glibc,LAT,CHURN,79,2,559985
+glibc,LAT,LIVESET,79,7,142336
+glibc,LAT,CHURN,80,2,819985
+glibc,LAT,LIVESET,80,4,148992
+glibc,LAT,CHURN,81,2,79982
+glibc,LAT,LIVESET,81,4,155648
+glibc,LAT,CHURN,95,2,599988
+glibc,LAT,LIVESET,95,6,117760
+glibc,LAT,CHURN,96,2,859988
+glibc,LAT,LIVESET,96,4,124416
+glibc,LAT,CHURN,97,2,119985
+glibc,LAT,LIVESET,97,4,131072
+glibc,LAT,CHURN,111,2,759976
+glibc,LAT,LIVESET,111,5,224256
+glibc,LAT,CHURN,112,2,899991
+glibc,LAT,LIVESET,112,4,99840
+glibc,LAT,CHURN,113,2,279973
+glibc,LAT,LIVESET,113,4,237568
+glibc,LAT,CHURN,127,2,679994
+glibc,LAT,LIVESET,127,6,68608
+glibc,LAT,CHURN,128,2,939994
+glibc,LAT,LIVESET,128,4,75264
+glibc,LAT,CHURN,129,2,199991
+glibc,LAT,LIVESET,129,4,81920
+glibc,LAT,CHURN,159,2,879985
+glibc,LAT,LIVESET,159,9,150528
+glibc,LAT,CHURN,160,2,139982
+glibc,LAT,LIVESET,160,4,157184
+glibc,LAT,CHURN,161,2,399982
+glibc,LAT,LIVESET,161,4,163840
+glibc,LAT,CHURN,191,2,79973
+glibc,LAT,LIVESET,191,7,232448
+glibc,LAT,CHURN,192,2,219988
+glibc,LAT,LIVESET,192,4,108032
+glibc,LAT,CHURN,193,2,479988
+glibc,LAT,LIVESET,193,4,114688
+glibc,LAT,CHURN,223,2,39994
+glibc,LAT,LIVESET,223,9,52224
+glibc,LAT,CHURN,224,2,419979
+glibc,LAT,LIVESET,224,4,189952
+glibc,LAT,CHURN,225,2,559994
+glibc,LAT,LIVESET,225,4,65536
+glibc,LAT,CHURN,255,2,239985
+glibc,LAT,LIVESET,255,11,134144
+glibc,LAT,CHURN,256,2,380000
+glibc,LAT,LIVESET,256,6,9728
+glibc,LAT,CHURN,257,2,303994
+glibc,LAT,LIVESET,257,7,147456
+glibc,LAT,CHURN,319,2,607994
+glibc,LAT,LIVESET,319,12,166912
+glibc,LAT,CHURN,320,2,711994
+glibc,LAT,LIVESET,320,14,173568
+glibc,LAT,CHURN,321,2,768000
+glibc,LAT,LIVESET,321,11,49152
+glibc,LAT,CHURN,383,2,71997
+glibc,LAT,LIVESET,383,22,68608
+glibc,LAT,CHURN,384,2,175997
+glibc,LAT,LIVESET,384,15,75264
+glibc,LAT,CHURN,385,2,279997
+glibc,LAT,LIVESET,385,17,81920
+glibc,LAT,CHURN,447,2,631991
+glibc,LAT,LIVESET,447,23,232448
+glibc,LAT,CHURN,448,2,687997
+glibc,LAT,LIVESET,448,19,108032
+glibc,LAT,CHURN,449,2,791997
+glibc,LAT,LIVESET,449,22,114688
+glibc,LAT,CHURN,511,2,95994
+glibc,LAT,LIVESET,511,28,134144
+glibc,LAT,CHURN,512,2,152000
+glibc,LAT,LIVESET,512,26,9728
+glibc,LAT,CHURN,513,2,303994
+glibc,LAT,LIVESET,513,29,147456
+glibc,LAT,CHURN,639,2,71997
+glibc,LAT,LIVESET,639,39,68608
+glibc,LAT,CHURN,640,2,175997
+glibc,LAT,LIVESET,640,36,75264
+glibc,LAT,CHURN,641,2,279997
+glibc,LAT,LIVESET,641,37,81920
+glibc,LAT,CHURN,767,2,95994
+glibc,LAT,LIVESET,767,50,134144
+glibc,LAT,CHURN,768,2,152000
+glibc,LAT,LIVESET,768,46,9728
+glibc,LAT,CHURN,769,2,303994
+glibc,LAT,LIVESET,769,46,147456
+glibc,LAT,CHURN,895,2,71997
+glibc,LAT,LIVESET,895,61,68608
+glibc,LAT,CHURN,896,2,175997
+glibc,LAT,LIVESET,896,56,75264
+glibc,LAT,CHURN,897,2,279997
+glibc,LAT,LIVESET,897,58,81920
+glibc,LAT,CHURN,1023,2,95994
+glibc,LAT,LIVESET,1023,71,134144
+glibc,LAT,CHURN,1024,2,152000
+glibc,LAT,LIVESET,1024,67,9728
+glibc,LAT,CHURN,1025,2,432000
+glibc,LAT,LIVESET,1025,67,147456
+glibc,DONE,230356736
+glibc,PID,1301609
+glibc,TABLECHECK,SKIP
+glibc,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+glibc,LAT,CHURN,1,2,759985
+glibc,LAT,LIVESET,1,9,147456
+glibc,LAT,CHURN,15,4,279988
+glibc,LAT,LIVESET,15,5,109568
+glibc,LAT,CHURN,16,4,539988
+glibc,LAT,LIVESET,16,5,116224
+glibc,LAT,CHURN,17,2,799988
+glibc,LAT,LIVESET,17,4,122880
+glibc,LAT,CHURN,31,2,439976
+glibc,LAT,LIVESET,31,6,216064
+glibc,LAT,CHURN,32,2,579991
+glibc,LAT,LIVESET,32,5,91648
+glibc,LAT,CHURN,33,2,959976
+glibc,LAT,LIVESET,33,4,229376
+glibc,LAT,CHURN,47,2,359994
+glibc,LAT,LIVESET,47,6,60416
+glibc,LAT,CHURN,48,2,739979
+glibc,LAT,LIVESET,48,4,198144
+glibc,LAT,CHURN,49,2,879994
+glibc,LAT,LIVESET,49,4,73728
+glibc,LAT,CHURN,63,2,519982
+glibc,LAT,LIVESET,63,6,166912
+glibc,LAT,CHURN,64,2,779982
+glibc,LAT,LIVESET,64,5,173568
+glibc,LAT,CHURN,65,2,919997
+glibc,LAT,LIVESET,65,4,49152
+glibc,LAT,CHURN,79,2,559985
+glibc,LAT,LIVESET,79,6,142336
+glibc,LAT,CHURN,80,2,819985
+glibc,LAT,LIVESET,80,4,148992
+glibc,LAT,CHURN,81,2,79982
+glibc,LAT,LIVESET,81,4,155648
+glibc,LAT,CHURN,95,2,599988
+glibc,LAT,LIVESET,95,6,117760
+glibc,LAT,CHURN,96,2,859988
+glibc,LAT,LIVESET,96,4,124416
+glibc,LAT,CHURN,97,2,119985
+glibc,LAT,LIVESET,97,4,131072
+glibc,LAT,CHURN,111,2,759976
+glibc,LAT,LIVESET,111,6,224256
+glibc,LAT,CHURN,112,2,899991
+glibc,LAT,LIVESET,112,4,99840
+glibc,LAT,CHURN,113,2,279973
+glibc,LAT,LIVESET,113,4,237568
+glibc,LAT,CHURN,127,2,679994
+glibc,LAT,LIVESET,127,6,68608
+glibc,LAT,CHURN,128,2,939994
+glibc,LAT,LIVESET,128,4,75264
+glibc,LAT,CHURN,129,2,199991
+glibc,LAT,LIVESET,129,4,81920
+glibc,LAT,CHURN,159,2,879985
+glibc,LAT,LIVESET,159,7,150528
+glibc,LAT,CHURN,160,2,139982
+glibc,LAT,LIVESET,160,4,157184
+glibc,LAT,CHURN,161,2,399982
+glibc,LAT,LIVESET,161,4,163840
+glibc,LAT,CHURN,191,2,79973
+glibc,LAT,LIVESET,191,8,232448
+glibc,LAT,CHURN,192,2,219988
+glibc,LAT,LIVESET,192,4,108032
+glibc,LAT,CHURN,193,2,479988
+glibc,LAT,LIVESET,193,4,114688
+glibc,LAT,CHURN,223,2,39994
+glibc,LAT,LIVESET,223,9,52224
+glibc,LAT,CHURN,224,2,419979
+glibc,LAT,LIVESET,224,4,189952
+glibc,LAT,CHURN,225,2,559994
+glibc,LAT,LIVESET,225,4,65536
+glibc,LAT,CHURN,255,2,239985
+glibc,LAT,LIVESET,255,13,134144
+glibc,LAT,CHURN,256,2,380000
+glibc,LAT,LIVESET,256,6,9728
+glibc,LAT,CHURN,257,2,303994
+glibc,LAT,LIVESET,257,6,147456
+glibc,LAT,CHURN,319,2,607994
+glibc,LAT,LIVESET,319,11,166912
+glibc,LAT,CHURN,320,2,711994
+glibc,LAT,LIVESET,320,12,173568
+glibc,LAT,CHURN,321,2,768000
+glibc,LAT,LIVESET,321,14,49152
+glibc,LAT,CHURN,383,2,71997
+glibc,LAT,LIVESET,383,17,68608
+glibc,LAT,CHURN,384,2,175997
+glibc,LAT,LIVESET,384,17,75264
+glibc,LAT,CHURN,385,2,279997
+glibc,LAT,LIVESET,385,15,81920
+glibc,LAT,CHURN,447,2,631991
+glibc,LAT,LIVESET,447,22,232448
+glibc,LAT,CHURN,448,2,687997
+glibc,LAT,LIVESET,448,21,108032
+glibc,LAT,CHURN,449,2,791997
+glibc,LAT,LIVESET,449,21,114688
+glibc,LAT,CHURN,511,2,95994
+glibc,LAT,LIVESET,511,29,134144
+glibc,LAT,CHURN,512,2,152000
+glibc,LAT,LIVESET,512,26,9728
+glibc,LAT,CHURN,513,2,303994
+glibc,LAT,LIVESET,513,26,147456
+glibc,LAT,CHURN,639,2,71997
+glibc,LAT,LIVESET,639,37,68608
+glibc,LAT,CHURN,640,2,175997
+glibc,LAT,LIVESET,640,37,75264
+glibc,LAT,CHURN,641,2,279997
+glibc,LAT,LIVESET,641,35,81920
+glibc,LAT,CHURN,767,2,95994
+glibc,LAT,LIVESET,767,51,134144
+glibc,LAT,CHURN,768,2,152000
+glibc,LAT,LIVESET,768,47,9728
+glibc,LAT,CHURN,769,2,303994
+glibc,LAT,LIVESET,769,46,147456
+glibc,LAT,CHURN,895,2,71997
+glibc,LAT,LIVESET,895,58,68608
+glibc,LAT,CHURN,896,2,175997
+glibc,LAT,LIVESET,896,58,75264
+glibc,LAT,CHURN,897,2,279997
+glibc,LAT,LIVESET,897,56,81920
+glibc,LAT,CHURN,1023,2,95994
+glibc,LAT,LIVESET,1023,78,134144
+glibc,LAT,CHURN,1024,2,152000
+glibc,LAT,LIVESET,1024,67,9728
+glibc,LAT,CHURN,1025,2,432000
+glibc,LAT,LIVESET,1025,67,147456
+glibc,DONE,230356736
+glibc,PID,1301612
+glibc,TABLECHECK,SKIP
+glibc,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+glibc,LAT,CHURN,1,2,759985
+glibc,LAT,LIVESET,1,7,147456
+glibc,LAT,CHURN,15,4,279988
+glibc,LAT,LIVESET,15,5,109568
+glibc,LAT,CHURN,16,4,539988
+glibc,LAT,LIVESET,16,4,116224
+glibc,LAT,CHURN,17,2,799988
+glibc,LAT,LIVESET,17,4,122880
+glibc,LAT,CHURN,31,2,439976
+glibc,LAT,LIVESET,31,6,216064
+glibc,LAT,CHURN,32,2,579991
+glibc,LAT,LIVESET,32,5,91648
+glibc,LAT,CHURN,33,2,959976
+glibc,LAT,LIVESET,33,4,229376
+glibc,LAT,CHURN,47,2,359994
+glibc,LAT,LIVESET,47,6,60416
+glibc,LAT,CHURN,48,2,739979
+glibc,LAT,LIVESET,48,4,198144
+glibc,LAT,CHURN,49,2,879994
+glibc,LAT,LIVESET,49,4,73728
+glibc,LAT,CHURN,63,2,519982
+glibc,LAT,LIVESET,63,6,166912
+glibc,LAT,CHURN,64,2,779982
+glibc,LAT,LIVESET,64,4,173568
+glibc,LAT,CHURN,65,2,919997
+glibc,LAT,LIVESET,65,4,49152
+glibc,LAT,CHURN,79,2,559985
+glibc,LAT,LIVESET,79,6,142336
+glibc,LAT,CHURN,80,2,819985
+glibc,LAT,LIVESET,80,4,148992
+glibc,LAT,CHURN,81,2,79982
+glibc,LAT,LIVESET,81,5,155648
+glibc,LAT,CHURN,95,2,599988
+glibc,LAT,LIVESET,95,6,117760
+glibc,LAT,CHURN,96,2,859988
+glibc,LAT,LIVESET,96,5,124416
+glibc,LAT,CHURN,97,2,119985
+glibc,LAT,LIVESET,97,5,131072
+glibc,LAT,CHURN,111,2,759976
+glibc,LAT,LIVESET,111,6,224256
+glibc,LAT,CHURN,112,2,899991
+glibc,LAT,LIVESET,112,4,99840
+glibc,LAT,CHURN,113,2,279973
+glibc,LAT,LIVESET,113,4,237568
+glibc,LAT,CHURN,127,2,679994
+glibc,LAT,LIVESET,127,6,68608
+glibc,LAT,CHURN,128,2,939994
+glibc,LAT,LIVESET,128,4,75264
+glibc,LAT,CHURN,129,2,199991
+glibc,LAT,LIVESET,129,4,81920
+glibc,LAT,CHURN,159,2,879985
+glibc,LAT,LIVESET,159,9,150528
+glibc,LAT,CHURN,160,2,139982
+glibc,LAT,LIVESET,160,4,157184
+glibc,LAT,CHURN,161,2,399982
+glibc,LAT,LIVESET,161,4,163840
+glibc,LAT,CHURN,191,2,79973
+glibc,LAT,LIVESET,191,7,232448
+glibc,LAT,CHURN,192,2,219988
+glibc,LAT,LIVESET,192,4,108032
+glibc,LAT,CHURN,193,2,479988
+glibc,LAT,LIVESET,193,4,114688
+glibc,LAT,CHURN,223,2,39994
+glibc,LAT,LIVESET,223,9,52224
+glibc,LAT,CHURN,224,2,419979
+glibc,LAT,LIVESET,224,4,189952
+glibc,LAT,CHURN,225,2,559994
+glibc,LAT,LIVESET,225,4,65536
+glibc,LAT,CHURN,255,2,239985
+glibc,LAT,LIVESET,255,10,134144
+glibc,LAT,CHURN,256,2,380000
+glibc,LAT,LIVESET,256,7,9728
+glibc,LAT,CHURN,257,2,303994
+glibc,LAT,LIVESET,257,6,147456
+glibc,LAT,CHURN,319,2,607994
+glibc,LAT,LIVESET,319,12,166912
+glibc,LAT,CHURN,320,2,711994
+glibc,LAT,LIVESET,320,14,173568
+glibc,LAT,CHURN,321,2,768000
+glibc,LAT,LIVESET,321,10,49152
+glibc,LAT,CHURN,383,2,71997
+glibc,LAT,LIVESET,383,19,68608
+glibc,LAT,CHURN,384,2,175997
+glibc,LAT,LIVESET,384,16,75264
+glibc,LAT,CHURN,385,2,279997
+glibc,LAT,LIVESET,385,17,81920
+glibc,LAT,CHURN,447,2,631991
+glibc,LAT,LIVESET,447,21,232448
+glibc,LAT,CHURN,448,2,687997
+glibc,LAT,LIVESET,448,21,108032
+glibc,LAT,CHURN,449,2,791997
+glibc,LAT,LIVESET,449,21,114688
+glibc,LAT,CHURN,511,2,95994
+glibc,LAT,LIVESET,511,29,134144
+glibc,LAT,CHURN,512,2,152000
+glibc,LAT,LIVESET,512,28,9728
+glibc,LAT,CHURN,513,2,303994
+glibc,LAT,LIVESET,513,26,147456
+glibc,LAT,CHURN,639,2,71997
+glibc,LAT,LIVESET,639,40,68608
+glibc,LAT,CHURN,640,2,175997
+glibc,LAT,LIVESET,640,36,75264
+glibc,LAT,CHURN,641,2,279997
+glibc,LAT,LIVESET,641,38,81920
+glibc,LAT,CHURN,767,2,95994
+glibc,LAT,LIVESET,767,49,134144
+glibc,LAT,CHURN,768,2,152000
+glibc,LAT,LIVESET,768,47,9728
+glibc,LAT,CHURN,769,2,303994
+glibc,LAT,LIVESET,769,47,147456
+glibc,LAT,CHURN,895,2,71997
+glibc,LAT,LIVESET,895,62,68608
+glibc,LAT,CHURN,896,2,175997
+glibc,LAT,LIVESET,896,56,75264
+glibc,LAT,CHURN,897,2,279997
+glibc,LAT,LIVESET,897,58,81920
+glibc,LAT,CHURN,1023,2,95994
+glibc,LAT,LIVESET,1023,72,134144
+glibc,LAT,CHURN,1024,2,152000
+glibc,LAT,LIVESET,1024,67,9728
+glibc,LAT,CHURN,1025,2,432000
+glibc,LAT,LIVESET,1025,67,147456
+glibc,DONE,230356736
+glibc,PID,1301616
+glibc,TABLECHECK,SKIP
+glibc,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+glibc,LAT,CHURN,1,2,759985
+glibc,LAT,LIVESET,1,7,147456
+glibc,LAT,CHURN,15,4,279988
+glibc,LAT,LIVESET,15,5,109568
+glibc,LAT,CHURN,16,4,539988
+glibc,LAT,LIVESET,16,4,116224
+glibc,LAT,CHURN,17,2,799988
+glibc,LAT,LIVESET,17,4,122880
+glibc,LAT,CHURN,31,2,439976
+glibc,LAT,LIVESET,31,6,216064
+glibc,LAT,CHURN,32,2,579991
+glibc,LAT,LIVESET,32,4,91648
+glibc,LAT,CHURN,33,2,959976
+glibc,LAT,LIVESET,33,4,229376
+glibc,LAT,CHURN,47,2,359994
+glibc,LAT,LIVESET,47,8,60416
+glibc,LAT,CHURN,48,2,739979
+glibc,LAT,LIVESET,48,5,198144
+glibc,LAT,CHURN,49,2,879994
+glibc,LAT,LIVESET,49,4,73728
+glibc,LAT,CHURN,63,2,519982
+glibc,LAT,LIVESET,63,6,166912
+glibc,LAT,CHURN,64,2,779982
+glibc,LAT,LIVESET,64,4,173568
+glibc,LAT,CHURN,65,2,919997
+glibc,LAT,LIVESET,65,4,49152
+glibc,LAT,CHURN,79,2,559985
+glibc,LAT,LIVESET,79,6,142336
+glibc,LAT,CHURN,80,2,819985
+glibc,LAT,LIVESET,80,5,148992
+glibc,LAT,CHURN,81,2,79982
+glibc,LAT,LIVESET,81,4,155648
+glibc,LAT,CHURN,95,2,599988
+glibc,LAT,LIVESET,95,6,117760
+glibc,LAT,CHURN,96,2,859988
+glibc,LAT,LIVESET,96,4,124416
+glibc,LAT,CHURN,97,2,119985
+glibc,LAT,LIVESET,97,4,131072
+glibc,LAT,CHURN,111,2,759976
+glibc,LAT,LIVESET,111,6,224256
+glibc,LAT,CHURN,112,3,899991
+glibc,LAT,LIVESET,112,4,99840
+glibc,LAT,CHURN,113,2,279973
+glibc,LAT,LIVESET,113,4,237568
+glibc,LAT,CHURN,127,2,679994
+glibc,LAT,LIVESET,127,6,68608
+glibc,LAT,CHURN,128,2,939994
+glibc,LAT,LIVESET,128,4,75264
+glibc,LAT,CHURN,129,2,199991
+glibc,LAT,LIVESET,129,4,81920
+glibc,LAT,CHURN,159,2,879985
+glibc,LAT,LIVESET,159,7,150528
+glibc,LAT,CHURN,160,2,139982
+glibc,LAT,LIVESET,160,4,157184
+glibc,LAT,CHURN,161,2,399982
+glibc,LAT,LIVESET,161,4,163840
+glibc,LAT,CHURN,191,2,79973
+glibc,LAT,LIVESET,191,8,232448
+glibc,LAT,CHURN,192,2,219988
+glibc,LAT,LIVESET,192,4,108032
+glibc,LAT,CHURN,193,2,479988
+glibc,LAT,LIVESET,193,4,114688
+glibc,LAT,CHURN,223,2,39994
+glibc,LAT,LIVESET,223,9,52224
+glibc,LAT,CHURN,224,2,419979
+glibc,LAT,LIVESET,224,4,189952
+glibc,LAT,CHURN,225,2,559994
+glibc,LAT,LIVESET,225,4,65536
+glibc,LAT,CHURN,255,2,239985
+glibc,LAT,LIVESET,255,13,134144
+glibc,LAT,CHURN,256,2,380000
+glibc,LAT,LIVESET,256,7,9728
+glibc,LAT,CHURN,257,2,303994
+glibc,LAT,LIVESET,257,6,147456
+glibc,LAT,CHURN,319,2,607994
+glibc,LAT,LIVESET,319,13,166912
+glibc,LAT,CHURN,320,2,711994
+glibc,LAT,LIVESET,320,14,173568
+glibc,LAT,CHURN,321,2,768000
+glibc,LAT,LIVESET,321,13,49152
+glibc,LAT,CHURN,383,2,71997
+glibc,LAT,LIVESET,383,18,68608
+glibc,LAT,CHURN,384,2,175997
+glibc,LAT,LIVESET,384,17,75264
+glibc,LAT,CHURN,385,2,279997
+glibc,LAT,LIVESET,385,15,81920
+glibc,LAT,CHURN,447,2,631991
+glibc,LAT,LIVESET,447,23,232448
+glibc,LAT,CHURN,448,2,687997
+glibc,LAT,LIVESET,448,22,108032
+glibc,LAT,CHURN,449,2,791997
+glibc,LAT,LIVESET,449,20,114688
+glibc,LAT,CHURN,511,2,95994
+glibc,LAT,LIVESET,511,30,134144
+glibc,LAT,CHURN,512,2,152000
+glibc,LAT,LIVESET,512,27,9728
+glibc,LAT,CHURN,513,2,303994
+glibc,LAT,LIVESET,513,27,147456
+glibc,LAT,CHURN,639,2,71997
+glibc,LAT,LIVESET,639,38,68608
+glibc,LAT,CHURN,640,2,175997
+glibc,LAT,LIVESET,640,38,75264
+glibc,LAT,CHURN,641,2,279997
+glibc,LAT,LIVESET,641,36,81920
+glibc,LAT,CHURN,767,2,95994
+glibc,LAT,LIVESET,767,48,134144
+glibc,LAT,CHURN,768,2,152000
+glibc,LAT,LIVESET,768,48,9728
+glibc,LAT,CHURN,769,2,303994
+glibc,LAT,LIVESET,769,47,147456
+glibc,LAT,CHURN,895,2,71997
+glibc,LAT,LIVESET,895,59,68608
+glibc,LAT,CHURN,896,2,175997
+glibc,LAT,LIVESET,896,58,75264
+glibc,LAT,CHURN,897,2,279997
+glibc,LAT,LIVESET,897,56,81920
+glibc,LAT,CHURN,1023,2,95994
+glibc,LAT,LIVESET,1023,69,134144
+glibc,LAT,CHURN,1024,2,152000
+glibc,LAT,LIVESET,1024,67,9728
+glibc,LAT,CHURN,1025,2,432000
+glibc,LAT,LIVESET,1025,67,147456
+glibc,DONE,230356736
+glibc,PID,1301633
+glibc,TABLECHECK,SKIP
+glibc,TABLE,16,32,48,64,80,96,112,128,160,192,224,256,320,384,448,512,640,768,896,1024
+glibc,LAT,CHURN,1,2,759985
+glibc,LAT,LIVESET,1,7,147456
+glibc,LAT,CHURN,15,4,279988
+glibc,LAT,LIVESET,15,5,109568
+glibc,LAT,CHURN,16,4,539988
+glibc,LAT,LIVESET,16,5,116224
+glibc,LAT,CHURN,17,2,799988
+glibc,LAT,LIVESET,17,4,122880
+glibc,LAT,CHURN,31,2,439976
+glibc,LAT,LIVESET,31,6,216064
+glibc,LAT,CHURN,32,2,579991
+glibc,LAT,LIVESET,32,5,91648
+glibc,LAT,CHURN,33,2,959976
+glibc,LAT,LIVESET,33,5,229376
+glibc,LAT,CHURN,47,2,359994
+glibc,LAT,LIVESET,47,6,60416
+glibc,LAT,CHURN,48,2,739979
+glibc,LAT,LIVESET,48,5,198144
+glibc,LAT,CHURN,49,2,879994
+glibc,LAT,LIVESET,49,4,73728
+glibc,LAT,CHURN,63,2,519982
+glibc,LAT,LIVESET,63,6,166912
+glibc,LAT,CHURN,64,2,779982
+glibc,LAT,LIVESET,64,4,173568
+glibc,LAT,CHURN,65,2,919997
+glibc,LAT,LIVESET,65,4,49152
+glibc,LAT,CHURN,79,2,559985
+glibc,LAT,LIVESET,79,6,142336
+glibc,LAT,CHURN,80,2,819985
+glibc,LAT,LIVESET,80,4,148992
+glibc,LAT,CHURN,81,2,79982
+glibc,LAT,LIVESET,81,4,155648
+glibc,LAT,CHURN,95,2,599988
+glibc,LAT,LIVESET,95,6,117760
+glibc,LAT,CHURN,96,2,859988
+glibc,LAT,LIVESET,96,4,124416
+glibc,LAT,CHURN,97,2,119985
+glibc,LAT,LIVESET,97,4,131072
+glibc,LAT,CHURN,111,2,759976
+glibc,LAT,LIVESET,111,6,224256
+glibc,LAT,CHURN,112,2,899991
+glibc,LAT,LIVESET,112,4,99840
+glibc,LAT,CHURN,113,2,279973
+glibc,LAT,LIVESET,113,4,237568
+glibc,LAT,CHURN,127,2,679994
+glibc,LAT,LIVESET,127,6,68608
+glibc,LAT,CHURN,128,2,939994
+glibc,LAT,LIVESET,128,4,75264
+glibc,LAT,CHURN,129,3,199991
+glibc,LAT,LIVESET,129,4,81920
+glibc,LAT,CHURN,159,2,879985
+glibc,LAT,LIVESET,159,9,150528
+glibc,LAT,CHURN,160,2,139982
+glibc,LAT,LIVESET,160,4,157184
+glibc,LAT,CHURN,161,2,399982
+glibc,LAT,LIVESET,161,4,163840
+glibc,LAT,CHURN,191,2,79973
+glibc,LAT,LIVESET,191,7,232448
+glibc,LAT,CHURN,192,2,219988
+glibc,LAT,LIVESET,192,4,108032
+glibc,LAT,CHURN,193,2,479988
+glibc,LAT,LIVESET,193,4,114688
+glibc,LAT,CHURN,223,2,39994
+glibc,LAT,LIVESET,223,9,52224
+glibc,LAT,CHURN,224,2,419979
+glibc,LAT,LIVESET,224,4,189952
+glibc,LAT,CHURN,225,2,559994
+glibc,LAT,LIVESET,225,4,65536
+glibc,LAT,CHURN,255,2,239985
+glibc,LAT,LIVESET,255,10,134144
+glibc,LAT,CHURN,256,2,380000
+glibc,LAT,LIVESET,256,8,9728
+glibc,LAT,CHURN,257,2,303994
+glibc,LAT,LIVESET,257,6,147456
+glibc,LAT,CHURN,319,2,607994
+glibc,LAT,LIVESET,319,13,166912
+glibc,LAT,CHURN,320,2,711994
+glibc,LAT,LIVESET,320,13,173568
+glibc,LAT,CHURN,321,2,768000
+glibc,LAT,LIVESET,321,11,49152
+glibc,LAT,CHURN,383,2,71997
+glibc,LAT,LIVESET,383,20,68608
+glibc,LAT,CHURN,384,2,175997
+glibc,LAT,LIVESET,384,15,75264
+glibc,LAT,CHURN,385,2,279997
+glibc,LAT,LIVESET,385,17,81920
+glibc,LAT,CHURN,447,2,631991
+glibc,LAT,LIVESET,447,23,232448
+glibc,LAT,CHURN,448,2,687997
+glibc,LAT,LIVESET,448,19,108032
+glibc,LAT,CHURN,449,2,791997
+glibc,LAT,LIVESET,449,21,114688
+glibc,LAT,CHURN,511,2,95994
+glibc,LAT,LIVESET,511,28,134144
+glibc,LAT,CHURN,512,2,152000
+glibc,LAT,LIVESET,512,28,9728
+glibc,LAT,CHURN,513,2,303994
+glibc,LAT,LIVESET,513,26,147456
+glibc,LAT,CHURN,639,2,71997
+glibc,LAT,LIVESET,639,42,68608
+glibc,LAT,CHURN,640,2,175997
+glibc,LAT,LIVESET,640,36,75264
+glibc,LAT,CHURN,641,2,279997
+glibc,LAT,LIVESET,641,38,81920
+glibc,LAT,CHURN,767,2,95994
+glibc,LAT,LIVESET,767,50,134144
+glibc,LAT,CHURN,768,2,152000
+glibc,LAT,LIVESET,768,47,9728
+glibc,LAT,CHURN,769,2,303994
+glibc,LAT,LIVESET,769,47,147456
+glibc,LAT,CHURN,895,2,71997
+glibc,LAT,LIVESET,895,63,68608
+glibc,LAT,CHURN,896,2,175997
+glibc,LAT,LIVESET,896,56,75264
+glibc,LAT,CHURN,897,2,279997
+glibc,LAT,LIVESET,897,58,81920
+glibc,LAT,CHURN,1023,2,95994
+glibc,LAT,LIVESET,1023,71,134144
+glibc,LAT,CHURN,1024,2,152000
+glibc,LAT,LIVESET,1024,67,9728
+glibc,LAT,CHURN,1025,2,432000
+glibc,LAT,LIVESET,1025,67,147456
+glibc,DONE,230356736
