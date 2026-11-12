@@ -1,0 +1,283 @@
+MimirAlloc Z13 recorded run - Size-class spacing study
+slice: Z-032 - Size-class spacing study
+date: 2026-11-12T04:37-05:00 (recorded run window, America/New_York)
+base: 1457c35 (team branch yrsa/mimiralloc-team-01: Z-024 commit 06f6e8d
+  plus merge of seat main c84f021, banked Z-001..Z-020; Z-032 artifacts
+  uncommitted in the working tree at run time)
+team: lead + 6 Mythic Engineering sub-agents mustered in parallel
+  (fragmentation arithmetic audit, cache-behaviour review, histogram-fit
+  sceptic, gate verification, ledger/queue audit, risk/commit-scope
+  review) - no 429s; their findings are folded into the verdict and are
+  cited where they changed the study (C4 is 32 classes, not 36; the
+  adoption bar; the G-002 affirmation duty; the Z-031 non-dependency).
+load state: slice opened at load 6.03 (two Aesir forge mojo test suites
+  at ~237% and ~149% CPU on the shared host); the probe executions ran
+  in a quiet window (load 0.10 at start, 0.25 at end) and the standing
+  gate at 0.14. This slice measures NO timing - only returned-pointer
+  distributions and geometry - which contention cannot shift; the
+  proof is in the data: the request->class map and every cache
+  distribution are IDENTICAL across 3 separate-process executions.
+harness: tests/perf/probe_z032.c (sha256 d19a456a569cf98d427c26547339624aacd006336c583a0cb685307cc2453198),
+  MimirAlloc leg only, linked with the production objects built fresh
+  into build/z32; runner tests/perf/run_z032.sh (sha256 311b506735a6a3cb4638dc304f88a47e7872652e5249d8bee639b0c0fbff5f10);
+  summariser tests/perf/summarize_z032.py (sha256 f4865074692feddb81eea837baab10084ac1240a73dad41f14751fef3fbc6b7b)
+  derives every table below FROM THE MEASURED request->class map and
+  asserts it against the source table, the span geometry, and cross-
+  execution stability (exit 1 on any mismatch). Raw probe output:
+  hidden_files/z032_probe_raw.log (team-local); summary as printed:
+  hidden_files/z032_summary.txt. Repo flags -std=c11 -Wall -Wextra
+  -Werror -pthread -Iinclude -Isrc -O2, as in Z-024's runner.
+method: (1) MAP - for every request size r in 1..1024, 6 blocks are
+  allocated and the serving class is derived as the minimum absolute
+  stride between consecutive returned pointers (carve order and
+  free-list LIFO order both step by exactly the class size inside a
+  span; a span crossing is a strictly larger jump, and a same-span
+  pair always exists at 6 blocks, so the minimum stride is the class
+  and is immune to reuse order and span boundaries by construction).
+  (2) SPAN - one fresh process per class: the count of consecutive
+  allocations landing on the first block's 4096 B page is the true
+  objects-per-span (first span in a fresh process is a fresh carve).
+  (3) CACHE - per exact class, 2048 blocks live at once, 2 rounds
+  (fresh carve, then free-list reuse), ptr mod 64 buckets, sub-16
+  count, cacheline-split count, min alignment (the Z-017 shape, at
+  half Z-017's n; distributions reproduce Z-017's exactly).
+measurement law: Z-004 governs timing runs; this slice takes no
+  timings, so its machinery does not bind. What binds is provenance:
+  the Z-002 environment header below, the load state above, and
+  repetition as stability evidence (3 executions, exact agreement).
+decision rule applied by this study (set with the reviewer crew
+  before the verdict was written): a candidate table is adopted
+  only if, priced under the IDENTICAL span geometry and models as
+  the current table, it (a) cuts the uniform-model span-effective
+  mapped bytes per request by at least 10%, (b) keeps the landed
+  workload cycles at zero internal waste, (c) adds no more than
+  12 classes, and (d) regresses no band's worst-case waste. A
+  model-only gain below that bar does not pay for re-opening the
+  banked G-002 arithmetic, the Z-028/Z-029 TLS-cache work built
+  over these classes, and the stats class-count surface.
+correctness gate: scripts/z13/run_gate.sh - GREEN 4988 checks /
+  0 failed / 77 by-design skips, exit 0 (hidden_files/z032_gate.log)
+  - identical to the Z-001 baseline. This slice changes no
+  production code, no Makefile, no test.
+
+=== Z-002 HEADER (scripts/z13/host_truth.sh at run time, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T09:37:55Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 56%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.15 0.23 0.67
+=== END Z-002 HEADER ===
+
+=== MEASURED BASIS (probe_z032, 3 executions, all identical) ===
+Request->class map: measured for EVERY r in 1..1024 (6 blocks per
+request, serving class = minimum absolute consecutive-pointer stride).
+The measured map is a step function identical in all 3 executions and
+identical to the mimir_class_sizes table in src/core/mimir_core.c.
+Objects per span: measured in 20 fresh processes (first-page run);
+equal to floor(4000/class) for every class; first-object offset
+measured 96 (= span header size) in every class.
+Sub-16-aligned pointers: 0 in map, span and cache modes, all executions.
+
+=== SECTION 1 - CLASS-BY-CLASS TABLE (measured map + span geometry) ===
+band = requests served by the class; waste over a band assumes requests
+uniform WITHIN the band (arithmetic on the measured map, labelled model);
+mapped/obj = 4096 / objs-per-span (span-full effective mapped bytes);
+overhead at exact class = mapped/obj - class (header + span tail share).
+maxW% = max waste as a percentage OF THE CLASS (allocated) size.
+cls | band      | width | maxW | maxW% | meanW | objs | tail | hdr/obj | mapped/obj | ovhd@cls
+  16 |    1..16   |    16 |   15 | 93.75 |  7.50 |  250 |    0 |   0.384 |      16.38 |     0.38
+  32 |   17..32   |    16 |   15 | 46.88 |  7.50 |  125 |    0 |   0.768 |      32.77 |     0.77
+  48 |   33..48   |    16 |   15 | 31.25 |  7.50 |   83 |   16 |   1.157 |      49.35 |     1.35
+  64 |   49..64   |    16 |   15 | 23.44 |  7.50 |   62 |   32 |   1.548 |      66.06 |     2.06
+  80 |   65..80   |    16 |   15 | 18.75 |  7.50 |   50 |    0 |   1.920 |      81.92 |     1.92
+  96 |   81..96   |    16 |   15 | 15.62 |  7.50 |   41 |   64 |   2.341 |      99.90 |     3.90
+ 112 |   97..112  |    16 |   15 | 13.39 |  7.50 |   35 |   80 |   2.743 |     117.03 |     5.03
+ 128 |  113..128  |    16 |   15 | 11.72 |  7.50 |   31 |   32 |   3.097 |     132.13 |     4.13
+ 160 |  129..160  |    32 |   31 | 19.38 | 15.50 |   25 |    0 |   3.840 |     163.84 |     3.84
+ 192 |  161..192  |    32 |   31 | 16.15 | 15.50 |   20 |  160 |   4.800 |     204.80 |    12.80
+ 224 |  193..224  |    32 |   31 | 13.84 | 15.50 |   17 |  192 |   5.647 |     240.94 |    16.94
+ 256 |  225..256  |    32 |   31 | 12.11 | 15.50 |   15 |  160 |   6.400 |     273.07 |    17.07
+ 320 |  257..320  |    64 |   63 | 19.69 | 31.50 |   12 |  160 |   8.000 |     341.33 |    21.33
+ 384 |  321..384  |    64 |   63 | 16.41 | 31.50 |   10 |  160 |   9.600 |     409.60 |    25.60
+ 448 |  385..448  |    64 |   63 | 14.06 | 31.50 |    8 |  416 |  12.000 |     512.00 |    64.00
+ 512 |  449..512  |    64 |   63 | 12.30 | 31.50 |    7 |  416 |  13.714 |     585.14 |    73.14
+ 640 |  513..640  |   128 |  127 | 19.84 | 63.50 |    6 |  160 |  16.000 |     682.67 |    42.67
+ 768 |  641..768  |   128 |  127 | 16.54 | 63.50 |    5 |  160 |  19.200 |     819.20 |    51.20
+ 896 |  769..896  |   128 |  127 | 14.17 | 63.50 |    4 |  416 |  24.000 |    1024.00 |   128.00
+1024 |  897..1024 |   128 |  127 | 12.40 | 63.50 |    3 |  928 |  32.000 |    1365.33 |   341.33
+Worst internal waste: 15 B for every band up to 128; 31 B to 256;
+63 B to 512; 127 B to 1024. Worst waste fraction at a band bottom:
+46.88% of the class (request 17 -> class 32), the largest band-bottom waste fraction above the
+first band; in the top octave it is 19.84% (request 513 -> class 640).
+First band separately: request 1 -> 16 wastes 15 B = 93.75% of the
+class but only 15 B absolute,
+the 16 B minimum-class floor every 16-byte-aligned allocator pays).
+Largest span overhead at exact class: class 1024 - 3 objects per span,
+928 B span tail, mapped 1365.33 B/object (+341.33 over class). This is
+span GEOMETRY (one 4096 B page, 96 B header), not spacing: no class
+table changes floor(4000/1024) = 3.
+
+=== SECTION 2 - CACHE BEHAVIOUR PER CLASS (probe cache mode; Z-017 splits) ===
+mod64 = TOTAL pointer counts over 4096 blocks/class (2 rounds x 2048),
+identical in all 3 executions of this probe and consistent with the
+banked Z-017 audit (8192/class, same distributions). Split is graded
+only for req <= 64 (classes that can fit one 64 B line); above 64 a
+block spans lines by size alone.
+cls | mod64 0/16/32/48 | split | split% | min_align | graded reading
+  16 | 1016/1016/1032/1032 |     0 |   0.00 |        16 | GRADED clean
+  32 | 2032/0/2064/0 |     0 |   0.00 |        32 | GRADED clean
+  48 | 1036/1036/1036/988 |  2024 |  49.41 |        16 | GRADED (Z-017 named)
+  64 | 0/0/4096/0 |  4096 | 100.00 |        32 | GRADED (Z-017 named)
+  80 | 984/984/1064/1064 |  4096 | 100.00 |        16 | spans by size (not graded)
+  96 | 1998/0/2098/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 112 | 1052/1054/1054/936 |  4096 | 100.00 |        16 | spans by size (not graded)
+ 128 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 160 | 1966/0/2130/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 192 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 224 | 1928/0/2168/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 256 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 320 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 384 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 448 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 512 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 640 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 768 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+ 896 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+1024 | 0/0/4096/0 |  4096 | 100.00 |        32 | spans by size (not graded)
+Structural fact (both audits): every class that is a multiple of 64
+returns pointers exclusively at ptr mod 64 = 32 - carve starts at page
+offset 96 (the span header) and strides by a multiple of 64, so starts
+stay at 96 mod 64 = 32 forever. Class 64 therefore splits 100% and
+class 48 splits ~half (offsets 32/48 straddle). This is fixed by the
+HEADER/CARVE OFFSET, not by which class sizes exist: any table keeps
+offset 96. Spacing cannot repair it; see the verdict.
+
+=== SECTION 3 - REQUEST HISTOGRAM FIT ===
+H1 - the campaign's own workload cycles (tests/perf/bench_k002.c,
+landed): small_churn cycles {16,32,48,64,96,128,192,256}; mixed_batch
+and mixed_lifecycle cycle the 20 class sizes exactly; large_batch is
+above the cutoff. Fit of the current table to H1, from the measured
+map: internal waste 0 B over 28 cycled sizes (0.00 B/request).
+CAVEAT (circularity): those cycles were DRAWN FROM this table, so a
+zero is guaranteed by construction and proves fit to the campaign's
+synthetic workloads only - never to any real application. No real-world
+request trace has been measured or landed on this host in this campaign.
+H2 - uniform model over 1..1024 (ARITHMETIC MODEL, not a measurement):
+current table: mean internal waste 42.50 B/request; mean
+span-effective mapped 638.79 B/request (spans full).
+
+=== SECTION 4 - CANDIDATE TABLES PRICED (same geometry, same models) ===
+Every candidate is priced with the IDENTICAL span geometry (4096 B
+page, 96 B header) and the IDENTICAL models (H1 cycles, H2 uniform).
+retained = worst-case empty-span retention = classes x 2 spans x 4096 B
+(the per-class retention bound of record, G-007 default 2).
+cand | classes | H2 mean waste | H2 mean mapped | vs C0 mapped | H1 waste | retention max
+C0 current (20) | 20 | 42.50 B | 638.79 B | +0.00% | 0 B | 163840 B
+C1 powers-of-two (7) | 7 | 170.25 B | 874.18 B | +36.85% | 1568 B | 57344 B
+C2 step-16 (64) | 64 | 7.50 B | 582.99 B | -8.74% | 0 B | 524288 B
+C3 +midpoints >256 (28) | 28 | 22.50 B | 611.41 B | -4.29% | 0 B | 229376 B
+C4 +midpoints >128 (32) | 32 | 21.50 B | 610.27 B | -4.47% | 0 B | 262144 B
+Reading: internal-waste savings shrink once span geometry is priced
+in (mapped column): a finer table's new classes carry their own span
+tails and headers, and every added class adds its own live spans to
+the registry Z-024 proved the free path walks linearly, twice.
+SUMMARIZER OK
+
+=== VERDICT - DECISION FOR Z-033 ===
+DECISION: NO-CHANGE. The current 20-class table (16, 32, 48, 64, 80,
+96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 896,
+1024) remains in force; no candidate table is adopted, and Z-033's
+conditional trigger (implement Z-032's adopted table) is NOT met.
+Basis, from the tables above (identical geometry and models for
+every candidate): the best finer candidate, C2 step-16 (64 classes),
+moves the uniform model's span-effective mapped figure from
+638.79 B/request (C0) to 582.99 B/request - an 8.74% model-only
+gain that fails the 10% bar and triples the class count (retention
+ceiling 524,288 B vs 163,840 B). C3 and C4 (the efficient midpoint
+points) gain only 4.29% / 4.47% on the same model. C1 powers-of-two
+regresses decisively (+36.85% mapped, +127.75 B mean internal
+waste) and is rejected outright. Z-033 is closable as a recorded
+no-op citing this run; it must not be left dangling as conditional.
+Reasons, in the order the evidence weighs:
+1. HISTOGRAM: there is no measured real-world request distribution
+   on this host to fit a table to. The landed histograms are the
+   campaign's own synthetic cycles drawn FROM this table; their
+   zero waste is circular and proves fit to those cycles only.
+   Every finer table's gain exists only inside the uniform
+   arithmetic model, which weights requests above 512 B at 50% -
+   exactly the region where real small-object workloads are
+   thinnest and where this campaign has no trace at all.
+2. CACHE: the Z-017-named defects (48 B at 49.41% split, 64 B at
+   100% split) are carve-offset geometry, reproduced exactly by
+   this probe (48 B 49.41%, 64 B 100.00%, every multiple-of-64
+   class pinned to ptr mod 64 = 32). Object k starts at
+   (96 + k*class) mod 64; with the 96 B span header that residue
+   is 32 for class 64 at every k, and cycles 32/16/0/48 for
+   class 48 (predicted 50%, measured 49.41%). NO class table
+   changes offset 96, so no spacing retune can repair either
+   class - and promoting 48 to a 64 stride would make it worse
+   (100%). The lever that fixes 64 B fully is the header/carve
+   offset (first object at a 64 B-aligned offset: header padded
+   to 128 B, shrunk to 64 B, or moved out-of-line); 48 B would
+   additionally need a per-object stride decision (64 B-aligned
+   carving costs 16 B/object). That is span-layout work for the
+   ledger to assign (Z-034's metadata diet is the nearest Wave 4
+   neighbour), NOT a Z-033 spacing implementation.
+3. SPAN-COUNT COST (measured, Z-024): the small-path free cost is
+   dominated by two linear registry walks priced by LIVE SPAN
+   COUNT (512 B batch: 1,171 spans, 5,668.0 ns steady free; 64 B
+   batch: 133 spans, 444.1 ns). Every added class spreads a fixed
+   live set over more spans and adds its own retained empties;
+   finer tables pay this measured cost to buy an unmeasured,
+   model-only fragmentation gain. Span geometry also eats the
+   naive gain directly: e.g. candidate class 576 has the same
+   6 objects/span as 640, so it saves 0 mapped bytes for requests
+   513..576 despite saving 64 B of internal waste on paper.
+4. G-002 AFFIRMED, not re-argued: G-002 already rejected the
+   powers-of-two and step-16 tables. This study's new evidence -
+   a measured full request->class map, span-effective pricing
+   (G-002 priced internal waste only), and retention pricing -
+   lands on G-002's side with stronger numbers: both rejected
+   tables stay rejected, for the record, on this machine.
+5. THE 1024 TAIL: the largest single overhead in the table is
+   span geometry, not spacing - class 1024 holds 3 objects per
+   4096 B span (928 B tail, +341.33 mapped B/object). No class
+   table changes floor(4000/1024). G-002's deferred two-page-span
+   alternative is RE-DEFERRED with its reason unchanged and now
+   priced: it is a span-size change, outside this slice's gate
+   (the class table) and outside Z-033's conditional wording.
+Defects: none in repo code. One study-tooling defect found and
+  fixed before commit: the summariser's worst-fraction prose
+  contradicted itself (it printed the first band's 93.75% while
+  claiming to exclude it); the computation now excludes the first
+  band (46.88% at request 17) and names the first band separately.
+  No table number changed; the summariser was re-run clean
+  (SUMMARIZER OK) after the fix.
+Evidence dependency note: this study does NOT depend on Z-031
+  (built, not yet banked at the seat); its landed evidence base is
+  Z-017 (alignment), Z-018 (constants of record, section 10), and
+  Z-024 (free-path span-walk pricing), plus this slice's own probe.
+Banking queue: Z-032 queues behind Z-021..Z-031 in roadmap order.
+RESULT: PASS (gate: class-by-class table + recorded no-change
+  verdict with reasons - both present above)
