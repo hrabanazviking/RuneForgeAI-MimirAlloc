@@ -1,0 +1,53 @@
+MimirAlloc Z13 recorded run - Z-028 TLS cache: contract before code
+slice: Z-028 - contract tests for a per-thread freelist cache over the banked size classes (ownership, cross-thread free routing, thread-exit drain), written against the roadmap Wave 4 road (see docs/Z13_TLS_CACHE_CONTRACT.md S0 for the Z-026 honesty note)
+date_utc: 2026-11-12T08:40:17Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+branch_head_at_run: 996364adece8849f686ab5c1f5606f68c8319ecc (merge of seat main 0b6c20f into yrsa/mimiralloc-team-05; slice commit follows this run)
+loadavg_at_run: 8.34 4.68 3.13 5/1344 1170862 - SHARED HOST (Aesir/Lifthrasir/Tensile co-tenants); the contract suite is deterministic correctness with no timing assertions, so load moves no count; recorded for honesty
+
+=== VERDICT ===
+Roadmap gate: contract suite exists, red on the old core, green-by-design review recorded.
+Suite exists: tests/contract/test_z028_tls_contract.c + mimir_tls_cache_z028.h + run_z028.sh - YES
+Red on the old core: CHECKS: 119 run, 96 failed, RESULT: FAIL, exit 1 - YES, RED BY DESIGN (details below)
+Green-by-design review: docs/Z13_TLS_CACHE_CONTRACT.md S8 - RECORDED
+Standing gate (Z-008): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, make exit 0 (hidden_files/z028_gate.log) - the contract suite is NOT wired into make test, counts unchanged
+Determinism: suite run 3 times on the final build, identical output all three times (CHECKS: 119 run, 96 failed / RESULT: FAIL); direct exit code 1
+
+=== NM ABSENCE PROOF ===
+-- library objects (expect no mimir_tls_cache symbols):
+(none found - grep exit 1, surface absent from the core)
+-- suite binary (expect all six symbols weak, w):
+                 w mimir_tls_cache_batch
+                 w mimir_tls_cache_bin_capacity
+                 w mimir_tls_cache_drain_thread
+                 w mimir_tls_cache_exit_drain_blocks
+                 w mimir_tls_cache_exit_drains
+                 w mimir_tls_cache_snapshot
+
+=== CONTRACT RUN (tests/contract/run_z028.sh, full log) ===
+# Z-028 contract run: 2026-11-12T08:39:10Z
+# host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+# head: 996364adece8849f686ab5c1f5606f68c8319ecc
+# loadavg: 4.80 2.81 2.42 25/1213 1156330
+make: 'build/mimir_alloc.o' is up to date.
+make: 'build/mimir_core.o' is up to date.
+make: 'build/mimir_platform.o' is up to date.
+FAIL: P0 snapshot symbol present
+FAIL: P0 bin_capacity symbol present
+FAIL: P0 batch symbol present
+FAIL: P0 drain_thread symbol present
+FAIL: P0 exit_drains symbol present
+FAIL: P0 exit_drain_blocks symbol present
+FAIL: P0 full TLS surface present
+FAIL: P1 constants: 42 planned checks failed (TLS surface absent)
+FAIL: P2 hitmiss: 9 planned checks failed (TLS surface absent)
+FAIL: P3 capacity: 7 planned checks failed (TLS surface absent)
+FAIL: P4 bypass: 8 planned checks failed (TLS surface absent)
+FAIL: P5 calloc/realloc: 5 planned checks failed (TLS surface absent)
+FAIL: P10 drain: 4 planned checks failed (TLS surface absent)
+FAIL: P6 isolation: 4 planned checks failed (TLS surface absent)
+FAIL: P7 cross-free: 5 planned checks failed (TLS surface absent)
+FAIL: P8 exit-drain: 5 planned checks failed (TLS surface absent)
+CHECKS: 119 run, 96 failed
+RESULT: FAIL
+# contract exit code: 1
