@@ -840,6 +840,18 @@ test-h002: $(BUILD)/probe_h002
 
 .PHONY: test-h002
 
+# Z-013: THP under madvise probe - standalone via make
+# test-z013; NOT part of make test. Host/kernel probe
+# (no allocator under test). Recorded run:
+# tests/perf/recorded_run_z13_thp.txt.
+$(BUILD)/probe_z013: tests/perf/probe_z013.c | $(BUILD)
+	$(CC) $(CFLAGS) tests/perf/probe_z013.c -o $@
+
+test-z013: $(BUILD)/probe_z013
+	./$(BUILD)/probe_z013
+
+.PHONY: test-z013
+
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies
 # cross-thread frees on the span and mapping paths,
