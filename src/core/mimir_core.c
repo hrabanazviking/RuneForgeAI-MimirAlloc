@@ -543,6 +543,9 @@ static uint64_t mimir_stats_peak_mapped;
 _Alignas(64) static uint64_t mimir_stats_alloc_failures; /* Z-040: own 64 B line - pre-lock atomic (Z-016 rule) */
 _Alignas(64) static uint64_t mimir_stats_alloc_posture_nulls; /* Z-040: own 64 B line - pre-lock atomic (Z-016 rule) */
 _Alignas(64) static uint64_t mimir_stats_unlock_failures; /* Z-064: own 64 B line - post-unlock atomic (Z-016 rule) */
+_Alignas(64) static uint64_t mimir_stats_drain_lock_failures; /* Z-065: own 64 B line - pre-lock atomic (Z-016 rule) */
+_Alignas(64) static uint64_t mimir_stats_trim_lock_failures; /* Z-065: own 64 B line - pre-lock atomic (Z-016 rule) */
+_Alignas(64) static uint64_t mimir_stats_free_lock_failures; /* Z-065: own 64 B line - pre-lock atomic (Z-016 rule) */
 static uint64_t mimir_stats_cross_thread_frees;
 
 static void mimir_stats_peak_update_locked(void);
@@ -4598,6 +4601,11 @@ static void tls_tss_destructor(void *value)
     }
     tls.exit_drained = 1;
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        /* Z-065 (D-02): an exit drain that cannot take the
+         * lock is a drain lock failure, counted like the
+         * drain entry point's own (below). */
+        __atomic_fetch_add(&mimir_stats_drain_lock_failures,
+                           1ULL, __ATOMIC_RELAXED);
         return;
     }
     tls_flush_locked();
@@ -4802,6 +4810,11 @@ static void tls_free_local(void *ptr,
     if (tls.bin_len[class_index] >= MIMIR_TLS_BIN_CAPACITY) {
         if (mimir_platform_global_lock() !=
             MIMIR_PLATFORM_OK) {
+            /* Z-065 (D-02): free-on-lock-failure -- the
+             * block stays LIVE (F-07) and the course is
+             * counted, never silent. */
+            __atomic_fetch_add(&mimir_stats_free_lock_failures,
+                               1ULL, __ATOMIC_RELAXED);
             return;
         }
         tls_flush_locked();
@@ -4815,6 +4828,10 @@ static void tls_free_local(void *ptr,
         if (mimir_platform_shard_lock(
                 shard_of_class(class_index)) !=
             MIMIR_PLATFORM_OK) {
+            /* Z-065 (D-02): free-on-lock-failure, counted
+             * (the block stays LIVE, F-07). */
+            __atomic_fetch_add(&mimir_stats_free_lock_failures,
+                               1ULL, __ATOMIC_RELAXED);
             return;
         }
         mimir_shard_hint = shard_of_class(class_index);
@@ -5134,6 +5151,13 @@ size_t mimir_core_drain_retained(void)
     size_t released;
 
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        /* Z-065 (D-02): the return stays 0 (nothing was
+         * released -- the safe posture is unchanged), but
+         * the course is no longer indistinguishable from
+         * nothing-retained: the drain lock-failure counter
+         * moves. See docs/DECISION_LEDGER.md D-010. */
+        __atomic_fetch_add(&mimir_stats_drain_lock_failures,
+                           1ULL, __ATOMIC_RELAXED);
         return 0;
     }
     tls_flush_locked(); /* Z-029 */
@@ -5198,6 +5222,10 @@ size_t mimir_core_trim_retained(void)
     size_t released;
 
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        /* Z-065 (D-02): counted, per D-010 -- return 0 is
+         * no longer the only evidence of this course. */
+        __atomic_fetch_add(&mimir_stats_trim_lock_failures,
+                           1ULL, __ATOMIC_RELAXED);
         return 0;
     }
     tls_flush_locked(); /* Z-029 */
@@ -5215,6 +5243,9 @@ size_t mimir_core_trim_retained_some(size_t max_spans)
     size_t released;
 
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        /* Z-065 (D-02): counted, per D-010. */
+        __atomic_fetch_add(&mimir_stats_trim_lock_failures,
+                           1ULL, __ATOMIC_RELAXED);
         return 0;
     }
     tls_flush_locked(); /* Z-029 */
@@ -5548,6 +5579,12 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
         &mimir_stats_alloc_failures, __ATOMIC_RELAXED);
     out->alloc_posture_nulls = __atomic_load_n(
         &mimir_stats_alloc_posture_nulls, __ATOMIC_RELAXED);
+    out->drain_lock_failures = __atomic_load_n(
+        &mimir_stats_drain_lock_failures, __ATOMIC_RELAXED);
+    out->trim_lock_failures = __atomic_load_n(
+        &mimir_stats_trim_lock_failures, __ATOMIC_RELAXED);
+    out->free_lock_failures = __atomic_load_n(
+        &mimir_stats_free_lock_failures, __ATOMIC_RELAXED);
     out->cross_thread_frees = mimir_stats_cross_thread_frees;
     out->unlock_failures = __atomic_load_n(
         &mimir_stats_unlock_failures, __ATOMIC_RELAXED);
@@ -5597,6 +5634,34 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
 #endif
     (void)core_global_unlock();
     return 0;
+}
+
+/* Z-065 (D-02): lock-free reads of the three silent-course
+ * tallies above. The stats snapshot is the reporting surface
+ * of record, but a snapshot takes the very lock whose
+ * failure is being counted; these getters are single atomic
+ * loads, so each tally stays readable (and provable) even
+ * then. Internal only, same INC-E001-07 shape (b) as the
+ * snapshot: reached by tests through
+ * tests/core/mimir_stats_j002.h's inclusion of
+ * src/core/mimir_core.h; bound local in the shared library
+ * (nm -D stays exactly 4). */
+uint64_t mimir_core_drain_lock_failures(void)
+{
+    return __atomic_load_n(&mimir_stats_drain_lock_failures,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_trim_lock_failures(void)
+{
+    return __atomic_load_n(&mimir_stats_trim_lock_failures,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_free_lock_failures(void)
+{
+    return __atomic_load_n(&mimir_stats_free_lock_failures,
+                           __ATOMIC_RELAXED);
 }
 
 /*
@@ -6537,6 +6602,12 @@ void mimir_core_free(void *ptr)
                 }
                 (void)core_global_unlock();
             } else {
+                /* Z-065 (D-02): the F-07 posture is kept
+                 * (the block stays LIVE) and the course
+                 * gains its counter. */
+                __atomic_fetch_add(
+                    &mimir_stats_free_lock_failures, 1ULL,
+                    __ATOMIC_RELAXED);
                 return; /* F-07: the block stays LIVE */
             }
 #else /* MIMIR_LOCK_SHARD */
@@ -6547,6 +6618,11 @@ void mimir_core_free(void *ptr)
                 shard_flush_phase();
                 fspan = shard_find_span_live(ptr, &fshard);
                 if (fshard == (size_t)-2) {
+                    /* Z-065 (D-02): counted; block stays
+                     * LIVE (F-07). */
+                    __atomic_fetch_add(
+                        &mimir_stats_free_lock_failures, 1ULL,
+                        __ATOMIC_RELAXED);
                     return; /* F-07: the block stays LIVE */
                 }
                 if (fspan != NULL) {
@@ -6569,8 +6645,12 @@ void mimir_core_free(void *ptr)
     }
 #endif
     /* L4: take the one global lock via L6. On lock failure the
-     * block is NOT freed unlocked; it stays LIVE (F-07). */
+     * block is NOT freed unlocked; it stays LIVE (F-07).
+     * Z-065 (D-02): that safe posture is unchanged, and the
+     * course now gains the free lock-failure counter. */
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        __atomic_fetch_add(&mimir_stats_free_lock_failures,
+                           1ULL, __ATOMIC_RELAXED);
         return;
     }
 

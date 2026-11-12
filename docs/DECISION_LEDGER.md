@@ -50,6 +50,7 @@ leaves open. Statuses in this ledger mean:
 | D-007 | Z13 redesign: TLS cache (Wave 4), per-CCD arenas (Wave 5) | Adopted | Z13 roadmap Z-026 | Z-026 (settler); consumers Z-028, Z-037, Z-039 |
 | D-008 | Z13 Wave 5 second geometry: lock-sharding (geometry B); per-thread arenas NOT taken | Adopted | Z13 roadmap Z-039; Z-039 recorded run decision rule R1-R4 | Z-039 follow-up (settler) |
 | D-009 | Z13 placement policy trial: current policy retained; best-fit NOT taken, first-fit TIE | Adopted | Z13 roadmap Z-059; Z-059 recorded run pre-registered rule (a)-(f) | Z-059 (settler) |
+| D-010 | Z13 silent courses (D-02): COUNTER chosen over sentinel for drain/trim/free lock-failure outcomes | Adopted | Z13 roadmap Z-065; defect register D-02 (INC-M002-02) | Z-065 (settler) |
 
 ---
 
@@ -282,6 +283,66 @@ leaves open. Statuses in this ledger mean:
   F-3 32064, R-EXT 0.260937, R-INT 0.091146; leg B table
   and clause record in the same file), with the standing
   gate green (4988/0/77) on the final tree.
+- **Supersedes:** None. **Status of entry:** Current.
+
+---
+## D-010 - Z13 silent courses: counter, not sentinel, at Z-065
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice Z-065
+  (Wave 8), which leaves the mechanism open in its own text --
+  "(counter or sentinel, chosen by ledger decision)" -- and
+  names this ledger as the decision's home; the defect it
+  discharges is register entry D-02 / INC-M002-02 in
+  docs/LIMITATIONS_AND_KNOWN_DEFECTS.md (drain/trim return 0
+  on lock failure, indistinguishable from nothing retained;
+  free on lock failure returns silently with the block live).
+- **Decision:** (1) COUNTER is chosen; the sentinel road is
+  NOT taken. Three monotone tallies are appended at the END
+  of struct mimir_stats -- drain_lock_failures,
+  trim_lock_failures, free_lock_failures -- each a pre-lock
+  atomic in the Z-040 posture (own cache line, incremented
+  at the failure site with no lock held), copied by the
+  stats snapshot and also readable through lock-free
+  getters, exactly the reporting shape Z-064 (D-01) set for
+  the neighbouring unlock_failures tally. (2) No return
+  value changes: drain/trim keep returning 0 on lock
+  failure and free keeps its F-07 posture (the block stays
+  LIVE, nothing is freed unlocked). The courses become
+  distinguishable through the tallies, not through a
+  changed contract. (3) The sentinel alternative -- e.g.
+  returning (size_t)-1 from drain/trim on lock failure --
+  is rejected on three recorded grounds: it changes the
+  I-003 return contract every existing caller was written
+  against (the Z-050 trim policy reads the return as a
+  released-span count, and the unload drain ignores it);
+  a sentinel count can collide with arithmetic on the
+  value (span budgets, byte reconciliation) at any caller
+  that misses the new meaning; and it reports only to the
+  immediate caller, while a counter reports to every later
+  observer, including post-hoc diagnosis of a course whose
+  caller has long returned. (4) Scope of the free tally:
+  every F-07 free course counts -- the legacy central
+  path, the owner-routed remote path, the shard-build
+  remote path, and the TLS full-bin drain inside a local
+  free. The thread-exit drain counts as a drain course.
+  Allocation-path lock failures are NOT in scope: they
+  already return NULL with a diagnostics report (not
+  silent) and keep that channel. (5) Relation to Z-064:
+  the two tallies are disjoint by construction -- Z-064
+  counts failed UNLOCKS (D-01), Z-065 counts failed LOCKS
+  at the silent courses (D-02); neither site touches the
+  other's counter. Whichever of the two slices banks
+  first, the appended stats fields land in slice order at
+  the struct's end and no earlier field's offset moves.
+- **Evidence:** tests/perf/recorded_run_z13_z065.txt
+  (contract suite tests/core/test_z065_silent.c: each
+  course's return is proven identical to its quiet no-op
+  return while its tally moves by exactly one per armed
+  failure via the I-004 lock shim; the nothing-retained
+  control proves the tallies stay at 0 when no failure
+  occurs), with the standing gate green (4988/0/77) on
+  the final tree.
 - **Supersedes:** None. **Status of entry:** Current.
 
 ---

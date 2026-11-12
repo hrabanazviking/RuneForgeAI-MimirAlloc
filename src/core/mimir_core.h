@@ -234,6 +234,15 @@ size_t mimir_tune_get_retention_bound(void);
  *   failure status. Before Z-064 every unlock discarded
  *   its status (INC-M002-01); this tally is the owed
  *   observability. Monotone.
+ * - drain_lock_failures / trim_lock_failures /
+ *   free_lock_failures: Z-065 / D-02 silent-course tallies
+ *   -- lock acquisitions that failed at the drain, trim
+ *   (both forms) and free courses whose outcomes were
+ *   previously indistinguishable from a quiet no-op
+ *   (INC-M002-02). Each is a pre-lock atomic (no lock is
+ *   held when it moves), monotone, and disjoint from the
+ *   neighbouring Z-064 unlock_failures tally (D-01), which
+ *   counts the opposite direction of the same lock.
  * - cross_thread_frees: PARTIAL (INC-J002-01) -- frees of
  *   MAPPING-path blocks whose allocating thread (recorded
  *   in the mapping's reserve page past the 96-byte
@@ -281,6 +290,22 @@ struct mimir_stats {
      * snapshot (and immediately in the lock-free getter
      * below). */
     uint64_t unlock_failures;
+    /* Z-065 (D-02): monotone counts of failed lock
+     * acquisitions at the previously silent courses --
+     * drain (entry point + thread-exit drain), trim (both
+     * forms) and free (every F-07 course). Appended at the
+     * END of the struct so every earlier field keeps its
+     * offset. Snapshots copy the values under the lock; a
+     * failure counted after a snapshot's copy appears in
+     * the NEXT snapshot and immediately in the lock-free
+     * getters below. When Z-064 (D-01) banks first, its
+     * appended unlock_failures field sits immediately
+     * before these three; the banking merge keeps both
+     * appends in slice order and no earlier offset moves
+     * either way. */
+    uint64_t drain_lock_failures;
+    uint64_t trim_lock_failures;
+    uint64_t free_lock_failures;
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
 
@@ -294,6 +319,16 @@ int mimir_core_stats_snapshot(struct mimir_stats *out);
  * inclusion of this header; bound local in the shared
  * library (nm -D stays exactly 4). */
 uint64_t mimir_core_unlock_failures(void);
+
+/* Z-065 (D-02): lock-free reads of the three tallies above
+ * (single atomic loads; the snapshot takes the very lock
+ * whose failure is counted, so the tallies must also be
+ * readable without it). Internal only, same INC-E001-07
+ * shape (b) as the snapshot; bound local in the shared
+ * library (nm -D stays exactly 4). */
+uint64_t mimir_core_drain_lock_failures(void);
+uint64_t mimir_core_trim_lock_failures(void);
+uint64_t mimir_core_free_lock_failures(void);
 
 #ifdef MIMIR_DEBUG
 /* J-004 on-demand red-zone verification (debug builds only;

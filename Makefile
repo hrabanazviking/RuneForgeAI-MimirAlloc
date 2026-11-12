@@ -1848,3 +1848,35 @@ test-z064: $(BUILD)/test_z064_unlock
 	./$(BUILD)/test_z064_unlock
 
 .PHONY: test-z064
+# Z-065 silent courses made distinguishable (D-02) contract
+# suite (tests/core/test_z065_silent.c), built against the
+# production LIBOBJS plus the I-004 fault-injection shim
+# (tests/core/mimir_fault_shim_i004.c, --wrap on the four L6
+# entries; only the lock channel is armed by this suite).
+# Standalone via make test-z065; NOT part of make test
+# (standing gate counts untouched). Recorded run:
+# tests/perf/recorded_run_z13_z065.txt.
+# The platform object for this test is built -fno-lto: the
+# production -flto build can inline the one-line L6 lock
+# wrapper into the core, leaving no call for --wrap to
+# interpose on (the Z-064 build fact). The core object under
+# test remains the production -flto object; only the leaf
+# platform object is compiled without LTO, from the same
+# source at the same -O2.
+# ------------------------------------------------------------------
+$(BUILD)/mimir_fault_shim_i004_z065.o: tests/core/mimir_fault_shim_i004.c tests/core/mimir_fault_i004.h src/platform/mimir_platform.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/mimir_fault_shim_i004.c -o $@
+
+$(BUILD)/mimir_platform_z065.o: src/platform/mimir_platform.c src/platform/mimir_platform.h | $(BUILD)
+	$(CC) $(CFLAGS) -fno-lto -c src/platform/mimir_platform.c -o $@
+
+$(BUILD)/test_z065_silent.o: tests/core/test_z065_silent.c include/mimir_alloc.h tests/core/mimir_fault_i004.h tests/core/mimir_stats_j002.h tests/core/mimir_trim_i003.h tests/core/mimir_drain_h001.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z065_silent.c -o $@
+
+$(BUILD)/test_z065_silent: $(filter-out $(BUILD)/mimir_platform.o,$(LIBOBJS)) $(BUILD)/mimir_platform_z065.o $(BUILD)/mimir_fault_shim_i004_z065.o $(BUILD)/test_z065_silent.o
+	$(CC) $(CFLAGS) $(filter-out $(BUILD)/mimir_platform.o,$(LIBOBJS)) $(BUILD)/mimir_platform_z065.o $(BUILD)/mimir_fault_shim_i004_z065.o $(BUILD)/test_z065_silent.o -Wl,--wrap=mimir_platform_map_acquire -Wl,--wrap=mimir_platform_map_release -Wl,--wrap=mimir_platform_global_lock -Wl,--wrap=mimir_platform_page_size -o $@
+
+test-z065: $(BUILD)/test_z065_silent
+	./$(BUILD)/test_z065_silent
+
+.PHONY: test-z065

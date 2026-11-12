@@ -1,0 +1,75 @@
+MimirAlloc Z13 recorded run - Z-065 Silent courses made distinguishable (D-02)
+slice: Z-065 - Silent courses made distinguishable (D-02) (Wave 8: drain/trim lock-failure outcomes made distinguishable from nothing-retained (counter or sentinel, chosen by ledger decision); free-on-lock-failure keeps its safe posture and gains a counter. Gate: contract tests for each course; decision recorded.)
+date: 2026-11-12 (America/Indiana/Indianapolis)
+base: merge 7d2c011 of seat main c0e19cd (banked Z-001..Z-060, keeper-verified) into yrsa/mimiralloc-team-04 - clean merge, no conflicts, no shared core files touched by the merge (seat-side files were Z-057..Z-060 artifacts only), so no merge gate was owed. Branch tip before the merge was 1d6eb4c (Z-059, banked as seat f4ef75f). This slice BUILDS AHEAD: it banks only after Z-061, Z-062, Z-063 and Z-064, in roadmap order.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed at the end of this file)
+machine load state: shared host; loadavg 2.39/2.99/3.15 at build start, 0.50/1.01/2.08 at the gate, 0.71/1.02/2.07 at filing. Team-01's Z-061 one-hour soak ran on cores 2/3 until ~12:17 EST; every Z-065 probe and suite was pinned to core 0 (taskset -c 0), away from the soak cores. All graded quantities here are exact counters, not timings; no timing is graded anywhere in this slice.
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z065_gate.log: 4988 checks / 0 failed / 77 by-design skips, GATE RESULT: GREEN, exit 0 - identical to the Z-001 baseline (this slice adds no make-test tests; test-z065 is standalone).
+standalone suite of record: make test-z065 (tests/core/test_z065_silent.c + the I-004 fault shim), 561 checks / 0 failed, RESULT: PASS, reproduced identically in 3 consecutive executions (1 pre-gate, 1 post-gate run of record below, 1 repeat) with bit-identical tally lines.
+neighbouring standalone suites on the final tree: test-z048 57 run / 0 failed PASS; test-z050 60 run / 0 failed PASS; test-z052 35 run / 0 failed PASS. (test-z064 does not exist on this tree - Z-064 is team-03's unbanked commit 0865998; its reconciliation with this slice is specified in the design section below.)
+variant compile proof: src/core/mimir_core.c compiles -Werror-clean under -DMIMIR_LOCK_SHARD=1, -DMIMIR_LOCK_HIST=1, -DMIMIR_DEBUG=1 and -DMIMIR_ARENA_CCD=1 (the counting sites compose with the shard lock names, the Z-019 histogram wrapper and the arena build; each failure site counts exactly once per build flavour).
+nm -D on build/libmimiralloc.so: exactly 4 public symbols (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free) - the new getters are bound local like the stats snapshot (INC-E001-07 shape (b)); no new public API.
+artifacts: src/core/mimir_core.c, src/core/mimir_core.h, Makefile (test-z065 block, standalone, NOT in make test), tests/core/test_z065_silent.c, docs/DECISION_LEDGER.md (index row + entry D-010, append-only), this recorded run. sha256: Makefile e35f4d58..., mimir_core.c 7eeb8bcc..., mimir_core.h 5ab89c65..., test_z065_silent.c c19f6a40..., DECISION_LEDGER.md df970870...
+team structure: 1 lead + 6 Mythic Engineering sub-agents spawned cleanly in parallel, no 429 (roles: design/clobber-risk review, test strategy, API/ABI naming review, merge-risk review, recorded-run review, failure-mode review). Material corrections folded in: leg-6 was redesigned per the test-strategy review so the armed call is the allocation itself, never a snapshot (snapshot-first would consume the arm); the remote-free leg likewise arms before pthread_create so the child's remote free is the next wrapped lock call in the process (its TLS exit drain runs unarmed, after the join). Every gate fact was verified on-device by the lead.
+
+DECISION (the ledger decision the roadmap names)
+- The roadmap leaves the mechanism open: "(counter or sentinel, chosen by ledger decision)". The decision was taken BY the ledger process and is recorded as docs/DECISION_LEDGER.md entry D-010 (append-only, settler Z-065): COUNTER, not sentinel.
+- Basis, as recorded in D-010: (a) the I-003 return contract is unchanged - drain/trim still return 0 on lock failure and free keeps its F-07 posture - so no existing caller (the Z-050 trim policy reads the trim return as a released-span count; the unload drain ignores the drain return) can misread a sentinel as a count in span budgets or byte reconciliation; (b) a counter reports to every later observer, including post-hoc diagnosis, while a sentinel reports only to the immediate caller; (c) the counter shape is the one Z-064 (D-01) just set for the neighbouring unlock tally, so the two Wave-8 observability slices read identically.
+
+DESIGN (smallest wiring that meets the gate)
+- Three monotone tallies, each an _Alignas(64) pre-lock atomic in the Z-040 posture (own cache line, incremented at the failure site with no lock held - after a failed lock acquisition no lock-taking recorder could run): mimir_stats_drain_lock_failures, mimir_stats_trim_lock_failures, mimir_stats_free_lock_failures in src/core/mimir_core.c.
+- Reporting surface: struct mimir_stats gains uint64_t drain_lock_failures, trim_lock_failures, free_lock_failures APPENDED AT THE END (every earlier field keeps its offset), copied by mimir_core_stats_snapshot under the lock from the atomics, plus three lock-free getters (mimir_core_drain_lock_failures / _trim_ / _free_, mimir_core.h beside the snapshot, one atomic load each) for the same reason Z-064's getter exists: a snapshot takes the very lock whose failure is being counted.
+- Counted sites, drain: mimir_core_drain_retained's entry lock, and the thread-exit drain's lock (a drain course by construction). Trim: mimir_core_trim_retained and mimir_core_trim_retained_some entry locks (the Z-050 policy rides these entry points, so policy-driven trims count exactly once, at the entry point, never twice). Free: every F-07 course - the legacy central path, the owner-routed remote path, the shard-build remote path (fshard == -2), and the TLS full-bin batch-drain lock inside a local free (both lock flavours). At every site the behaviour is byte-for-byte the old posture: nothing released, nothing freed unlocked, the block stays LIVE; only the tally moves.
+- Out of scope by decision, recorded in D-010: allocation-path lock failures already return NULL with a diagnostics report (not silent) and keep that channel - contract leg 6 proves they move none of the three tallies. The retained-query getters (retained_spans/bytes, mapped_bytes, pool queries) already return (size_t)-1 on lock failure (G-007 posture) and were never silent; untouched.
+- Z-064 RECONCILIATION (never clobber): Z-064 (team-03, 0865998, unbanked at this build) appends unlock_failures at the END of struct mimir_stats and adds mimir_core_unlock_failures beside the snapshot. This slice appends its three fields at the same end and its getters at the same place. The two appends are textually adjacent and will conflict mechanically at banking; the resolution is specified here and in the header comment: keep BOTH appends in slice order (unlock_failures first, as Z-064 banks first, then drain/trim/free), keep both getter sets, keep both snapshot copy blocks. No earlier field's offset moves under either order, the two tallies are disjoint by construction (failed unlocks vs failed locks at the silent courses; no site touches the other's counter), and Z-064's recorded run already proves its suite on its own tree; after the banking merge the keeper re-runs test-z064 and test-z065 on the merged tree.
+
+CONTRACT PROOF (tests/core/test_z065_silent.c, I-004 shim heritage)
+- Instrument: the existing I-004 fault shim (tests/core/mimir_fault_shim_i004.c) linked with --wrap on the four L6 entries; only the lock channel is armed (arm_lock(1) fails the next global-lock call with ERR_LOCK, the mutex NOT taken - a genuine failure's exact state). Following the Z-064 build fact, the leaf platform object is built -fno-lto for this test so --wrap can interpose; the core object under test remains the production -flto object. Makefile comment records this. Test and gate probes pinned to core 0, away from the Z-061 soak cores 2/3.
+- LEG 1 CONTROL (nothing retained): drain and both trim forms return 0; all three tallies stay 0. The quiet no-op course, proven silent in the tallies.
+- LEG 2 ARMED (nothing retained): the same calls return the SAME 0, while trim moves to 2 (one per form) and drain to 1. Return-identical, tally-distinct - the defect and its discharge in one comparison.
+- LEG 3 RETAINED: with retained spans built (256 x 32 B alloc/free + zero-budget flush), an armed trim returns 0, releases nothing, retained count bit-unchanged, trim tally +1; the unarmed retry releases exactly the retained count. Same pair for drain (tally +1 armed, full release unarmed).
+- LEG 4 FREE, legacy course: armed free of a 300000 B mapping block - free tally +1, the block stays LIVE and fully writable (memset over the whole extent after the failed free), the unarmed retry frees it and the tally does not move.
+- LEG 5 FREE, remote course: cross-thread free of a 48 B block under an armed failure - free tally +1, block still live and writable by its owner, owner then frees it normally with no further tally movement.
+- LEG 6 NON-COURSE: an armed large allocation returns NULL through its pre-existing channel and moves NONE of the three tallies.
+- LEG 7 SNAPSHOT: stats snapshot fields equal the lock-free getters at the exact predicted totals (drain 2, trim 3, free 2); the shim reports exactly 8 injected lock failures across the whole suite - every armed failure is accounted for, none leaked into an unintended call.
+
+VERDICT: GATE MET. Contract tests for each course pass (561 checks, 0 failed); the counter-vs-sentinel decision is recorded in the ledger (D-010, COUNTER); standing gate GREEN 4988/0/77.
+BUGS: none in the allocator or tree found by this slice. No pre-existing defect was encountered: the neighbouring suites run here (test-z048/z050/z052) pass, and the standing gate holds exactly. (Z-064's recorded run names test-j002/test-i004 staleness on the seat tree; that is Z-064's already-filed next work, not re-discovered here, and this slice does not touch those suites.)
+
+=== RUN OF RECORD (make test-z065 output, verbatim) ===
+TALLY control nothing-retained drain=0 trim=0 free=0
+TALLY armed nothing-retained drain=1 trim=2 free=0
+TALLY retained legs drain=2 trim=3 free=0
+TALLY free legacy f0=0 after=1
+TALLY free remote f0=1 after=2
+TALLY final snapshot drain=2 trim=3 free=2 shim_lock_injected=8
+CHECKS: 561 run, 0 failed
+RESULT: PASS
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T17:30:36Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5153383
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 75%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.71 1.02 2.07
