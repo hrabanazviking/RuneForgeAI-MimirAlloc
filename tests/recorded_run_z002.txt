@@ -1,0 +1,43 @@
+MimirAlloc Z-002 recorded run - host-truth reference sample
+slice: Z-002 - Host-truth capture
+date: 2026-11-12T01:57:53-05:00
+base: 5ad882b0006578732c85b9bcda68977dd644b009 (branch yrsa/mimiralloc-team-02)
+script: scripts/z13/host_truth.sh
+command: scripts/z13/host_truth.sh (read-only capture, exit 0)
+note: The block between the BEGIN/END markers below is the script output
+verbatim for the seat host (purpleraider) at capture time. Later bench
+runs embed this header verbatim; volatile fields (date_utc,
+scaling_cur_freq_khz, cpu_scaling_mhz_pct, loadavg) are sampled values
+at capture time and will differ on re-run - that is expected.
+
+=== BEGIN HOST TRUTH (verbatim scripts/z13/host_truth.sh output) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T06:57:53Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 1643848
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 37%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 4.78 4.29 2.29
+=== END HOST TRUTH ===
+
+Verdict: Z-002 gate met - script committed at scripts/z13/host_truth.sh
+and this reference sample committed as the seat-host header of record.
