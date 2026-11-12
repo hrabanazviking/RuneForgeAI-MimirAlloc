@@ -40,7 +40,7 @@
 #        run is tests/concurrency/recorded_run_d004.txt.
 
 CC      = cc
-CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2
+CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto
 # K-004 (Phase 11): -O2 added to the shipped CFLAGS on measured
 # evidence only (docs/PHASE_11_PERFORMANCE_K004.md; bench
 # tests/core/bench_k004.c, recorded run tests/core/
@@ -49,6 +49,20 @@ CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2
 # This discharges the INC-K002-02 comparison leg by making
 # the optimised flavour the shipped flavour. No source,
 # ABI or flag other than -O2 changes.
+# Z-035 (Z13 line): -flto added to the shipped CFLAGS on measured
+# evidence only (tests/perf/recorded_run_z13_z035.txt; runner
+# tests/perf/run_z035.sh, bench tests/perf/bench_k002.c mimir
+# leg, allocator objects only, bench TU -O2 in every leg):
+# small_churn median 34.18->27.87 ns/op (+18.5%), mixed_batch
+# 223.22->148.03 (+33.7%), mixed_lifecycle +11.2%, large_batch
+# TIE; replicated in a second interleaved run. -O3 and
+# -march=native measured TIE on every workload in both runs
+# and are NOT adopted. The four .so link lines also gain -flto
+# so the shared libraries link the same LTO objects they are
+# compiled from. Note: the static archive now holds LTO
+# objects - link it with -flto in CFLAGS (every in-tree
+# consumer does); Z-096 re-trials the flag set on the
+# near-final core. No source or ABI change.
 # J-004 debug flavour (docs/PHASE_10_FOUNDATION_PLAN.md S5.1;
 # docs/PHASE_10_DEBUG_REDZONES.md): `make DEBUG=1` adds
 # -DMIMIR_DEBUG=1 and directs ALL objects to build-debug/,
@@ -253,7 +267,7 @@ $(PICDIR)/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mimir
 	$(CC) $(CFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
 
 $(BUILD)/libmimiralloc.so: $(PICOBJS) $(MAPFILE) | $(BUILD)
-	$(CC) -shared -Wl,--version-script=$(MAPFILE) -o $@ $(PICOBJS) -pthread
+	$(CC) -flto -shared -Wl,--version-script=$(MAPFILE) -o $@ $(PICOBJS) -pthread
 
 lib: $(BUILD)/libmimiralloc.so
 
@@ -1365,7 +1379,7 @@ $(DPICDIR)/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mimi
 	$(CC) $(DCFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
 
 $(DBUILD)/libmimiralloc.so: $(DPICOBJS) $(MAPFILE) | $(DBUILD)
-	$(CC) -shared -Wl,--version-script=$(MAPFILE) -o $@ $(DPICOBJS) -pthread
+	$(CC) -flto -shared -Wl,--version-script=$(MAPFILE) -o $@ $(DPICOBJS) -pthread
 
 lib-debug: $(DBUILD)/libmimiralloc.so
 
@@ -1475,7 +1489,7 @@ $(HARD)/pic/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mim
 	$(CC) $(HCFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
 
 $(HARD)/libmimiralloc.so: $(HARDPIC) $(MAPFILE) | $(HARD)
-	$(CC) -shared $(HARDLINK) -Wl,--version-script=$(MAPFILE) -o $@ $(HARDPIC) -pthread
+	$(CC) -flto -shared $(HARDLINK) -Wl,--version-script=$(MAPFILE) -o $@ $(HARDPIC) -pthread
 
 lib-hardened: $(HARD)/libmimiralloc.so
 
@@ -1666,7 +1680,7 @@ LIBDIR        = $(PREFIX)/lib
 INCLUDEDIR    = $(PREFIX)/include
 
 $(VLIB): $(PICOBJS) $(MAPFILE) VERSION | $(BUILD)
-	$(CC) -shared -Wl,--version-script=$(MAPFILE) -Wl,-soname,$(VSONAME) -o $@ $(PICOBJS) -pthread
+	$(CC) -flto -shared -Wl,--version-script=$(MAPFILE) -Wl,-soname,$(VSONAME) -o $@ $(PICOBJS) -pthread
 
 $(BUILD)/$(VSONAME): $(VLIB)
 	ln -sf libmimiralloc.so.$(MIMIR_VERSION) $@

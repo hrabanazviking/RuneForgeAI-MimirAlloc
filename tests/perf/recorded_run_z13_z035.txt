@@ -1,0 +1,249 @@
+run_z035_version: 1
+slice: Z-035 build-flag honesty round
+date_utc: 2026-11-12T09:21:23Z
+repo: /home/volmarr/mimiralloc-team-04
+head: ffd1722a4dd68e2dc0d2eac28c747263d38a8da5
+branch: yrsa/mimiralloc-team-04
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cpus_pin: 2
+reps: 9
+warmups: 3
+common_flags: -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
+bench_tu_flags: -O2 (identical for every leg, K-004 style)
+variant_base: -O2
+variant_o3: -O3
+variant_march: -O2 -march=native
+variant_o3march: -O3 -march=native
+variant_lto: -O2 -flto
+variant_full: -O3 -march=native -flto
+loadavg_start: 0.22 0.87 1.50
+co_tenant_top: COMMAND         %CPU;systemd-logind   0.8;openrazer-daemo  0.4;musegadget       0.3;
+--- host_truth (scripts/z13/host_truth.sh, verbatim) ---
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T09:21:23Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5105433
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 65%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.22 0.87 1.50
+--- end host_truth ---
+loadavg_end: 0.56 0.90 1.49
+raw_lines: 216 (expect 216)
+
+=== ATTEMPT 1 SUMMARY (summarize_z035.py on z035_a1.raw) ===
+noise bound: 5.0%   drift bound: 8.0%
+checksums: large_batch=OK(1 distinct); mixed_batch=OK(1 distinct); mixed_lifecycle=OK(1 distinct); small_churn=OK(1 distinct)
+
+variant   workload             median        min        max  drift%   delta%  verdict
+base      large_batch         2752.31    2743.42    2791.42    0.47     0.00  BASE
+base      mixed_batch          223.22     222.54     224.82    0.17     0.00  BASE
+base      mixed_lifecycle      816.79     810.00     821.60    0.51     0.00  BASE
+base      small_churn           34.18      34.04      34.75    0.31     0.00  BASE
+o3        large_batch         2747.67    2721.07    2783.38    0.50     0.17  TIE
+o3        mixed_batch          222.91     222.18     226.82    0.01     0.14  TIE
+o3        mixed_lifecycle      816.70     805.72     825.29    0.19     0.01  TIE
+o3        small_churn           33.82      33.72      34.43    1.60     1.05  TIE
+march     large_batch         2775.98    2751.41    2838.99    1.32    -0.86  TIE
+march     mixed_batch          222.13     220.70     223.69    0.31     0.49  TIE
+march     mixed_lifecycle      822.82     810.17     836.04    0.24    -0.74  TIE
+march     small_churn           34.94      34.85      35.41    0.50    -2.22  TIE
+o3march   large_batch         2787.23    2754.25    3078.80    0.59    -1.27  TIE
+o3march   mixed_batch          222.12     221.10     229.07    0.11     0.49  TIE
+o3march   mixed_lifecycle      816.92     811.90     837.90    0.48    -0.02  TIE
+o3march   small_churn           35.04      34.51      35.21    1.56    -2.52  TIE
+lto       large_batch         2769.89    2741.55    2870.16    0.31    -0.64  TIE
+lto       mixed_batch          148.03     147.81     150.00    0.67    33.68  WIN
+lto       mixed_lifecycle      725.13     716.32     735.73    0.17    11.22  WIN
+lto       small_churn           27.87      27.83      28.47    0.09    18.46  WIN
+full      large_batch         2753.48    2725.67    2842.14    0.03    -0.04  TIE
+full      mixed_batch          146.48     146.01     150.01    0.10    34.38  WIN
+full      mixed_lifecycle      720.40     715.75     737.07    0.30    11.80  WIN
+full      small_churn           27.78      27.73      28.56    0.02    18.72  WIN
+
+adoption rule: isolated flag adopted only if WIN on BOTH small-path workloads, drift inside bounds, checksums identical, and no other workload LOSS.
+  -O3              small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+  -march=native    small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+  LTO (-flto)      small-path=['WIN', 'WIN'] others=['TIE', 'WIN'] -> ADOPT
+  combo -O3 + -march=native        small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] (informational; adoption judges isolated flags first)
+  combo -O3 + -march=native + LTO  small-path=['WIN', 'WIN'] others=['TIE', 'WIN'] (informational; adoption judges isolated flags first)
+
+Z035 SUMMARY GATE: PASS (checksums identical)
+
+=== ATTEMPT 2 (confirmation) - header load lines ===
+date_utc: 2026-11-12T09:22:39Z
+reps: 9
+warmups: 3
+variant_base: -O2
+variant_o3: -O3
+variant_march: -O2 -march=native
+variant_o3march: -O3 -march=native
+variant_lto: -O2 -flto
+variant_full: -O3 -march=native -flto
+loadavg_start: 0.50 0.82 1.44
+date_utc: 2026-11-12T09:22:39Z
+loadavg: 0.50 0.82 1.44
+loadavg_end: 0.73 0.86 1.43
+=== ATTEMPT 2 SUMMARY (summarize_z035.py on z035_a2.raw) ===
+noise bound: 5.0%   drift bound: 8.0%
+checksums: large_batch=OK(1 distinct); mixed_batch=OK(1 distinct); mixed_lifecycle=OK(1 distinct); small_churn=OK(1 distinct)
+
+variant   workload             median        min        max  drift%   delta%  verdict
+base      large_batch         2772.65    2753.20    2842.25    1.69     0.00  BASE
+base      mixed_batch          223.26     222.59     225.89    0.03     0.00  BASE
+base      mixed_lifecycle      825.21     815.29     841.07    0.49     0.00  BASE
+base      small_churn           34.15      34.05      34.88    0.13     0.00  BASE
+o3        large_batch         2777.69    2748.20    3008.29    0.85    -0.18  TIE
+o3        mixed_batch          223.27     221.85     227.10    0.22    -0.00  TIE
+o3        mixed_lifecycle      821.61     807.59     864.88    1.72     0.44  TIE
+o3        small_churn           33.82      33.70      34.34    1.39     0.97  TIE
+march     large_batch         2790.40    2761.35    3012.74    2.58    -0.64  TIE
+march     mixed_batch          222.74     221.14     230.28    0.65     0.23  TIE
+march     mixed_lifecycle      822.97     812.37     869.65    1.09     0.27  TIE
+march     small_churn           35.43      35.04      36.23    0.28    -3.75  TIE
+o3march   large_batch         2808.13    2762.81    3045.41    1.27    -1.28  TIE
+o3march   mixed_batch          222.84     221.22     232.73    0.62     0.19  TIE
+o3march   mixed_lifecycle      815.42     808.18     876.01    0.05     1.19  TIE
+o3march   small_churn           34.94      34.48      35.09    0.69    -2.31  TIE
+lto       large_batch         2760.41    2745.36    3048.34    0.60     0.44  TIE
+lto       mixed_batch          147.98     147.71     158.78    0.19    33.72  WIN
+lto       mixed_lifecycle      720.98     717.44     757.18    0.90    12.63  WIN
+lto       small_churn           27.98      27.83      28.51    0.02    18.07  WIN
+full      large_batch         2760.63    2722.97    2871.07    1.42     0.43  TIE
+full      mixed_batch          147.34     146.37     150.69    0.55    34.01  WIN
+full      mixed_lifecycle      720.20     711.42     737.23    0.57    12.73  WIN
+full      small_churn           27.87      27.74      29.22    1.06    18.39  WIN
+
+adoption rule: isolated flag adopted only if WIN on BOTH small-path workloads, drift inside bounds, checksums identical, and no other workload LOSS.
+  -O3              small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+  -march=native    small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+  LTO (-flto)      small-path=['WIN', 'WIN'] others=['TIE', 'WIN'] -> ADOPT
+  combo -O3 + -march=native        small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] (informational; adoption judges isolated flags first)
+  combo -O3 + -march=native + LTO  small-path=['WIN', 'WIN'] others=['TIE', 'WIN'] (informational; adoption judges isolated flags first)
+
+Z035 SUMMARY GATE: PASS (checksums identical)
+
+====================================================================
+Z-035 VERDICTS AND ADOPTION DECISION
+====================================================================
+Method (K-004 style, Z-004 protocol): bench_k002 mimir leg only;
+the bench TU is compiled -O2 for every variant; the three
+allocator objects (src/api, src/core, src/platform) differ ONLY
+by the flag under trial. Six variants, interleaved round-robin
+as separate processes, taskset -c 2 (one physical core, CCD0),
+3 warm-up rounds discarded, 9 measured reps per variant,
+headline = median of per-process ns/op. Adoption rule, stated
+before measuring: a flag is adopted only if its isolated
+variant beats the -O2 base by more than the 5% noise bound on
+BOTH small-path workloads (small_churn, mixed_batch), drift
+inside the 8% bound, checksums identical, and no other
+workload regresses beyond noise.
+
+Attempt 1 (of record): quiet window, loadavg 0.22 -> 0.56,
+no co-tenant load (the Aesir forge job had finished); every
+drift <= 1.60%; exactly one distinct checksum per workload
+across all six variants. Verdicts:
+  -O3            : TIE on all 4 workloads (deltas +0.01..+1.05%)
+  -march=native  : TIE on all 4 workloads (deltas -2.22..+0.49%)
+  -O3 + -march   : TIE on all 4 workloads (deltas -2.52..+0.49%)
+  LTO (-flto)    : WIN small_churn 34.18 -> 27.87 ns/op (+18.46%)
+                   WIN mixed_batch 223.22 -> 148.03 ns/op (+33.68%)
+                   WIN mixed_lifecycle 816.79 -> 725.13 (+11.22%)
+                   TIE large_batch 2752.31 -> 2769.89 (-0.64%)
+  full combo     : WIN/WIN/WIN/TIE, statistically the LTO leg
+                   again (+18.72/+34.38/+11.80/-0.04) - the two
+                   rejected flags add nothing on top of LTO.
+Attempt 2 (confirmation, same switches, load state in its own
+header): LTO WINs replicate - small_churn +18.07% (27.98),
+mixed_batch +33.72% (147.98), mixed_lifecycle +12.63% (720.98),
+large_batch TIE (+0.44%); -O3 and -march=native TIE on every
+workload again; checksums identical; summary gate PASS.
+
+Why LTO wins here (interpretation, labelled as such): the
+small path crosses the L1/L2 boundary on every op (API fetch_add
++ forward into the core, K-004 profile section 1); only LTO
+can inline across the api/core/platform translation units.
+-O3's extra unrolling/vectorisation finds nothing the -O2
+codegen had left on this branchy, lock-serialised path, and
+-march=native's wider ISA likewise - the work under the lock
+(Z-027 verdict V-1) is not instruction-starved at -O2.
+
+ADOPTED: -flto only. Makefile changes, all in service of the
+adopted flag and nothing else:
+  - shipped CFLAGS gain exactly one flag: -flto (K-004 style
+    evidence comment added above the J-004 comment);
+  - the four .so link lines (production, versioned, debug,
+    hardened) gain -flto - they were the only link lines not
+    already carrying $(CFLAGS), and their PIC objects are
+    compiled from those same CFLAGS.
+NOT ADOPTED: -O3, -march=native (TIE everywhere, twice).
+No source change, no ABI change, no other flag change.
+
+Scope and honesty notes:
+  - Provisional scope: measured on the current tree (seat main
+    c84f021 / Z-020 + this branch's Z-027), BEFORE the Wave 4
+    TLS-cache slices Z-028..Z-034 integrate. Flag deltas can
+    move when the hot path changes; Z-096 re-trials the full
+    flag matrix on the near-final core and this verdict does
+    not carry over unmeasured (roadmap Z-096).
+  - The verdicts are deltas against the -O2 base of THIS tree
+    on THIS machine only (Law 1). They say nothing about glibc
+    standings, which remain the Z-009/Z-003 LOSS table's to
+    state; Z-036 files the Wave 4 verdict.
+  - Packaging note (named, not hidden): the static archive
+    build/libmimiralloc.a now holds LTO objects; consumers
+    must link with -flto (every in-tree consumer links via
+    $(CFLAGS) and does). Proven below: make test-e003 PASS.
+    Install/packaging story remains D-07's open defect.
+
+====================================================================
+FINAL-TREE VERIFICATION (after the Makefile adoption)
+====================================================================
+Standing gate (scripts/z13/run_gate.sh, log
+hidden_files/z035_gate.log): GATE RESULT: GREEN -
+4988 checks / 0 failed / 77 by-design skips, identical to the
+pre-slice baseline. The shipped build is the LTO build.
+
+Library flavours all build under the adopted flags:
+make lib, make static-lib, make lib-versioned, make lib-debug,
+make lib-hardened - all exit 0.
+ABI consumers: make test-e002 (dynamic route) PASS 16/16;
+make test-e003 (static archive route) PASS 16/16.
+Symbol surface (K-004 check): nm -D --defined-only on
+build/libmimiralloc.so = exactly 4 symbols (mimir_malloc,
+mimir_free, mimir_calloc, mimir_realloc) - unchanged.
+
+Final-tree bench confirmation (scripts/z13/run_measured.sh,
+leg A = build/bench_k002_mimir built by the shipped Makefile,
+leg B = the attempt-1 trial LTO binary; taskset -c 2, reps 9,
+warmups 3): PROTOCOL GATE: PASS - agreement 0.20% (large_batch),
+0.34% (mixed_batch), 0.53% (mixed_lifecycle), 0.39%
+(small_churn), all inside the 5% noise bound; drifts <= 1.41%;
+one checksum per workload. Final-tree medians: small_churn
+28.08, mixed_batch 147.72, mixed_lifecycle 725.22, large_batch
+2739.87 ns/op - the shipped build reproduces the measured LTO
+flavour, it is not a different build that merely shares a flag.
+
+Bugs found/fixed in repo code: none. Transfer note: one
+single-shot base64 file.write of the runner was corrupted in
+re-emission and caught by the sha256 guard (discarded, nothing
+landed); both harness scripts were then landed by the chunked
+373-byte road with final sha256 verified on device.
