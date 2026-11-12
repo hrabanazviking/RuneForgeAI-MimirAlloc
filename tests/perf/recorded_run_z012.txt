@@ -1,0 +1,80 @@
+MimirAlloc Z13 slice Z-012 - recorded run of tests/perf/probe_z012.c
+slice: Z-012 - CCD and SMT behaviour (Wave 2)
+date: 2026-11-12T02:13:33-05:00 (primary run, America/New_York); corroborating run 2026-11-12T02:13:42-05:00
+base: 7961e56468d3cfc1b0e300e6ab51de962a7762c4 (branch yrsa/mimiralloc-team-02, Z-002 team commit; Z-002 banked at seat as ab8cfbd)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (Strix Halo), 16 cores / 32 threads, 2 CCDs
+environment header (scripts/z13/host_truth.sh, Z-002, verbatim in runner output):
+  governor performance, driver amd-pstate-epp, cur 2747701 kHz, min 2000000, max 5187500
+  THP enabled=madvise defrag=madvise shmem=never; page_size_bytes 4096; glibc 2.44
+  cache topology: L1d 768 KiB (16), L1i 512 KiB (16), L2 16 MiB (16), L3 64 MiB (2 instances)
+topology (sysfs, printed by the runner):
+  cpu0 core_id=0 siblings=0,16 L3 32768K shared 0-7,16-23 (CCD0)
+  cpu8 core_id=8 siblings=8,24 L3 32768K shared 8-15,24-31 (CCD1)
+  => CCD0 = physical cores 0-7 (logical 0-7 + SMT 16-23); CCD1 = cores 8-15 (logical 8-15 + SMT 24-31)
+  => SMT sibling of logical CPU n (n<16) is n+16; L3 is per-CCD 32 MiB, NOT unified (confirms Z-010)
+compiler: cc -std=c11 -Wall -Wextra -Werror -pthread -O2 (standalone build in run_z012.sh; Makefile untouched)
+sha256 (primary run): probe_z012.c b1b80943451552f1bd6565e753325b480b1b0a2395d26ef7a1de6620b1f395b4
+        run_z012.sh 66a1a0414578b1ebf536d3f188103147332ff73019d6c9a479145ad759e2bf2a
+        /tmp/probe_z012 92ffeb362eddcd06b4e57090dd9013c6b194a7de6fb3961049f2c4b41de822dc
+method:
+  Part A ping-pong: two threads pinned to a CPU pair bounce ownership of ONE 64-byte cache
+  line via an atomic turn-taking counter (acquire loads / release stores); 200,000 transfers
+  per rep, 5 reps, median ns/transfer reported. This is the shared-line transfer cost.
+  Part B bandwidth: each thread streams over its OWN private 64 MiB buffer (write pass +
+  read pass per pass, 5 passes, no sharing, first-touch warm-up); 3 reps, median aggregate
+  GB/s (write+read bytes). Configs: 1 thread; 2 SMT siblings; 2 distinct cores same CCD;
+  2 cores on distinct CCDs. Timing: clock_gettime(CLOCK_MONOTONIC) throughout.
+load state (SHARED HOST - recorded honestly):
+  primary run: load average 0.27 / 1.43 / 2.08 at start AND end (1/5/15 min) - the quietest
+  window this campaign has recorded; the only busy process was one Aesir forge mojo test
+  run at ~100% of ONE core (aesir-team-04); Tensile lab idle; Lifthrasir idle.
+  corroborating run: load 0.46 / 1.43 / 2.08. Both runs exit 0; all reps tight (see tables).
+  Verdict on load: numbers are near-baseline quality for this host; the small residual
+  contention is named here per the shared-machine law.
+correctness gate: make clean && make test in this worktree, log hidden_files/z012_make_test.log -
+  4988 checks run (18 smoke + 4970 CHECKS), 0 failed, 77 by-design SKIP lines, EXIT:0.
+  Matches the Z-001/Z-002 baseline exactly.
+
+=== COST TABLE - Part A: shared-line ping-pong (median ns/transfer, min in parentheses) ===
+pair type          CPUs      primary run      corroborating    ratio vs intra-CCD
+smt-sibling        0<->16     33.41 (33.23)     31.98 (31.83)    ~1.03x
+intra-ccd          0<->1      32.53 (31.34)     31.52 (31.16)    1.00x (reference)
+intra-ccd (CCD1)   8<->9      32.19 (32.10)     31.96 (31.84)    ~0.99x
+intra-ccd-far      0<->7      36.96 (35.56)     37.59 (37.21)    ~1.14x
+cross-ccd          0<->8     103.02 (102.79)   102.75 (102.46)   ~3.17x
+cross-ccd-edge     7<->8     103.66 (103.60)   103.66 (103.55)   ~3.19x
+
+=== COST TABLE - Part B: streaming throughput, private buffers (median aggregate GB/s) ===
+config             threads   primary run   corroborating   scaling vs single
+single (cpu0)          1        34.24           34.31         1.00x
+smt siblings 0+16      2        40.35           41.14         ~1.18x
+intra-ccd 0+1          2        56.72           58.43         ~1.66x
+cross-ccd 0+8          2        63.06           62.88         ~1.84x
+(bw sink identical across all reps and configs of equal thread count - work verified equal)
+
+=== FINDINGS ===
+1. Cross-CCD shared-line transfer costs ~103 ns vs ~32 ns intra-CCD: a 3.2x penalty.
+   A cache line that bounces between CCDs is the single most expensive sharing pattern
+   measured on this machine so far. CCD identity, not core distance within a CCD,
+   is the cliff: far intra-CCD (0<->7) costs only ~1.14x the adjacent-core cost.
+2. An SMT sibling is nearly free for line sharing (33 ns, ~ intra-CCD cost) but adds
+   only ~18% streaming throughput over a lone thread on its core: for memory work a
+   sibling is worth roughly 0.2 of a core, NOT a second core.
+3. Two distinct physical cores give 1.66x (same CCD, sharing that CCD's L3/memory path)
+   to 1.84x (split across CCDs, separate L3 slices) of one thread's streaming rate -
+   real cores scale, siblings do not, and splitting private working sets across CCDs
+   is mildly BETTER than concentrating them in one CCD when nothing is shared.
+
+=== ARENA DESIGN CONSTANTS (feed Wave 4 / Z-037 per-CCD arena variant) ===
+CCD_PENALTY_FACTOR      = 3.2   (cross-CCD / intra-CCD ping-pong median, both runs)
+ARENA_PER_CCD           = YES   (penalty > 2.0: strict per-CCD arenas; a shared central
+                                structure whose line bounces cross-CCD pays ~103 ns/hop)
+CROSS_CCD_SHARING       = AVOID on hot paths: allocator metadata touched by both CCDs
+                          (central free lists, global stats) must be sharded per CCD or
+                          padded/partitioned so no single line serves both CCDs.
+SMT_SCALING_FACTOR      = 0.18  (extra streaming throughput from a sibling; size
+                          thread-count-sensitive structures for 16 physical cores,
+                          treat threads 17-32 as ~0.2-core helpers, not full workers)
+PREFER_INTRA_CCD        = YES   (place cooperating threads and their arena in one CCD;
+                          spill to the other CCD only for private, unshared work)
