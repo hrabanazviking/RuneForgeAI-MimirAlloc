@@ -1,0 +1,336 @@
+MimirAlloc Z13 recorded run - Z-056 soak harness
+slice: Z-056 - Soak harness (Wave 7)
+date: 2026-11-12T08:32-05:00 (pilot window, America/New_York); gate + assembly same morning
+base: merge 3fa1488 of seat main 8df68e8 (banked Z-001..Z-053, remote-verified) into yrsa/mimiralloc-team-02. The merge was NOT clean, contrary to the dispatch expectation: Makefile, src/core/mimir_core.c and src/core/mimir_core.h conflicted because the branch tip b528228 (Z-048, banked at the seat as 7b8ebd4) and the seat had diverged around the Z-049..Z-053 additions. Every conflicted hunk had an EMPTY HEAD side and the seat side adding the banked Z-050/Z-052 blocks; the seat version of each file is a superset of the branch version (474 insertions, 2 deletions - a comment rewrap - across the three files, verified by diff b528228..8df68e8). Resolution: seat version taken for the three files; the merged tree is byte-identical to seat main 8df68e8 (git diff HEAD 8df68e8 empty after the merge commit). No team content lost.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below).
+load state: SHARED HOST - loadavg 2.43 / 0.81 / 0.51 at pilot start (immediately after this slice's own gate run), polls during the pilot 3.00, 5.19, 2.52, 2.24 (1-min), 1.68 / 2.28 / 1.65 at collect. The two soak probes were themselves the top CPU consumers for most of the window (99.9% of one core each, ps snapshot at the t=380 poll; 2 of 32 threads), with other campaigns as transient co-tenants - a load spike at pilot t=260 is visible in BOTH legs' latency samples in the same wall-clock moment, which is the fingerprint of a shared-host event, not of either allocator. RSS/PSS samples are per-process smaps_rollup reads (resident shape, not timing); latency batches are shared-machine samples and are NOT quiet-machine baselines. Recorded honestly as a shared-machine pilot.
+artifacts: tests/perf/probe_z056.c (sha256 887cb2309b41ad6af5e89c170fc572d4f4cfa1e6c1290418a083ea9787de8e53), tests/perf/run_z056.sh (d1e831f4b77c11a715381ec00bab78d4a3e6501bd1f37ce8a693b5a48eb10bf0), tests/perf/summarize_z056.py (0bf0f302d1668d2e9dc44f7879f8cb555b703ab166c3e8d68541b5c7d4ba83fb). Probe binaries built by the runner: probe_mimir 500816e1fa6a4aa7575df7804394cbcacf4c4aeea97a200ac77c4b7a1a903784, probe_glibc 20f0cb0a2c694c9bbcab825c45a5853542ac6f28bb5ee52a0c9dd8210cc7a0cf. Built with the repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2 into build/z56/ (standalone, no Makefile target, NOT part of make test). No production code is changed by this slice.
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z056_gate_final.log (team-local, not banked): GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN - identical to the Z-001 baseline.
+
+=== METHOD ===
+The harness has three parts. probe_z056.c is the soak probe: one source, two legs (mimir = this tree's banked allocator with the Z-048 mapping cache and Z-049 THP posture live; glibc = host malloc/free/calloc/realloc). run_z056.sh is the runner with the detached-run discipline the roadmap demands - start builds both legs and launches them detached (setsid + nohup), poll reports liveness and sample counts without blocking, collect refuses while a leg is still running and otherwise verifies both exit codes and runs the summariser. summarize_z056.py checks sample completeness (the gate quantity) and prints the drift series.
+The soak workload is a mixed lifecycle over a 320-slot registry. Sizes come from one fixed-seed xorshift PRNG: 55% small (16..1024 B), 25% medium (4 KiB..64 KiB), 20% large (128 KiB..2 MiB). Every block is dense-touched (full memset; the calloc fills - 1 in 8 small fills - are verified zero before stamping) so RSS is real resident memory. Each slot carries a TTL of 100..20000 operations; the free-running loop replaces expired or empty slots, and additionally applies random realloc operations (15% of visits - contents-preservation up to the smaller size is verified on every realloc, then the block is re-stamped) and random free/refill operations (15%).
+Sampling, every interval_s of wall clock plus t=0 and the deadline: verify the first, middle and last stored byte of every live block (any mismatch aborts the process - corruption evidence, not a statistic); read /proc/self/smaps_rollup (Rss + Pss, the Z-006 method) and /proc/self/maps (VMA count, allocation-VMA window holes, the Z-053 definition); run a timed latency batch (256 x 64 B alloc/free + 32 x 64 KiB alloc/free, CLOCK_MONOTONIC) reported as ns/op. After the deadline the probe frees everything and emits DRAINED (post-drain Rss/Pss/VMA) and DONE (total ops, sample count, peak Rss).
+Time-boxed, not op-boxed (stated plainly): the two legs run the same duration and the same workload DISTRIBUTION, not the identical operation sequence, so per-sample checksums are per-process integrity evidence only and are never compared across legs. The legs ran CONCURRENTLY, pinned to separate cores (mimir taskset -c 2, glibc taskset -c 3), because RSS/PSS are per-process reads; the concurrency caveat falls on the latency batches, which are shared-machine samples (see F5).
+Pilot parameters (the roadmap gate run): 600 seconds, 10-second interval, 61 scheduled samples per leg (t = 0, 10, ..., 600). A 20-second smoke run (3 samples per leg, COMPLETE, collect exit 0) preceded the pilot and proved start/poll/collect end to end. The full one-hour run is Z-057's job and was NOT run here; the harness default is 3600 s / 60 s for it.
+
+=== SUMMARY (tests/perf/summarize_z056.py on the pilot raw data, verbatim) ===
+=== leg mimir (hidden_files/z056_pilot/z056_mimir.raw) ===
+schedule: seconds=600 interval_s=10 expected_samples=61 got_samples=61
+completeness: COMPLETE - every scheduled sample present exactly once, DRAINED + DONE present
+ops_total=43181056 peak_rss_kib=174744
+rss_kib: first=2112 median=144884 peak=174744 final=150400 (t0 baseline 2112)
+live_bytes: median=74237019 peak=99199308
+net_factor: median=2.016 worst=2.638 final=1.901
+holes: median_count=109 median_bytes=53063680 worst_largest=20877312
+latency ns/op: small median=238 worst=564; large median=2290 worst=4670
+drained: rss_kib=38212 retained_net_kib=36100 vma_delta=83
+series (every sample):
+  t_s      ops  live      live_B    rss_KiB   net_f  holes  hole_B   lat_s  lat_l
+     0        0     0          0      2112  0.000     0         0   1070   1554
+    10   754944   320   83983362    137324  1.649   114  61145088    293   2308
+    20  1484544   320   69330513    135316  1.967   112  46825472    239   2355
+    30  2206976   320   87171243    151228  1.752   116  25477120    252   2176
+    40  2827520   320   86260947    158260  1.854   111  54452224    307   2335
+    50  3531264   320   83665439    141680  1.708   104  47624192    271   2432
+    60  4259328   320   76670273    147276  1.939   117  45158400    235   2085
+    70  4982272   320   68368909    144884  2.138   122  49168384    217   2560
+    80  5711872   320   76119963    152364  2.021   114  57696256    237   2465
+    90  6439424   320   73277865    142380  1.960   112  56770560    228   2709
+   100  7169280   320   74621969    137760  1.861    90  57004032    222   2275
+   110  7888128   320   77697135    155024  2.015   117  43048960    244   2924
+   120  8590592   320   74472985    144000  1.951   109  58257408    228   2582
+   130  9315072   320   68557819    147776  2.176   109  65355776    223   2443
+   140 10042368   320   61998286    130064  2.113   103  56750080    222   2322
+   150 10761472   320   77253004    145092  1.895   106  54833152    226   2154
+   160 11489792   320   76820861    141268  1.855   108  67817472    247   2189
+   170 12226048   320   78708902    140372  1.799   109  42364928    219   2899
+   180 12947712   320   85551316    169020  1.998   117  38412288    233   2727
+   190 13634816   320   64111575    140960  2.218   113  69607424    228   2228
+   200 14327808   320   76802171    153900  2.024   100  56500224    223   2236
+   210 15058176   320   77757058    153140  1.989   120  36597760    258   2368
+   220 15762944   320   59986864    136896  2.301   100  46948352    245   2241
+   230 16495104   320   57826502    140060  2.443   107  62763008    242   2263
+   240 17220096   320   50057620    131072  2.638   113  70115328    245   1846
+   250 17946112   320   81599475    151484  1.874   109  50384896    240   2388
+   260 18606592   320   58123990    127860  2.215    98  63680512    564   4670
+   270 19310592   320   61699947    137800  2.252   102  56795136    290   2679
+   280 20026624   320   72205952    144656  2.022   105  53260288    239   1912
+   290 20748800   320   83181300    156724  1.903   115  43315200    246   2440
+   300 21468160   320   58273250    134808  2.332   118  66125824    217   2030
+   310 22194176   320   72301828    152480  2.130   109  37564416    211   2691
+   320 22916352   320   74593280    146188  1.978   106  51908608    231   2411
+   330 23645440   320   88808551    156096  1.776   103  58548224    244   2603
+   340 24364800   320   74001053    142444  1.942   115  43016192    245   2456
+   350 25086208   320   64696451    137032  2.135   108  52740096    230   2154
+   360 25810688   320   70771401    147716  2.107   108  53628928    263   1832
+   370 26537472   320   69968588    144156  2.079   108  54898688    272   2569
+   380 27266048   320   67871570    140884  2.094   116  71716864    242   2197
+   390 27990784   320   77234567    144656  1.890   107  49905664    215   2206
+   400 28720384   320   69350581    146984  2.139   111  40648704    237   2907
+   410 29447424   320   68882419    156796  2.300   117  39804928    240   2754
+   420 30168832   320   77190264    166564  2.182   111  45297664    264   2255
+   430 30895104   320   99199308    174744  1.782   118  41385984    279   2422
+   440 31620608   320   58947354    140576  2.405   109  59957248    243   2074
+   450 32343808   320   68528218    136328  2.006    95  65413120    233   2243
+   460 33059840   320   72696886    148004  2.055   117  47046656    271   2269
+   470 33784064   320   74934133    146768  1.977   108  52719616    266   2043
+   480 34512896   320   87780334    157660  1.815   108  52867072    221   2125
+   490 35233536   320   63185342    141668  2.262   114  87416832    229   2242
+   500 35946496   320   88583666    168268  1.921   119  37666816    222   2744
+   510 36663808   320   63715114    139292  2.205   108  73842688    219   2222
+   520 37385472   320   69104877    138252  2.017   107  43298816    217   2191
+   530 38110720   320   61521985    140228  2.299   105  66785280    216   2033
+   540 38834176   320   78031868    158140  2.048   112  49152000    243   2119
+   550 39559936   320   85728655    148236  1.745   115  38096896    264   2423
+   560 40284160   320   87746365    158764  1.828   108  43208704    223   2263
+   570 41013760   320   64492319    145088  2.270   110  59674624    213   2364
+   580 41737984   320   60242111    132468  2.216   104  72929280    228   2096
+   590 42455808   320   76465462    144944  1.913   102  54132736    259   2306
+   600 43181056   320   79862741    150400  1.901   109  44101632    237   2143
+=== leg glibc (hidden_files/z056_pilot/z056_glibc.raw) ===
+schedule: seconds=600 interval_s=10 expected_samples=61 got_samples=61
+completeness: COMPLETE - every scheduled sample present exactly once, DRAINED + DONE present
+ops_total=271437568 peak_rss_kib=198468
+rss_kib: first=2084 median=188800 peak=198468 final=196528 (t0 baseline 2084)
+live_bytes: median=76236239 peak=93316545
+net_factor: median=2.522 worst=3.275 final=2.611
+holes: median_count=0 median_bytes=0 worst_largest=0
+latency ns/op: small median=44 worst=84; large median=135 worst=347
+drained: rss_kib=196528 retained_net_kib=194444 vma_delta=0
+series (every sample):
+  t_s      ops  live      live_B    rss_KiB   net_f  holes  hole_B   lat_s  lat_l
+     0        0     0          0      2084  0.000     0         0     10    415
+    10  4492800   320   60884339    194064  3.229     0         0     51    165
+    20  9020416   320   66298440    191868  2.931     0         0     44    147
+    30 13416960   320   66189424    186440  2.852     0         0     43    152
+    40 17103616   320   78817734    184124  2.365     0         0     47    172
+    50 21122560   320   81619159    191012  2.370     0         0     48    113
+    60 25665024   320   67981894    189496  2.823     0         0     42    136
+    70 30288384   320   73241067    198468  2.746     0         0     45    149
+    80 34887936   320   76866501    190976  2.516     0         0     48    180
+    90 39428352   320   62618925    190080  3.074     0         0     54    118
+   100 44000768   320   85142371    181728  2.161     0         0     49    109
+   110 48466176   320   88820658    188788  2.152     0         0     58    175
+   120 52531712   320   86578464    198300  2.321     0         0     42    100
+   130 57133824   320   91124501    195372  2.172     0         0     45    140
+   140 61763584   320   84989986    187724  2.237     0         0     40    159
+   150 66381056   320   65300409    185700  2.879     0         0     47    106
+   160 70922496   320   78483494    182708  2.357     0         0     47    173
+   170 75469312   320   90825977    194712  2.172     0         0     44    162
+   180 79962880   320   63985356    188800  2.988     0         0     54    151
+   190 84341248   320   86810945    192588  2.247     0         0     51    131
+   200 88531456   320   85743475    187760  2.217     0         0     58    184
+   210 92842496   320   79503844    183140  2.332     0         0     47    160
+   220 97273600   320   76203850    186288  2.475     0         0     43    104
+   230 101794560   320   66776802    185448  2.812     0         0     53    140
+   240 106290432   320   76517911    185240  2.451     0         0     44    124
+   250 110818048   320   70310413    194088  2.796     0         0     50    149
+   260 114902784   320   82038661    183624  2.266     0         0     84    347
+   270 119084544   320   78771489    196124  2.522     0         0     70    185
+   280 123285760   320   82222710    188800  2.325     0         0     46    132
+   290 127922944   320   70100350    180120  2.601     0         0     42    164
+   300 132559872   320   73147142    188864  2.615     0         0     57    108
+   310 137216512   320   74101297    188928  2.582     0         0     44    139
+   320 141850880   320   65670303    189448  2.922     0         0     38    127
+   330 146491904   320   63689131    188100  2.991     0         0     41    123
+   340 151143680   320   63349620    183824  2.938     0         0     43    130
+   350 155764736   320   63304828    190484  3.048     0         0     43    154
+   360 160404736   320   93316545    182684  1.982     0         0     41    112
+   370 165035520   320   86531123    188452  2.205     0         0     40    132
+   380 169662976   320   91518446    193644  2.143     0         0     42    137
+   390 174284288   320   78149088    193680  2.511     0         0     37    117
+   400 178909440   320   91137591    189340  2.104     0         0     41    132
+   410 183560448   320   64163371    188356  2.973     0         0     41    121
+   420 188182016   320   66923910    184084  2.785     0         0     50    136
+   430 192800000   320   78389691    184996  2.389     0         0     46    143
+   440 197419520   320   69643458    187740  2.730     0         0     44    104
+   450 202020352   320   83826506    186788  2.256     0         0     49    135
+   460 206658048   320   78911001    189980  2.438     0         0     50    148
+   470 211265280   320   67509822    188052  2.821     0         0     48    145
+   480 215888128   320   92556904    189740  2.076     0         0     45    109
+   490 220509184   320   70756272    185396  2.653     0         0     46     97
+   500 225141248   320   85056328    195116  2.324     0         0     43    151
+   510 229763072   320   70566965    189824  2.724     0         0     43    139
+   520 234379264   320   69014862    187264  2.748     0         0     39    135
+   530 239016960   320   78376261    187424  2.422     0         0     43    131
+   540 243664896   320   90446583    191420  2.144     0         0     49    130
+   550 248306688   320   75962470    192364  2.565     0         0     43    126
+   560 252931072   320   74627375    189428  2.571     0         0     43    114
+   570 257541120   320   73983279    184236  2.521     0         0     42    144
+   580 262186496   320   63732901    190592  3.029     0         0     44     88
+   590 266809600   320   58884734    190432  3.275     0         0     46    128
+   600 271437568   320   76268628    196528  2.611     0         0     42     98
+
+SOAK COMPLETENESS: ALL LEGS COMPLETE
+
+=== READING - THE 10-MINUTE PILOT (roadmap gate) ===
+Gate: "harness proven on a 10-minute pilot with complete samples" - MET. Both legs emitted every scheduled sample exactly once (61 of 61, t = 0..600 step 10), followed by DRAINED and DONE, and exited 0; the summariser's completeness verdict is ALL LEGS COMPLETE and collect exited 0. Raw pilot files: hidden_files/z056_pilot/z056_mimir.raw and z056_glibc.raw (team-local), appended verbatim below.
+
+F1 - Throughput under the identical distribution differs 6.3x. In 600 s the glibc leg executed 271,437,568 registry operations against the mimir leg's 43,181,056 (6.29x). The soak therefore stresses glibc with far more lifecycle events per unit time; per-leg drift curves are comparable as resident-shape series (live_bytes medians are close: mimir 74,237,019 B, glibc 76,236,239 B) but NOT as equal-work measurements. Any Z-057/Z-061 soak comparison inherits this caveat.
+F2 - Resident shape over the pilot: mimir holds LESS resident memory per live byte than glibc in this mixed lifecycle. net_factor ((Rss - Rss_t0) / live_bytes) median 2.016 for mimir vs 2.522 for glibc; worst sample 2.638 vs 3.275. Peak Rss: mimir 174,744 KiB vs glibc 198,468 KiB, on live peaks of 99,199,308 B vs 93,316,545 B. This does not contradict Z-053's holed-phase LOSS: Z-053 measured a single adversarial free pattern at a frozen phase; the soak's continuous mixed lifecycle (TTL expiry, realloc, refill across all classes) is a different workload, and on it the banked allocator's resident factor is the lower one across all 61 samples' medians. Grade in roadmap words for the soak workload: WIN on resident shape (this workload, this machine, this window).
+F3 - Drain retention is the mirror image of Z-053's checker/uniform rows and is allocator-policy, not leakage: after freeing all 320 blocks in-process, mimir retains 36,100 KiB net Rss across +83 VMAs - at the Z-048 mapping-cache design bounds (64 mappings / 32 MiB, plus small-path spans) - while glibc retains 194,444 KiB net (its DRAINED Rss 196,528 KiB equals its final live sample: in-process, freed large blocks sit in arena/top retention under the dynamic mmap threshold and are not returned until exit or trim). Both figures are in-process readings taken the instant after the drain; process exit returns everything for both legs. Z-057's full-hour report should keep the DRAINED line for exactly this comparison.
+F4 - Fragmentation window: mimir's allocation-VMA window carries a median of 109 holes (median 53,063,680 hole bytes, worst largest hole 20,877,312 B) at every live sample - the interleaved size mix keeps its address window permanently holed, consistent with Z-053 F2 (MimirAlloc trades address holes for pooled retention). glibc's window shows 0 holes at every sample: its live blocks sit in merged/contiguous VMAs, and its fragmentation cost appears instead as the higher net_factor of F2. Address holes and resident holes remain different quantities; the harness now records both, per sample, for the full hour.
+F5 - Latency samples (shared-machine, NOT baselines): small-batch (64 B) median 238 ns/op mimir vs 44 glibc (LOSS ~5.4x); large-batch (64 KiB) median 2,290 ns/op mimir vs 135 glibc (LOSS ~17x). The t=260 sample spikes in both legs simultaneously (mimir 564 / 4,670; glibc 84 / 347) - a co-tenant event crossing both pinned cores, kept in the series as the honest shared-machine fingerprint; medians are insensitive to it. These batch figures are soak-health samples (is the allocator degrading over time?) - and on that question the series is flat for both legs from t=10 to t=600, no drift trend. Z-057 inherits the same reading discipline.
+F6 - Integrity: neither leg aborted. Every sample of both legs verified the stored bytes of all 320 live blocks (first/middle/last), every calloc fill verified zeroed, every realloc verified contents-preserved - 61 samples x 2 legs with zero mismatches, and both probes exited 0. No allocator bug was discovered by the pilot.
+
+Bugs found in this slice's own tooling, fixed before the recorded run (no production code touched; no production bug discovered): (1) the glibc leg's calloc function-pointer was declared returning void - a -Werror build failure at the first smoke attempt; fixed to void* (the mimir declaration was already correct) and the smoke rerun built clean. The runner's first poll during that failed start honestly reported both legs missing/0 samples rather than a false running state.
+Team structure: 1 lead + 6 Mythic Engineering sub-agents spawned in parallel as reviewers (architecture, workload design, metrics/sampling, testing/gate, reliability/detached-run, bookkeeping/provenance) - no 429; all six completed before the commit. Folded in: the gate reviewer's recorded-run structure and read-counts-from-log discipline, the metrics reviewer's smaps_rollup/maps sources (no VmRSS spot readings), the architecture reviewer's neighbour-pattern file layout, and the bookkeeping reviewer's CAMPAIGN_STATE form.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T13:32:14Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2906387
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 62%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 2.52 0.88 0.53
+
+=== RAW (hidden_files/z056_pilot/, verbatim) ===
+SOAK,mimir,600,10
+SAMPLE,mimir,0,0,0,0,2112,166,26,0,0,0,0,0,0,0,0,1070,1554,0
+SAMPLE,mimir,10,754944,320,83983362,137324,135309,159,133,115,120168,114,61145088,6139904,45780992,100165212,293,2308,120855
+SAMPLE,mimir,20,1484544,320,69330513,135316,133300,155,129,113,121360,112,46825472,7983104,35000320,101717518,239,2355,121530
+SAMPLE,mimir,30,2206976,320,87171243,151228,149210,155,129,117,141188,116,25477120,2674688,19865600,82878131,252,2176,121200
+SAMPLE,mimir,40,2827520,320,86260947,158260,156242,155,129,112,144328,111,54452224,6520832,42807296,115946001,307,2335,115512
+SAMPLE,mimir,50,3531264,320,83665439,141680,139663,156,130,105,123904,104,47624192,5824512,32219136,90806837,271,2432,122700
+SAMPLE,mimir,60,4259328,320,76670273,147276,145261,162,136,118,130748,117,45158400,2981888,31182848,102344080,235,2085,116814
+SAMPLE,mimir,70,4982272,320,68368909,144884,142871,168,142,124,131096,122,49168384,8634368,38141952,115011046,217,2560,125007
+SAMPLE,mimir,80,5711872,320,76119963,152364,150348,165,139,115,130876,114,57696256,5537792,38793216,115563711,237,2465,121614
+SAMPLE,mimir,90,6439424,320,73277865,142380,140363,156,130,114,124180,112,56770560,7852032,41259008,110645493,228,2709,126735
+SAMPLE,mimir,100,7169280,320,74621969,137760,135743,139,113,91,118332,90,57004032,6610944,40247296,103546503,222,2275,117459
+SAMPLE,mimir,110,7888128,320,77697135,155024,153007,157,131,118,141480,117,43048960,4255744,32317440,110197733,244,2924,121044
+SAMPLE,mimir,120,8590592,320,74472985,144000,141987,151,125,111,128868,109,58257408,6250496,45907968,115713577,228,2582,127380
+SAMPLE,mimir,130,9315072,320,68557819,147776,145765,155,129,110,129852,109,65355776,8421376,50151424,129735715,223,2443,130731
+SAMPLE,mimir,140,10042368,320,61998286,130064,128051,156,130,104,105592,103,56750080,3485696,36900864,102847312,222,2322,122124
+SAMPLE,mimir,150,10761472,320,77253004,145092,143079,158,132,107,123256,106,54833152,5103616,35676160,103764595,226,2154,122331
+SAMPLE,mimir,160,11489792,320,76820861,141268,139252,159,133,110,120516,108,67817472,9879552,49782784,114374370,247,2189,117597
+SAMPLE,mimir,170,12226048,320,78708902,140372,138356,151,125,110,127088,109,42364928,4235264,31981568,93757690,219,2899,123777
+SAMPLE,mimir,180,12947712,320,85551316,169020,167004,162,136,118,155612,117,38412288,3661824,27926528,112163267,233,2727,127860
+SAMPLE,mimir,190,13634816,320,64111575,140960,138944,166,140,115,119112,113,69607424,9347072,50483200,127435589,228,2228,118632
+SAMPLE,mimir,200,14327808,320,76802171,153900,151884,152,126,101,132432,100,56500224,6959104,37789696,115299300,223,2236,125019
+SAMPLE,mimir,210,15058176,320,77757058,153140,151125,160,134,121,141444,120,36597760,2633728,27869184,103641480,258,2368,126765
+SAMPLE,mimir,220,15762944,320,59986864,136896,134881,150,124,101,117064,100,46948352,5238784,31805440,106805024,245,2241,128049
+SAMPLE,mimir,230,16495104,320,57826502,140060,138044,163,137,108,114808,107,62763008,12820480,41582592,122470683,242,2263,120741
+SAMPLE,mimir,240,17220096,320,50057620,131072,129056,159,133,114,108644,113,70115328,16281600,50511872,131279067,245,1846,118377
+SAMPLE,mimir,250,17946112,320,81599475,151484,149469,156,130,111,134336,109,50384896,6225920,36188160,106315967,240,2388,120924
+SAMPLE,mimir,260,18606592,320,58123990,127860,125844,149,123,99,107664,98,63680512,10153984,46370816,115775351,564,4670,123066
+SAMPLE,mimir,270,19310592,320,61699947,137800,135783,149,123,103,118064,102,56795136,8699904,39968768,115963575,290,2679,120078
+SAMPLE,mimir,280,20026624,320,72205952,144656,142643,155,129,106,122540,105,53260288,7905280,34000896,106506122,239,1912,115224
+SAMPLE,mimir,290,20748800,320,83181300,156724,154711,158,132,116,143620,115,43315200,6565888,33292288,107158828,246,2440,125211
+SAMPLE,mimir,300,21468160,320,58273250,134808,132795,163,137,119,122036,118,66125824,19992576,56471552,132803138,217,2030,127611
+SAMPLE,mimir,310,22194176,320,72301828,152480,150467,151,125,110,138236,109,37564416,4165632,26378240,106784570,211,2691,120417
+SAMPLE,mimir,320,22916352,320,74593280,146188,144175,156,130,107,126936,106,51908608,4112384,35594240,107266081,231,2411,120816
+SAMPLE,mimir,330,23645440,320,88808551,156096,154083,153,127,104,138020,103,58548224,8003584,43438080,111042449,244,2603,124815
+SAMPLE,mimir,340,24364800,320,74001053,142444,140431,159,133,116,124368,115,43016192,5201920,29806592,96338476,245,2456,121446
+SAMPLE,mimir,350,25086208,320,64696451,137032,135021,155,129,109,120808,108,52740096,6057984,39534592,111721492,230,2154,122379
+SAMPLE,mimir,360,25810688,320,70771401,147716,145705,152,126,109,133052,108,53628928,12009472,42033152,119073887,263,1832,119595
+SAMPLE,mimir,370,26537472,320,69968588,144156,142145,162,136,110,122492,108,54898688,5709824,36212736,110332226,272,2569,121212
+SAMPLE,mimir,380,27266048,320,67871570,140884,138873,153,127,117,128368,116,71716864,12845056,62406656,135262946,242,2197,120210
+SAMPLE,mimir,390,27990784,320,77234567,144656,142645,147,121,108,128800,107,49905664,6672384,37224448,104533445,215,2206,123471
+SAMPLE,mimir,400,28720384,320,69350581,146984,144973,157,131,112,128712,111,40648704,3178496,25493504,103070011,237,2907,116643
+SAMPLE,mimir,410,29447424,320,68882419,156796,154785,164,138,119,139336,117,39804928,3653632,25485312,111557330,240,2754,115209
+SAMPLE,mimir,420,30168832,320,77190264,166564,164553,155,129,112,146192,111,45297664,4780032,27996160,117776217,264,2255,120930
+SAMPLE,mimir,430,30895104,320,99199308,174744,172733,160,134,119,158364,118,41385984,3682304,28184576,104321353,279,2422,127806
+SAMPLE,mimir,440,31620608,320,58947354,140576,138565,152,126,110,124708,109,59957248,18767872,47353856,128680872,243,2074,124590
+SAMPLE,mimir,450,32343808,320,68528218,136328,134317,143,117,96,114092,95,65413120,16109568,46301184,113683532,233,2243,120735
+SAMPLE,mimir,460,33059840,320,72696886,148004,145993,161,135,118,132032,117,47046656,4771840,34361344,109520971,271,2269,120129
+SAMPLE,mimir,470,33784064,320,74934133,146768,144757,152,126,110,129264,108,52719616,9433088,38498304,110122669,266,2043,124218
+SAMPLE,mimir,480,34512896,320,87780334,157660,155649,158,132,109,139928,108,52867072,6688768,38449152,108342543,221,2125,123249
+SAMPLE,mimir,490,35233536,320,63185342,141668,139657,161,135,115,120700,114,87416832,10919936,69689344,147799196,229,2242,117372
+SAMPLE,mimir,500,35946496,320,88583666,168268,166255,165,139,121,155608,119,37666816,3375104,28446720,108395730,222,2744,119586
+SAMPLE,mimir,510,36663808,320,63715114,139292,137281,152,126,109,119692,108,73842688,14598144,57516032,132662995,219,2222,122742
+SAMPLE,mimir,520,37385472,320,69104877,138252,136241,153,127,110,121632,107,43298816,3436544,30023680,98714433,217,2191,122454
+SAMPLE,mimir,530,38110720,320,61521985,140228,138217,151,125,106,122736,105,66785280,13725696,52617216,130915283,216,2033,122247
+SAMPLE,mimir,540,38834176,320,78031868,158140,156127,159,133,114,142720,112,49152000,5668864,37105664,117235750,243,2119,120831
+SAMPLE,mimir,550,39559936,320,85728655,148236,146225,162,136,116,133880,115,38096896,2629632,27140096,89430327,264,2423,119913
+SAMPLE,mimir,560,40284160,320,87746365,158764,156753,157,131,109,141708,108,43208704,2326528,29507584,100540316,223,2263,119430
+SAMPLE,mimir,570,41013760,320,64492319,145088,143077,166,140,111,126272,110,59674624,4669440,44171264,124455119,213,2364,120612
+SAMPLE,mimir,580,41737984,320,60242111,132468,130457,149,123,106,119916,104,72929280,20877312,63844352,135450938,228,2096,119184
+SAMPLE,mimir,590,42455808,320,76465462,144944,142933,151,125,104,123232,102,54132736,8593408,39829504,103848487,259,2306,124455
+SAMPLE,mimir,600,43181056,320,79862741,150400,148389,156,130,110,132212,109,44101632,5226496,29245440,99586563,237,2143,118287
+DRAINED,mimir,38212,36201,109,83
+DONE,mimir,43181056,61,174744
+SOAK,glibc,600,10
+SAMPLE,glibc,0,0,0,0,2084,137,26,0,0,0,0,0,0,0,0,10,415,0
+SAMPLE,glibc,10,4492800,320,60884339,194064,192049,26,0,1,192028,0,0,0,0,129617687,51,165,122343
+SAMPLE,glibc,20,9020416,320,66298440,191868,189852,26,0,1,189704,0,0,0,0,126427333,44,147,120603
+SAMPLE,glibc,30,13416960,320,66189424,186440,184422,26,0,1,184276,0,0,0,0,118233683,43,152,126147
+SAMPLE,glibc,40,17103616,320,78817734,184124,182106,26,0,1,181960,0,0,0,0,106415490,47,172,121191
+SAMPLE,glibc,50,21122560,320,81619159,191012,188995,26,0,1,188976,0,0,0,0,104070702,48,113,127194
+SAMPLE,glibc,60,25665024,320,67981894,189496,187481,26,0,1,187332,0,0,0,0,121525757,42,136,122943
+SAMPLE,glibc,70,30288384,320,73241067,198468,196455,26,0,1,196416,0,0,0,0,121335301,45,149,129270
+SAMPLE,glibc,80,34887936,320,76866501,190976,188960,26,0,1,188812,0,0,0,0,113482076,48,180,123141
+SAMPLE,glibc,90,39428352,320,62618925,190080,188063,26,0,1,187916,0,0,0,0,126926216,54,118,126123
+SAMPLE,glibc,100,44000768,320,85142371,181728,179711,26,0,1,179564,0,0,0,0,98568360,49,109,119358
+SAMPLE,glibc,110,48466176,320,88820658,188788,186771,26,0,1,186624,0,0,0,0,102089699,58,175,122556
+SAMPLE,glibc,120,52531712,320,86578464,198300,196287,26,0,1,196264,0,0,0,0,109123669,42,100,122415
+SAMPLE,glibc,130,57133824,320,91124501,195372,193361,26,0,1,193336,0,0,0,0,104573462,45,140,119628
+SAMPLE,glibc,140,61763584,320,84989986,187724,185711,26,0,1,185560,0,0,0,0,104877671,40,159,113004
+SAMPLE,glibc,150,66381056,320,65300409,185700,183687,26,0,1,183536,0,0,0,0,121892881,47,106,124767
+SAMPLE,glibc,160,70922496,320,78483494,182708,180692,26,0,1,180544,0,0,0,0,103353337,47,173,128397
+SAMPLE,glibc,170,75469312,320,90825977,194712,192696,26,0,1,192548,0,0,0,0,100837383,44,162,120846
+SAMPLE,glibc,180,79962880,320,63985356,188800,186784,26,0,1,186636,0,0,0,0,126948257,54,151,118833
+SAMPLE,glibc,190,84341248,320,86810945,192588,190572,26,0,1,190552,0,0,0,0,104482533,51,131,121680
+SAMPLE,glibc,200,88531456,320,85743475,187760,185744,26,0,1,185724,0,0,0,0,101941014,58,184,117678
+SAMPLE,glibc,210,92842496,320,79503844,183140,181125,26,0,1,180976,0,0,0,0,103572521,47,160,119958
+SAMPLE,glibc,220,97273600,320,76203850,186288,184273,26,0,1,184124,0,0,0,0,111798518,43,104,122877
+SAMPLE,glibc,230,101794560,320,66776802,185448,183432,26,0,1,183412,0,0,0,0,117740645,53,140,123525
+SAMPLE,glibc,240,106290432,320,76517911,185240,183224,26,0,1,183204,0,0,0,0,106823359,44,124,126840
+SAMPLE,glibc,250,110818048,320,70310413,194088,192073,26,0,1,191960,0,0,0,0,122142336,50,149,126129
+SAMPLE,glibc,260,114902784,320,82038661,183624,181608,26,0,1,181460,0,0,0,0,103598506,84,347,119400
+SAMPLE,glibc,270,119084544,320,78771489,196124,194107,26,0,1,193960,0,0,0,0,106852661,70,185,122232
+SAMPLE,glibc,280,123285760,320,82222710,188800,186787,26,0,1,186764,0,0,0,0,104700674,46,132,117690
+SAMPLE,glibc,290,127922944,320,70100350,180120,178107,26,0,1,177956,0,0,0,0,110024102,42,164,121305
+SAMPLE,glibc,300,132559872,320,73147142,188864,186851,26,0,1,186828,0,0,0,0,114010604,57,108,123165
+SAMPLE,glibc,310,137216512,320,74101297,188928,186915,26,0,1,186820,0,0,0,0,115002653,44,139,119826
+SAMPLE,glibc,320,141850880,320,65670303,189448,187435,26,0,1,187284,0,0,0,0,125768780,38,127,121764
+SAMPLE,glibc,330,146491904,320,63689131,188100,186087,26,0,1,185936,0,0,0,0,125034019,41,123,117042
+SAMPLE,glibc,340,151143680,320,63349620,183824,181811,26,0,1,181788,0,0,0,0,118149426,43,130,120036
+SAMPLE,glibc,350,155764736,320,63304828,190484,188473,26,0,1,188320,0,0,0,0,127182962,43,154,119613
+SAMPLE,glibc,360,160404736,320,93316545,182684,180673,26,0,1,180648,0,0,0,0,89458674,41,112,124398
+SAMPLE,glibc,370,165035520,320,86531123,188452,186441,26,0,1,186288,0,0,0,0,102004163,40,132,119784
+SAMPLE,glibc,380,169662976,320,91518446,193644,191633,26,0,1,191608,0,0,0,0,100579683,42,137,124476
+SAMPLE,glibc,390,174284288,320,78149088,193680,191669,26,0,1,191644,0,0,0,0,114935130,37,117,121842
+SAMPLE,glibc,400,178909440,320,91137591,189340,187329,26,0,1,187176,0,0,0,0,100341212,41,132,122796
+SAMPLE,glibc,410,183560448,320,64163371,188356,186345,26,0,1,186192,0,0,0,0,123083097,41,121,121731
+SAMPLE,glibc,420,188182016,320,66923910,184084,182073,26,0,1,182048,0,0,0,0,117094668,50,136,116766
+SAMPLE,glibc,430,192800000,320,78389691,184996,182985,26,0,1,182832,0,0,0,0,108678223,46,143,118737
+SAMPLE,glibc,440,197419520,320,69643458,187740,185729,26,0,1,185576,0,0,0,0,116010835,44,104,119055
+SAMPLE,glibc,450,202020352,320,83826506,186788,184777,26,0,1,184736,0,0,0,0,100813947,49,135,125043
+SAMPLE,glibc,460,206658048,320,78911001,189980,187969,26,0,1,187944,0,0,0,0,100631721,50,148,121437
+SAMPLE,glibc,470,211265280,320,67509822,188052,186041,26,0,1,186016,0,0,0,0,119969038,48,145,120408
+SAMPLE,glibc,480,215888128,320,92556904,189740,187729,26,0,1,187704,0,0,0,0,94869556,45,109,120168
+SAMPLE,glibc,490,220509184,320,70756272,185396,183385,26,0,1,183232,0,0,0,0,116683164,46,97,117945
+SAMPLE,glibc,500,225141248,320,85056328,195116,193103,26,0,1,193080,0,0,0,0,106259272,43,151,117621
+SAMPLE,glibc,510,229763072,320,70566965,189824,187813,26,0,1,187788,0,0,0,0,111247756,43,139,118956
+SAMPLE,glibc,520,234379264,320,69014862,187264,185253,26,0,1,185100,0,0,0,0,116141133,39,135,122700
+SAMPLE,glibc,530,239016960,320,78376261,187424,185413,26,0,1,185260,0,0,0,0,111020361,43,131,119943
+SAMPLE,glibc,540,243664896,320,90446583,191420,189407,26,0,1,189384,0,0,0,0,101308676,49,130,122526
+SAMPLE,glibc,550,248306688,320,75962470,192364,190353,26,0,1,190328,0,0,0,0,114763582,43,126,122517
+SAMPLE,glibc,560,252931072,320,74627375,189428,187417,26,0,1,187276,0,0,0,0,115024809,43,114,123141
+SAMPLE,glibc,570,257541120,320,73983279,184236,182225,26,0,1,182072,0,0,0,0,112263724,42,144,125469
+SAMPLE,glibc,580,262186496,320,63732901,190592,188581,26,0,1,188496,0,0,0,0,125205486,44,88,118725
+SAMPLE,glibc,590,266809600,320,58884734,190432,188421,26,0,1,188320,0,0,0,0,130535472,46,128,121050
+SAMPLE,glibc,600,271437568,320,76268628,196528,194517,26,0,1,194364,0,0,0,0,117299837,42,98,126966
+DRAINED,glibc,196528,194517,26,0
+DONE,glibc,271437568,61,198468
