@@ -47,6 +47,7 @@ leaves open. Statuses in this ledger mean:
 | D-004 | Allocation-free startup and diagnostics | Adopted | Section 6.3 | A-008 (specification slice) |
 | D-005 | Implementation language (C11 vs C++17 core) | Superseded by D-006 | Section 7.2 | A-009 |
 | D-006 | Implementation language — C11 core | Adopted | Section 7.2 | A-009 |
+| D-007 | Z13 redesign: TLS cache (Wave 4), per-CCD arenas (Wave 5) | Adopted | Z13 roadmap Z-026 | Z-026 (settler); consumers Z-028, Z-037, Z-039 |
 
 ---
 
@@ -138,6 +139,49 @@ leaves open. Statuses in this ledger mean:
 - **Decision:** The MimirAlloc core starts as portable C11. The C ABI is the core's own ABI. No C++ is used in the core. Any C++ surface (e.g. operator new/delete variants, S6.1) is added only when a mapped integration actually requires it, and then only inside Layer 1, Public boundary, as a shim over the C ABI — it is not an eighth layer and it does not change the core language. A Mojo interface, where supported, is developed above the core (S7.2) and is never a bootstrap dependency.
 - **Working proof:** Doc `IMPLEMENTATION_LANGUAGE_DECISION.md` Appendices A-B; purpleviking1, aarch64, gcc/g++ 12.2.0, both -std=c11 and -std=c++17 probes compiled/linked/ran exit 0, identical unmangled C symbol, no Mojo invoked; ceiling: proves toolchain/ABI feasibility only, not interposition/correctness/performance.
 - **Supersedes:** D-005. **Status of entry:** Current.
+
+---
+
+## D-007 - Z13 redesign: TLS cache for Wave 4, per-CCD arenas for Wave 5
+
+- **Status:** Adopted (provisional only in the named re-open
+  conditions of the dossier, section 7; a re-open is a
+  superseding entry, never an edit of this one)
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice Z-026
+  (Wave 3), which names this ledger as the decision's home;
+  consuming slices Z-028 (TLS cache contract), Z-037
+  (per-CCD arena prototype), Z-039 (second arena geometry).
+- **Decision:** (1) Wave 4's road is the TLS freelist cache:
+  per-thread bins for the hot size classes over the banked
+  span machinery, lock-free on cache hit, batched refill/drain
+  to the central core on miss (Z-029), cross-thread frees
+  routed through a bounded remote-free queue per owner thread
+  (Z-030), contract first (Z-028). The 48 B and 64 B alignment
+  defects named by Z-017 are Wave 4 work on this road. (2)
+  Wave 5's first road is per-CCD arenas: two arenas, one per
+  CCD, behind a build flag, sharing the Wave 4 cache machinery
+  (Z-037), judged by the three-way contention ladder at Z-038.
+  (3) Per-thread arenas are NOT adopted as a primary road;
+  they may be taken up at Z-039 only if Z-038's landed ladder
+  argues for them. (4) Sharded central locks are NOT adopted
+  as a primary road; they are Wave 5's named fallback geometry
+  at Z-039 if Z-038 does not argue for per-thread arenas. (5)
+  The large path is not redesigned in Waves 4/5; KL-C belongs
+  to Wave 6 (Z-046..Z-054).
+- **Evidence:** docs/Z13_REDESIGN_DOSSIER.md (slice Z-026),
+  scored against docs/Z13_DESIGN_CONSTANTS.md (Z-018) and the
+  banked recorded runs it cites: Z-003 loss table (small path
+  LOSS 10.4x), Z-005 counters (3.6x..46x instruction excess;
+  small path is a code-path-length wound), Z-019 lock
+  histograms (uncontended wait at the measurement floor; hold
+  is the serialised wound - contended wait ~12x hold at 4
+  threads, ~26x at 8), Z-012 CCD constants (cross-CCD 3.2x;
+  ARENA_PER_CCD = YES), Z-016 padding rule, Z-017 alignment
+  naming (48 B, 64 B), Z-006 RSS standings. Inputs Z-020..
+  Z-025 were in flight and are recorded in the dossier as
+  OWED with named re-open triggers; no owed number is cited
+  as evidence for this decision.
+- **Supersedes:** None. **Status of entry:** Current.
 
 ---
 
