@@ -1,0 +1,221 @@
+MimirAlloc Z13 recorded run - Z-069: Canary economics
+Thu 2026-11-12 EST (runs 13:51-13:52 EST / 18:51-18:52 UTC)
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64,
+  page 4096, 128 GB UMA)
+Base: seat main a950f96 (banked Z-001..Z-066), merged into
+  yrsa/mimiralloc-team-02 as bf51906 (clean, no conflicts) on
+  top of b491d61 (Z-063, banked). This slice BUILDS AHEAD: it
+  banks only after Z-067 and Z-068 in roadmap order.
+Load state: shared host, quiet window. Baseline gate ran at
+  loadavg ~0.5; the two graded sweeps ran back to back at
+  loadavg 0.26 -> 0.32 and 0.19 -> ~0.3 (uptime read at each
+  sweep). No cross-campaign benchmark was observed running.
+  All graded quantities are medians of 5 pinned processes per
+  cell (Z-004 protocol); the identical-leg control stayed
+  within +/-2.1% in both sweeps (bound 5%).
+
+S1. Roadmap gate
+Gate (docs/MIMIRALLOC_Z13_ROADMAP.md Z-069): per-block
+canaries costed at this machine's scale (ns/op and
+bytes/block per class group); adopt where the price is
+noise, reject where it is not -- by measurement, not taste.
+Gate form: cost table + adopt/reject verdict per class
+group.
+Result: MET. The cost table is S3 (time) + S4 (bytes); the
+verdicts are S5. No production code is added by this slice:
+the only ADOPT-CANDIDATE group (G3) is adopted as a VERDICT
+whose implementation is a named follow-on (S6), per the
+campaign's paper-then-implementation separation (the
+Z-062 measurements -> Z-063 verdict -> later implementation
+pattern; the Z-037/Z-039 flag-gated geometries likewise
+landed in their own implementation slices, not in the
+slices that costed them).
+
+S2. Method (Z-004 protocol)
+Probe tests/perf/probe_z069.c: one process per (leg, class)
+cell; W blocks held in a probe array; one timed cycle =
+acquire all W (mimir_malloc), touch byte 0, release all W in
+order (mimir_free); ns/op is per alloc+free pair. Warm-up
+cycle untimed with a pairwise-distinctness proof on all W
+pointers (exit 5 on failure). Checksum is a deterministic
+function of (block index, cycle), identical across legs by
+construction; the summariser refuses (INVALID) any class
+whose legs disagree on checksum or any nonzero canary
+fault count. Runner tests/perf/run_z069.sh: every process
+pinned taskset -c 5, 3 warm-up processes per leg discarded,
+5 measured processes per cell, legs interleaved round-robin
+per repetition round, headline = median
+(tests/perf/summarize_z069.py). Legs: base (production, no
+canary), base_dup (identical duplicate; agreement control,
+bound 5%), can16 (16 B canary fill at handout + verify at
+free per block), can32 (32 B, same shape). The canary legs
+place the pattern (0xA5, the J-004 byte) in the last N
+bytes of the block extent -- the in-slack / stride-tail
+position a production tail canary occupies -- so the
+fill+verify instruction cost is measured on the real
+alloc/free cycle of this tree. Cells: representatives
+16/32/64 (G1), 128/256 (G2), 512/1024 (G3), 8192/65536
+(G4); W = 4096 blocks (footprint <= 4 MiB) for classes
+<= 1024, 256 blocks for the large classes; 4 timed rounds
+per process. Two full sweeps were run; both are preserved
+(hidden_files/z069_raw.txt, z069_raw2.txt) and both give
+identical group verdicts (S5). Sweep 1 is the headline;
+sweep 2 is the confirmation.
+
+Grading rule (stated in summarize_z069.py, applied
+mechanically): for one (form, class) --
+  ADOPT-CANDIDATE: time delta <= max(1.0 ns/op, 2% of base)
+    AND stride capacity loss <= 10%
+  REJECT: time delta > max(3.0 ns/op, 5% of base) OR
+    capacity loss > 10%
+  else MARGINAL.
+Group verdict = the worst verdict among its measured
+representative classes (a group adopts only if every
+representative can pay the price).
+
+PROBE DEFECT FOUND AND FIXED IN-SLICE: the first draft's
+can32 leg wrote its 32 B at offset 0 of the block; on the
+16 B class that is a 16 B overflow past the extent, and
+the first sweep segfaulted after 15 rows (raw preserved as
+hidden_files/z069_raw_attempt1_segfault.txt). The fault
+was the probe's, not the allocator's: no production code
+was running anything but ordinary malloc/free. Fixed by
+chunk-wrapping the fill+verify inside the extent when the
+class is smaller than the canary (full N bytes of work,
+zero bytes outside the block); the fixed probe re-ran both
+sweeps clean (180/180 rows each, exit 0, checksums
+agreeing, 0 canary faults).
+
+S3. Time cost (sweep 1 medians, ns/op per alloc+free pair)
+class    base     dup%    can16   delta    d%     can32
+  16    275.961  +0.09   278.596  +2.635  +0.95   283.310
+  32    308.474  +0.27   311.445  +2.971  +0.96   314.304
+  64    378.398  -0.35   380.437  +2.039  +0.54   384.329
+ 128    521.452  +0.04   526.599  +5.147  +0.99   530.110
+ 256    851.446  -0.15   858.345  +6.899  +0.81   861.085
+ 512   1781.709  +0.26  1789.951  +8.242  +0.46  1791.529
+1024   5610.780  -0.10  5611.509  +0.729  +0.01  5614.359
+8192   2276.966  -1.09  2606.272 +329.306 +14.46  2606.360
+65536  2274.128  +0.36  2942.801 +668.673 +29.40  2929.759
+(can32 deltas: +7.349/+5.830/+5.931/+8.658/+9.639/+9.820/
+ +3.579/+329.394/+655.631 ns, i.e. +2.66% down to +0.06%
+ on span classes, +14.47%/+28.83% on the mapping path.)
+Reading: on every span class the fill+verify instruction
+cost is 2-10 ns/op against bases of 276-5611 ns/op --
+0.01%-2.66%, at or near the control band (dup within
++/-0.35% on span classes in sweep 1). Time alone would
+call canaries noise on span classes. The G4 rows are a
+different mechanism, named in S5.
+Note on bases: this churn shape (4096 live blocks,
+alloc-all/free-all) exercises the central span paths, not
+TLS-cache hits -- the shipped policy at desktop working
+sets, measured as-is (the Z-062 caveat, unchanged).
+
+S4. Byte cost (exact, from the banked span geometry:
+page 4096 B, span header 96 B, usable 4000 B; stride forms
+tail16 = class+16, full32 = class+32 = the J-004 stride)
+class  slots  slots+16  loss%   slots+32  loss%
+  16     250       125   50.00         83   66.80
+  32     125        83   33.60         62   50.40
+  64      62        50   19.35         41   33.87
+ 128      31        27   12.90         25   19.35
+ 256      15        14    6.67        13   13.33
+ 512       7         7    0.00          7    0.00
+1024       3         3    0.00          3    0.00
+Nominal bytes/block: +16 (tail16) or +32 (full32) of
+stride. The capacity loss is the honest form of that
+price: at tiny classes the stride growth eats whole slots
+per page; at 512/1024 the page slack absorbs the growth
+entirely (floor effects: 4000/528 and 4000/544 both floor
+to 7; 4000/1056 and 4000/1088 both floor to 3).
+Nuance, recorded not hidden: these are worst-case
+full-class requests. A request with >= 16 B of slack
+inside its class (request <= class-16) can carry a tail
+canary in-slack at ZERO byte cost in any group; the
+verdicts below govern the always-on stride forms, which
+must price the worst case.
+
+S5. Verdicts per class group
+G1 tiny (classes 16-64): REJECT tail16, REJECT full32.
+  Time is noise (+0.54%..+0.96% tail16) but bytes are
+  not: capacity loss 19.35%-50.00% (tail16) and
+  33.87%-66.80% (full32). An always-on canary here pays
+  up to two-thirds of the arena for guard bytes.
+G2 small (classes 80-256): REJECT tail16, REJECT full32.
+  Governed by class 128 (loss 12.90% / 19.35% > 10%).
+  Class 256 alone would adopt tail16 (loss 6.67%, time
+  +0.81%) and reject full32 (13.33%); a group verdict
+  cannot adopt on its best class and bill its worst.
+G3 medium (classes 320-1024): ADOPT-CANDIDATE tail16,
+  ADOPT-CANDIDATE full32. Representatives 512 and 1024:
+  capacity loss 0.00% for both forms (page slack absorbs
+  the stride), time +0.01%..+0.46% (tail16) and
+  +0.06%..+0.55% (full32) in sweep 1; sweep 2 confirms
+  (+0.43%/+0.97% at 1024, the noisiest cell, still inside
+  the 2% adopt band). This is the one group where the
+  price is noise on BOTH axes.
+G4 large (>1024, descriptor/mapping path): REJECT
+  tail16, REJECT full32. The measured delta (+329 ns /
+  +14.46% at 8192; +669 ns / +29.40% at 65536, sweep 2
+  +352/+695 ns) is NOT fill+verify instruction cost --
+  can16 and can32 cost the same within noise, which no
+  instruction-count story explains. Mechanism: a tail
+  canary on a fresh mapping must be written at handout,
+  which faults in the mapping's tail page that the
+  workload (and typical callers) may never touch; the
+  base leg touches one page per block, the canary legs
+  touch one more. A canary that costs a page fault per
+  fresh large block is not noise at any size. (J-004
+  scoped the mapping path out of its red zones for its
+  own reasons, INC-J004-01; the economics here agree.)
+Standing of the existing canary: the J-004 debug red
+zones (16 B pre + 16 B post, MIMIR_DEBUG builds only)
+are untouched by these verdicts -- debug builds pay for
+detection with capacity by design. These verdicts govern
+PRODUCTION always-on adoption only.
+
+S6. Adoption record and follow-on
+Adopted as verdict: G3 tail16/full32 (either form; the
+choice between them is an implementation-slice decision
+-- full32 buys the pre-zone, the metadata-adjacent guard,
+at the same measured price on this group).
+NOT implemented in this slice: a production stride change
+for the 320-1024 classes touches span carve geometry,
+the TLS cache batching over those classes, and the J-002
+accounting of allocated bytes; by campaign precedent it
+lands as its own flag-gated implementation slice
+(MIMIR_CANARY stride variant, G3 classes only) with its
+own gate run and detection proofs. Recorded here and in
+the team's CAMPAIGN_STATE.md as the named next work if
+the keeper queues it; Z-069's own gate (cost table +
+verdicts) does not require it.
+Rejected groups need no follow-on: G1/G2 stay canary-free
+in production (in-slack tail canaries for slack-rich
+requests remain available to a future design at zero
+byte cost, S4 nuance); G4 stays as J-004 scoped it.
+
+S7. Correctness gate
+Standing gate scripts/z13/run_gate.sh on the merged tree
+BEFORE slice work (log hidden_files/z069_gate_baseline
+.log) and on the final tree (log
+hidden_files/z069_gate_final.log): both GATE COUNTS
+checks=4988 failed=0 skips=77, GATE RESULT: GREEN. This
+slice adds no suite tests (probe/runner/summariser only,
+the standalone-target pattern of the neighbouring perf
+slices), so the counts are identical to the Z-001
+baseline by construction and in fact.
+
+Files in this slice: tests/perf/probe_z069.c,
+tests/perf/run_z069.sh, tests/perf/summarize_z069.py,
+tests/perf/recorded_run_z13_z069.txt (this file).
+Raw evidence (uncommitted, team hidden_files/):
+z069_raw.txt + z069_summary.txt (sweep 1),
+z069_raw2.txt + z069_summary2.txt (sweep 2),
+z069_raw_attempt1_segfault.txt (the S2 probe defect),
+z069_gate_baseline.log, z069_gate_final.log.
+Team structure: lead ran the six Mythic Engineering
+roles (method, code, measurement, gate verification,
+ledger, risk) sequentially itself; no sub-agents were
+spawned (device-side work is serial in this worktree
+by campaign law). All counts above are read from the
+preserved raw/summary/log files, never from memory.
