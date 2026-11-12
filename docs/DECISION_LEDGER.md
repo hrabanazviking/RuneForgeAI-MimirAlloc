@@ -52,6 +52,7 @@ leaves open. Statuses in this ledger mean:
 | D-009 | Z13 placement policy trial: current policy retained; best-fit NOT taken, first-fit TIE | Adopted | Z13 roadmap Z-059; Z-059 recorded run pre-registered rule (a)-(f) | Z-059 (settler) |
 | D-010 | Z13 silent courses (D-02): COUNTER chosen over sentinel for drain/trim/free lock-failure outcomes | Adopted | Z13 roadmap Z-065; defect register D-02 (INC-M002-02) | Z-065 (settler) |
 | D-011 | Z13 diagnostics emission gate (L-07): the opt-in gate stands as the permanent posture; INC-J007-01 discharged | Adopted | Z13 roadmap Z-071; INC-J007-01 (docs/PHASE_10_DIAGNOSTICS.md S5) | Z-071 (settler) |
+| D-012 | Z13 usable size: namespaced mimir_usable_size taken (malloc_usable_size shape NOT declared/exported); exact per-class semantics defined for this target (V-05) | Adopted | Z13 roadmap Z-075; contracts.md S2.9 (MA-COND-USABLE-01..04) | Z-075 (settler) |
 
 ---
 
@@ -411,6 +412,93 @@ leaves open. Statuses in this ledger mean:
   as recorded in docs/PHASE_10_DIAGNOSTICS.md S5 (the
   interim gate posture itself is unchanged and becomes
   permanent). **Status of entry:** Current.
+
+---
+
+## D-012 - Z13 usable size: the namespaced shape, exact per class, at Z-075
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice
+  Z-075 (Wave 9), which requires the naming decision
+  (mimir_usable_size vs malloc_usable_size shape) to be
+  recorded and the implementation to be exact per class,
+  never a guess, with the decision in this ledger. The
+  contract hooks are docs/contracts.md S2.9, rows
+  MA-COND-USABLE-01..04, whose semantics are conditional
+  on the per-target record V-05; this entry IS that
+  record for the Z13 target.
+- **Decision:** (1) NAMING: the public surface is
+  `size_t mimir_usable_size(const void *ptr)`, the
+  namespaced shape. The standard name
+  `malloc_usable_size` is NOT declared in the public
+  header and NOT exported by the library (the slice's
+  ABI recorded run proves its absence from .dynsym).
+  Grounds: every surface this line has shipped is
+  namespaced (the B-008 S7.2 supported list; Z-074's
+  mimir_aligned_alloc and the posix-shaped-but-
+  namespaced mimir_posix_memalign); a bare malloc_*
+  name in the default build would interpose silently
+  in any consumer that links the .so for the
+  namespaced API -- the exact surprise the Wave 10
+  interposition slice (Z-082) exists to audit and
+  opt into deliberately, never a side effect of a
+  Wave 9 query. The const parameter records
+  MA-COND-USABLE-01's no-modification clause in the
+  type: the call is a pure query. (2) SEMANTICS
+  (V-05 for this target): the answer is read from the
+  allocator's own records, never derived from the
+  request. A span-registry block answers exactly its
+  span's class size (the G-002 table, 16..1024) --
+  no per-object requested-size record exists
+  (INC-G003-03) and the class extent is the block's
+  whole usable extent. A mapping-registry block
+  answers exactly its descriptor's usable_size
+  (mapping_length - usable_offset, revalidated by
+  descriptor_is_live on the lookup itself); a realloc
+  shrink lowers only the requested-size record, so
+  the answer after a shrink is still the mapping's
+  full usable extent. NULL answers 0. A pointer the
+  registries can determine is not a live block --
+  foreign, interior, or already freed (span free
+  list, retired or pooled descriptor, or the calling
+  thread's own TLS bin, which the core checks by
+  identity) -- answers 0 by free's non-destructive
+  S8.3 course; lock failure answers 0 (the F-07
+  posture carried to a query). (3) THE NAMED
+  BOUNDARY: a block resident in ANOTHER thread's TLS
+  bin is indistinguishable from live to any other
+  thread -- the cache holds no cross-thread identity
+  index by design (Z-028 contract S9) -- and is
+  answered as its class extent. No promise is made
+  for it: asking after a freed block is use after
+  free, UB across the family, and MA-COND-USABLE-03
+  states no behaviour for a released argument. The
+  boundary is recorded here rather than hidden; a
+  future cache redesign that adds a cross-thread
+  residence index may narrow it, at its own slice's
+  recorded decision. (4) The slice adds one public
+  symbol: the shared library's export list grows
+  from six to exactly seven as an explicit contract
+  change, recorded in the slice's ABI run.
+- **Evidence:** tests/abi/recorded_run_z13_z075.txt
+  (static exactness test tests/abi/test_z075.c --
+  every request 1..1024 against the class table, the
+  mapping ladder, calloc/aligned composition, NULL /
+  interior / foreign / freed refusals, realloc shrink
+  and move postures, cross-thread courses, the audit
+  counter -- plus the dynamic and C++ consumers and
+  the run_z075.sh ABI proofs), with the standing gate
+  green (4988/0/77) on the final tree. Above-page
+  aligned extents proved to be per-block record state:
+  the mapping base is page-aligned, not
+  alignment-aligned, so the usable offset -- and with
+  it the answer -- varies with the base's alignment
+  residue (probe on this host: aligned_alloc(8192,
+  100) answered 12288, aligned_alloc(16384, 100)
+  answered 8192); the test pins invariants for that
+  case and exact values everywhere a closed form
+  exists.
+- **Supersedes:** None. **Status of entry:** Current.
 
 ---
 

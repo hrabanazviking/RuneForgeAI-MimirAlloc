@@ -1,0 +1,142 @@
+Z-075 -- Usable size (Wave 9)
+Roadmap gate: per-class exactness tests green; naming
+decision recorded in the ledger (docs/DECISION_LEDGER.md,
+decision D-012). Gate: contract green; ABI recorded runs
+filed.
+
+SURFACE (decision D-012; behaviour by analogy under
+[UNRESOLVED: U-03] to contracts.md MA-COND-USABLE-01/02,
+with the V-05 per-target semantics D-012 defines):
+  size_t mimir_usable_size(const void *ptr)
+The public name is the namespaced mimir_* shape. A
+malloc_usable_size-shaped standard name is NOT declared
+and NOT exported by this slice: standard-name
+interposition is Wave 10's opt-in business (Z-082), the
+same posture as Z-073's aligned entries. The const
+parameter records MA-COND-USABLE-01's no-modification
+clause in the type.
+
+SEMANTICS (the answer is read from the allocator's own
+records, never computed from the request, never a guess):
+  - span block (any request the class machinery served,
+    1..1024 bytes at publication): exactly the span's
+    class size. No per-object requested-size record
+    exists under the G-002 span layout (INC-G003-03);
+    the class extent is the block's whole usable extent.
+  - mapping block (requests above the cutoff, and every
+    aligned block above the family floor): exactly the
+    descriptor's usable_size (mapping_length -
+    usable_offset), revalidated live on the lookup.
+  - NULL: 0. A pointer the registries determine is not
+    a live block (foreign, interior, already freed --
+    central free, this thread's own TLS bin, retired
+    descriptor): 0, non-destructively; the argument is
+    never dereferenced.
+  - realloc shrink never reduces the answer (small:
+    class retained; large: only the requested-size
+    record drops). A move answers the new block's own
+    extent.
+  - lock failure at entry: 0 (the F-07 posture carried
+    to a query); untriggerable through the public API
+    on a healthy host, rests on inspection
+    (INC-C005-03).
+  - named boundary: a block freed into ANOTHER thread's
+    TLS bin is indistinguishable from live (the cache
+    holds no cross-thread identity index, Z-028 S9);
+    querying a pointer another thread freed is
+    use-after-free, UB across the family
+    (MA-COND-USABLE-03). Above-page aligned extents are
+    per-block record state for the same reason in
+    miniature: the offset depends on the mapping base's
+    alignment residue (probe: 8192/100 -> 12288,
+    16384/100 -> 8192); the test pins invariants there
+    and exact values everywhere a closed form exists.
+
+EXPORT: the version script gains exactly one global --
+mimir_usable_size -- for exactly seven exported
+allocator entry points; the nm -D count assertion in
+run_z075.sh pins 7 and the absence of
+malloc_usable_size.
+
+Below: the ABI run (bash tests/abi/run_z075.sh on
+purpleraider, Kubuntu 26.10, 2026-11-12): export and
+link proofs against the freshly built libmimiralloc.so,
+then the static, dynamic and C++ consumers, then the
+neighbour suites (Z-074's static/dynamic/C++ consumers
+and the E-005 audit-counter suite) against the same
+build.
+
+=== Z-075 ABI recorded run ===
+date_utc: 2026-11-12T21:42:42Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: 3021debbb82d5b9edfbae8eaae70718a5860bf06
+branch: yrsa/mimiralloc-team-01
+loadavg: 0.12 0.46 0.69 1/1210 2080094
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + z075 consumers (log hidden_files/z075_build.log)
+=== S2 shared library exports (nm -D) - exactly the 7 public symbols ===
+00000000000061a0 T mimir_aligned_alloc
+00000000000055e0 T mimir_calloc
+0000000000004d50 T mimir_free
+0000000000004d30 T mimir_malloc
+00000000000061c0 T mimir_posix_memalign
+0000000000005740 T mimir_realloc
+0000000000006240 T mimir_usable_size
+defined dynamic symbol count: 7
+  [ok] count == 7
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_usable_size
+=== S3 absence proofs - no internal symbol is exported ===
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+  [ok] malloc_usable_size NOT exported (D-012: namespaced shape only)
+=== S4 consumers bind to the .so (DT_NEEDED + undefined symbols) ===
+-- test_z075_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z075_dyn DT_NEEDED names libmimiralloc.so
+                 U mimir_usable_size
+  [ok] test_z075_dyn references mimir_usable_size as undefined (U)
+  [ok] test_z075_dyn does not define mimir_usable_size (not statically absorbed)
+-- test_z075_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z075_cpp DT_NEEDED names libmimiralloc.so
+                 U mimir_usable_size
+  [ok] test_z075_cpp references mimir_usable_size as undefined (U)
+  [ok] test_z075_cpp does not define mimir_usable_size (not statically absorbed)
+-- C++ consumer object: unmangled reference --
+                 U mimir_usable_size
+  [ok] test_z075_cpp.o undefined reference is unmangled (extern C guards cover the new declaration)
+=== S5 header-only translation units (compile-only) ===
+-rw-r--r-- 1 volmarr volmarr 3448 Nov 12 16:42 build/header_only_z075_c.o
+-rw-r--r-- 1 volmarr volmarr 1208 Nov 12 16:42 build/header_only_z075_cpp.o
+  [ok] header-only C and C++ objects built (header self-contained, exact prototype)
+=== S6 static exactness test ===
+Z-075 usable size exactness test (static link)
+Z075 STATIC: 5252 checks, 0 failed
+RESULT: PASS
+  [ok] test_z075 exit 0
+=== S7 dynamic C consumer ===
+Z-075 dynamic consumer (libmimiralloc.so only)
+Z075 DYN: 9 checks, 0 failed
+RESULT: PASS
+  [ok] test_z075_dyn exit 0
+=== S8 C++ consumer ===
+Z-075 C++ consumer (libmimiralloc.so only)
+Z075 CPP: 7 checks, 0 failed
+RESULT: PASS
+  [ok] test_z075_cpp exit 0
+=== S9 neighbour evidence: Z-074 suite and E-005 audit readers ===
+  [ok] make test-z074 still passes (log hidden_files/z075_test_z074.log)
+  [ok] make test-e005 still passes (log hidden_files/z075_test_e005.log)
+=== Z-075 ABI RUN RESULT: PASS ===

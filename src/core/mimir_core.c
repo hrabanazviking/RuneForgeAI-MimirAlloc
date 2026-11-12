@@ -7734,3 +7734,130 @@ void mimir_core_free(void *ptr)
      * and a second free is double-free UB (S11.2 step 9). */
     (void)core_global_unlock();
 }
+
+/*
+ * Z-075 -- usable size (Wave 9; roadmap Z-075, decision
+ * D-012 in docs/DECISION_LEDGER.md): the exact usable
+ * extent of a live block, by analogy under U-03 to
+ * contracts.md MA-COND-USABLE-01/-02, with the V-05
+ * per-target semantics DEFINED by D-012 as follows --
+ * the answer is read from the allocator's own records,
+ * never computed from the request and never guessed:
+ *   - a span-registry block (any request the class
+ *     machinery served, 1..1024 bytes at publication):
+ *     exactly its span's class size. No per-object
+ *     requested-size record exists under the G-002 span
+ *     layout (INC-G003-03), and the class extent is the
+ *     block's whole usable extent -- every byte of it is
+ *     the caller's to use, which the slice's tests prove
+ *     by filling and re-reading the full class extent.
+ *   - a mapping-registry block (requests above the
+ *     cutoff, and every aligned block above the family
+ *     floor): exactly the descriptor's usable_size,
+ *     which publication wrote as mapping_length -
+ *     usable_offset and descriptor_is_live revalidates
+ *     on this very lookup. A realloc shrink lowers only
+ *     the requested-size record, so the answer after a
+ *     shrink is still the mapping's full usable extent
+ *     (those bytes remain the caller's; the answer is
+ *     the extent, not the last request).
+ *   - NULL: 0 (MA-COND-USABLE-02's null case, defined
+ *     for this target by D-012; glibc agrees).
+ *   - a pointer the registries can determine is not a
+ *     live block -- foreign, interior, or already freed
+ *     (on a span's free list, retired or pooled in the
+ *     mapping registry, or resident in the CALLING
+ *     thread's TLS bin): 0, by the non-destructive
+ *     course of free's S8.3 posture, with the defined
+ *     return a query can give. The lookup never
+ *     dereferences the argument: ownership is decided
+ *     by walking allocator-owned registry links and
+ *     comparing pointer values, exactly as in free
+ *     (the span walk's free-list reads are of
+ *     allocator-owned span pages, under the J-006
+ *     bounds discipline).
+ *   - lock failure at entry: 0 (the F-07 posture
+ *     carried to a query: nothing can be proven, so
+ *     nothing is claimed). This branch cannot be
+ *     triggered through the public API on a healthy
+ *     host -- no fault-injection hook is wired into
+ *     this suite -- and rests on code inspection, the
+ *     INC-C005-03 posture for such branches.
+ * The one residence no other thread can distinguish
+ * from live is a block sitting in ANOTHER thread's TLS
+ * bin: the cache holds no cross-thread identity index
+ * by design (Z-028 contract S9: no tid-indexed shared
+ * array), so such a pointer is answered from the span
+ * registry as its class extent. Asking after a block
+ * another thread has freed is use-after-free -- UB
+ * across the whole family (MA-COND-USABLE-03 states no
+ * behaviour for a released argument) -- and D-012
+ * records this boundary rather than papering over it;
+ * the calling thread's own bin IS checked by identity
+ * below, so a same-thread free is always answered 0.
+ * The call modifies nothing: no counter moves, no
+ * record changes; the only state it touches is the
+ * calling thread's own pending TLS accounting, which
+ * it flushes under the lock first, exactly as every
+ * other locked entry point does.
+ */
+#ifndef MIMIR_DEBUG
+/* Identity scan of the calling thread's own TLS bins:
+ * a block resident there has been freed by this thread
+ * and not yet drained to its span's free list, so the
+ * span registry alone would still call it live. The
+ * bins are thread-local static storage (zeroed before
+ * first use, so the scan is safe on a thread that has
+ * never allocated); no lock and no cache
+ * initialisation are needed to read them. */
+static int z075_own_bin_contains(const void *ptr)
+{
+    size_t ci;
+    size_t i;
+
+    for (ci = 0; ci < MIMIR_TLS_CLASS_COUNT; ci++) {
+        for (i = 0; i < tls.bin_len[ci]; i++) {
+            if (tls.bins[ci][i] == ptr) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+#endif /* !MIMIR_DEBUG */
+
+size_t mimir_core_usable_size(const void *ptr)
+{
+    struct mimir_descriptor *desc;
+    struct mimir_span_header *span;
+    size_t result = 0;
+
+    if (ptr == NULL) {
+        return 0;
+    }
+#ifndef MIMIR_DEBUG
+    if (z075_own_bin_contains(ptr)) {
+        return 0; /* freed into this thread's own bin */
+    }
+#endif
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return 0; /* F-07 posture: nothing can be proven */
+    }
+    tls_flush_locked(); /* Z-029: as every locked entry */
+    desc = find_candidate_locked((void *)ptr);
+    if (desc != NULL && descriptor_is_live(desc)) {
+        result = desc->usable_size;
+        (void)core_global_unlock();
+        return result;
+    }
+#ifdef MIMIR_LOCK_SHARD
+    span = find_span_live_any_locked((void *)ptr);
+#else
+    span = find_span_live_locked((void *)ptr);
+#endif
+    if (span != NULL) {
+        result = span->class_size;
+    }
+    (void)core_global_unlock();
+    return result;
+}

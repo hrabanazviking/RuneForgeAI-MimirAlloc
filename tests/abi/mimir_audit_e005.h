@@ -55,6 +55,9 @@ extern unsigned long mimir_audit_call_free;
  * original four declarations above are unchanged. */
 extern unsigned long mimir_audit_call_aligned_alloc;
 extern unsigned long mimir_audit_call_posix_memalign;
+/* Z-075: appended for the usable-size entry point; the
+ * declarations above are unchanged. */
+extern unsigned long mimir_audit_call_usable_size;
 extern unsigned long mimir_audit_alloc_published;
 extern unsigned long mimir_audit_mapping_retired;
 

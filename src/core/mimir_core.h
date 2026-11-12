@@ -68,6 +68,18 @@ void *mimir_core_aligned_alloc(size_t alignment, size_t size);
 int mimir_core_posix_memalign(void **memptr, size_t alignment,
                               size_t size);
 
+/* Usable size (Z-075, Wave 9; decision D-012): the exact
+ * usable extent of a live block -- the span's class size
+ * for a class-machinery block, the descriptor's
+ * usable_size for a mapping-registry block -- read from
+ * the allocator's own records, never derived from the
+ * request and never guessed. NULL, a determinably
+ * non-live pointer (foreign, interior, already freed)
+ * and a lock failure all answer 0; the call modifies
+ * nothing. Full rules, including the cross-thread
+ * TLS-bin boundary, in mimir_core.c. */
+size_t mimir_core_usable_size(const void *ptr);
+
 /* Unload drain (H-001, docs/PHASE_7_UNLOAD_DRAIN_H001.md):
  * under the one global lock, release every retained EMPTY
  * span (live_count == 0) whole through L6 and return how

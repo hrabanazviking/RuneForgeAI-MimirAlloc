@@ -13,9 +13,11 @@
  * mimir_realloc -- the B-008 S7.2 supported-call list, as
  * amended by B-008 -- plus, from Z-074 (Wave 9), the two
  * explicit-alignment entry points of the Z-073 contract:
- * mimir_aligned_alloc and mimir_posix_memalign. Nothing
+ * mimir_aligned_alloc and mimir_posix_memalign -- plus,
+ * from Z-075 (Wave 9), the usable-size query
+ * mimir_usable_size (decision D-012). Nothing
  * else is declared: no standard-name malloc/free
- * replacement, no usable-size, statistics, trim, or
+ * replacement, no statistics, trim, or
  * reallocarray entry point. Absent symbols are the
  * documented unsupported behaviour for those facilities
  * (B-008 S6.1: not present - absence at link time, never a
@@ -214,6 +216,38 @@ void *mimir_aligned_alloc(size_t alignment, size_t size);
  * closure is Z-078's). */
 int mimir_posix_memalign(void **memptr, size_t alignment,
                          size_t size);
+
+/* Z-075, per decision D-012 (by analogy under U-03 to
+ * MA-COND-USABLE-01/-02; the V-05 semantics for this
+ * target are defined by D-012): the exact usable extent
+ * of a live block from this allocator family -- the size
+ * class's extent for a class-served block, the mapping's
+ * usable extent for a mapping-served block (which a
+ * realloc shrink does NOT reduce: shrink lowers only the
+ * requested-size record). The result is read from the
+ * allocator's records, never derived from the request,
+ * and the call modifies nothing (MA-COND-USABLE-01's
+ * no-modification clause is part of this signature: the
+ * parameter is const). mimir_usable_size(NULL) is 0
+ * (MA-COND-USABLE-02's null case, defined for this
+ * target). A pointer that is not a live family block --
+ * foreign, interior, or already freed -- is answered 0
+ * whenever the allocator can determine it (a block freed
+ * by the calling thread is always determined); the
+ * single indeterminable residence, a block sitting in
+ * another thread's TLS cache bin, is recorded in D-012:
+ * asking after any freed block is use after free,
+ * undefined behaviour across the family
+ * (MA-COND-USABLE-03), and no caller may rely on an
+ * answer for one. The standard name malloc_usable_size
+ * is NOT declared by this header and NOT exported by
+ * the library (D-012): standard-name interposition is
+ * the Wave 10 opt-in variant's business, never a
+ * surprise from the namespaced surface. errno is not
+ * promised (U-10): 0 is the only refusal value and also
+ * the NULL answer, by design -- a live block's usable
+ * extent is never 0. */
+size_t mimir_usable_size(const void *ptr);
 
 #ifdef __cplusplus
 }

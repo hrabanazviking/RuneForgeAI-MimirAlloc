@@ -155,7 +155,7 @@ void *mimir_realloc(void *ptr, size_t size)
  * declarations are appended to tests/abi/mimir_audit_e005.h),
  * and bound local in the shared library by the version
  * script's local: * -- the .so export count is exactly the
- * six public entry points after Z-074, never these.
+ * seven public entry points after Z-075, never these.
  */
 _Alignas(64) unsigned long mimir_audit_call_aligned_alloc;
 _Alignas(64) unsigned long mimir_audit_call_posix_memalign;
@@ -173,4 +173,27 @@ int mimir_posix_memalign(void **memptr, size_t alignment,
     __atomic_fetch_add(&mimir_audit_call_posix_memalign, 1UL,
                        __ATOMIC_RELAXED);
     return mimir_core_posix_memalign(memptr, alignment, size);
+}
+
+/*
+ * Z-075 audit counter: the E-005 shape carried to the
+ * usable-size entry point -- counts CALLS at this L1
+ * boundary, exactly once per invocation, whatever the
+ * outcome (a live answer, the NULL answer, or a refusal
+ * 0). APPENDED after the Z-074 counters so every
+ * existing reader is undisturbed; declared in no
+ * installed header, read only by a test-only static
+ * build (the declaration is appended to
+ * tests/abi/mimir_audit_e005.h), and bound local in the
+ * shared library by the version script's local: * --
+ * the .so export count is exactly the seven public
+ * entry points after Z-075, never this.
+ */
+_Alignas(64) unsigned long mimir_audit_call_usable_size;
+
+size_t mimir_usable_size(const void *ptr)
+{
+    __atomic_fetch_add(&mimir_audit_call_usable_size, 1UL,
+                       __ATOMIC_RELAXED);
+    return mimir_core_usable_size(ptr);
 }
