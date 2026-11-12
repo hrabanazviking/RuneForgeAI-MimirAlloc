@@ -161,6 +161,10 @@
 #include <string.h>
 #include <stdlib.h> /* J-007: getenv for the channel's
                        * enable gate (INC-J007-01). */
+#include <stdio.h>  /* Z-050: fopen/fread for the live
+                       * /proc/pressure/memory read only. */
+#include <time.h>   /* Z-050: clock_gettime(CLOCK_MONOTONIC)
+                       * for the retained-pool idle clock. */
 #include <threads.h>
 #include <unistd.h> /* J-007: write(2) / STDERR_FILENO for
                        * the diagnostic channel only (the
@@ -5120,6 +5124,205 @@ size_t mimir_core_pool_bytes(void)
     n = mimir_pool_bytes;
     (void)mimir_platform_global_unlock();
     return n;
+}
+/* ---- Z-050 trim policy under pressure --------------------
+ * docs/Z13_TRIM_POLICY.md. The policy layer over the I-003
+ * trim surface above: it decides WHEN retained EMPTY spans
+ * go back to the OS, from two inputs only -- a PSI sample
+ * (/proc/pressure/memory) and the retained pool's idle time
+ * -- and it executes exclusively through the existing trim
+ * entry points, so there is still exactly ONE release path
+ * (span_release_locked via trim_some_locked, I-002 S5.1).
+ * Conservative by construction (policy doc S2): with no
+ * pressure and a young pool it does nothing; a read failure
+ * does nothing (fail-calm: a broken pressure input must
+ * never cause a trim, and never blocks one the caller
+ * drives explicitly through mimir_core_trim_retained).
+ * Thresholds are the policy of record, named here once:
+ *   HIGH   some_avg10 >= 5.00 or full_avg10 >= 2.50 (PSI %)
+ *   RAISED some_avg10 >= 1.00
+ *   under RAISED, idle >= 10 s escalates PARTIAL -> FULL
+ *   CALM (below RAISED): idle >= 60 s earns PARTIAL only
+ * PARTIAL releases half the retained spans (rounded up),
+ * class-fair, through mimir_core_trim_retained_some.
+ * The idle clock is pool-level, derived at tick time from
+ * the J-002 activity counters: while retained bytes exist
+ * and bytes_requested + bytes_released has not moved since
+ * the previous tick, the pool is idle. The policy's own
+ * releases move bytes_released, so a trim restarts the
+ * idle clock -- deliberate: a pool that just paid a trim
+ * is never immediately re-trimmed by the calm band.
+ * The tick statics below are advisory policy state, not
+ * allocator state: the tick is a caller-driven evaluation
+ * (no background thread exists in this allocator), and a
+ * racing pair of ticks can at worst agree on a decision
+ * the table would have taken anyway. */
+#define MIMIR_Z050_PSI_HIGH_SOME 5.0
+#define MIMIR_Z050_PSI_HIGH_FULL 2.5
+#define MIMIR_Z050_PSI_RAISED_SOME 1.0
+#define MIMIR_Z050_IDLE_RAISED_S ((uint64_t)10)
+#define MIMIR_Z050_IDLE_CALM_S ((uint64_t)60)
+
+int mimir_pressure_parse(const char *text,
+                         struct mimir_pressure_sample *out)
+{
+    struct mimir_pressure_sample parsed;
+    const char *p;
+
+    if (text == NULL || out == NULL) {
+        return -1;
+    }
+    memset(&parsed, 0, sizeof parsed);
+    p = strstr(text, "some avg10=");
+    if (p == NULL) {
+        return -1;
+    }
+    parsed.some_avg10 = strtod(p + strlen("some avg10="), NULL);
+    /* The total= field sits at the END of each PSI line
+     * ("some avg10=.. avg60=.. avg300=.. total=.."): there
+     * is no "some total=" substring in the kernel format.
+     * Anchor each total= search at its own line start. */
+    p = strstr(text, " total=");
+    if (p == NULL) {
+        return -1;
+    }
+    parsed.some_total_us =
+        strtoull(p + strlen(" total="), NULL, 10);
+    p = strstr(text, "full avg10=");
+    if (p == NULL) {
+        return -1;
+    }
+    parsed.full_avg10 = strtod(p + strlen("full avg10="), NULL);
+    p = strstr(p, " total=");
+    if (p == NULL) {
+        return -1;
+    }
+    parsed.full_total_us =
+        strtoull(p + strlen(" total="), NULL, 10);
+    /* strtod/strtoull accept empty fields as 0; the kernel
+     * format always carries digits, and a text lacking the
+     * avg300 marker between avg10 and total is not PSI. */
+    if (strstr(text, "avg300=") == NULL) {
+        return -1;
+    }
+    *out = parsed;
+    return 0;
+}
+
+int mimir_core_pressure_read(struct mimir_pressure_sample *out)
+{
+    char buf[512];
+    size_t n;
+    FILE *f;
+
+    if (out == NULL) {
+        return -1;
+    }
+    f = fopen("/proc/pressure/memory", "r");
+    if (f == NULL) {
+        return -1;
+    }
+    n = fread(buf, 1, sizeof buf - 1, f);
+    (void)fclose(f);
+    if (n == 0) {
+        return -1;
+    }
+    buf[n] = '\0';
+    return mimir_pressure_parse(buf, out);
+}
+
+int mimir_trim_decision_for(const struct mimir_pressure_sample *sample,
+                            uint64_t idle_seconds)
+{
+    if (sample == NULL) {
+        return MIMIR_TRIM_DECISION_NONE;
+    }
+    if (sample->some_avg10 >= MIMIR_Z050_PSI_HIGH_SOME ||
+        sample->full_avg10 >= MIMIR_Z050_PSI_HIGH_FULL) {
+        return MIMIR_TRIM_DECISION_FULL;
+    }
+    if (sample->some_avg10 >= MIMIR_Z050_PSI_RAISED_SOME) {
+        return idle_seconds >= MIMIR_Z050_IDLE_RAISED_S
+                   ? MIMIR_TRIM_DECISION_FULL
+                   : MIMIR_TRIM_DECISION_PARTIAL;
+    }
+    return idle_seconds >= MIMIR_Z050_IDLE_CALM_S
+               ? MIMIR_TRIM_DECISION_PARTIAL
+               : MIMIR_TRIM_DECISION_NONE;
+}
+
+size_t mimir_core_trim_policy_apply(
+    const struct mimir_pressure_sample *sample,
+    uint64_t idle_seconds, int *out_decision)
+{
+    int decision = mimir_trim_decision_for(sample, idle_seconds);
+    size_t spans;
+
+    if (out_decision != NULL) {
+        *out_decision = decision;
+    }
+    if (decision == MIMIR_TRIM_DECISION_FULL) {
+        return mimir_core_trim_retained();
+    }
+    if (decision == MIMIR_TRIM_DECISION_PARTIAL) {
+        spans = mimir_core_retained_spans();
+        if (spans == (size_t)-1 || spans == 0) {
+            return 0;
+        }
+        return mimir_core_trim_retained_some((spans + 1) / 2);
+    }
+    return 0;
+}
+
+static uint64_t z050_policy_last_activity;
+static uint64_t z050_policy_idle_since_s;
+static int z050_policy_idle_valid;
+
+static uint64_t z050_policy_now_s(void)
+{
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0;
+    }
+    return (uint64_t)ts.tv_sec;
+}
+
+int mimir_core_trim_policy_tick(struct mimir_trim_policy_report *report)
+{
+    struct mimir_stats stats;
+    uint64_t activity;
+    uint64_t now_s;
+
+    if (report == NULL) {
+        return -1;
+    }
+    memset(report, 0, sizeof *report);
+    if (mimir_core_pressure_read(&report->sample) != 0) {
+        return -1;
+    }
+    if (mimir_core_stats_snapshot(&stats) != 0) {
+        return -1;
+    }
+    activity = stats.bytes_requested + stats.bytes_released;
+    now_s = z050_policy_now_s();
+    if (!z050_policy_idle_valid ||
+        activity != z050_policy_last_activity) {
+        z050_policy_last_activity = activity;
+        z050_policy_idle_since_s = now_s;
+        z050_policy_idle_valid = 1;
+        report->idle_seconds = 0;
+    } else {
+        report->idle_seconds = now_s - z050_policy_idle_since_s;
+    }
+    report->retained_before = mimir_core_retained_bytes();
+    if (report->retained_before == (size_t)-1) {
+        return -1;
+    }
+    report->released_spans = mimir_core_trim_policy_apply(
+        &report->sample, report->idle_seconds, &report->decision);
+    report->retained_after = mimir_core_retained_bytes();
+    return 0;
 }
 
 /*

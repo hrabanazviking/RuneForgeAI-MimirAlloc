@@ -1,0 +1,72 @@
+MimirAlloc Z13 recorded run - Z-050 Trim policy under pressure
+slice: Z-050 - Trim policy under pressure (Wave 6)
+date: 2026-11-12 (America/Indiana/Indianapolis)
+base: merge 95841de (seat main 517bbb1, banked Z-001..Z-046, merged into yrsa/mimiralloc-team-04; 5 conflicts resolved seat-side, Z-043 fixes preserved and gate-verified)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+machine load state: shared host (Aesir forge + Tensile lab co-tenants); run header below carries loadavg start/end; RSS legs are resident-memory measurements, process-local, not timings
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z050_gate.log: 4988 checks / 0 failed / 77 by-design skips, GATE RESULT: GREEN
+nm -D on libmimiralloc.so: exactly 4 public symbols (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free)
+verdict: unit/policy suite 60 run / 0 failed; pressure-cycle probe PASS 3/3; RSS fell by exactly 384 KiB = retained bytes (393216 B) in every attempt under an injected HIGH PSI sample; CALM leg released 0. Mapping-pool clauses CONDITION-PENDING on Z-048 banking (docs/Z13_TRIM_POLICY.md S6); mapping-pool cycle leg OWED to Z-060.
+
+=== RUN (tests/perf/run_z050.sh output, verbatim) ===
+run_z050_version: 1
+date_local: 2026-11-12T07:42:21-0500
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+loadavg_start: 2.11 1.52 1.47 2/1253 802925
+pressure_memory_live: some avg10=0.00 avg60=0.00 avg300=0.00 total=1024312 full avg10=0.00 avg60=0.00 avg300=0.00 total=991899 
+tick: some_avg10=0.00 full_avg10=0.00 idle=0s decision=0 released=0 retained=0->0
+Z050 CHECKS: 60 run, 0 failed
+unit_exit: 0
+--- probe attempt 1 ---
+rss_base_kib=1864
+retained_spans=96
+retained_bytes=393216
+rss_after_free_kib=6592
+calm_decision=0
+calm_released=0
+rss_after_calm_kib=6724
+pressure_decision=2
+pressure_released=96
+retained_after_pressure=0
+rss_after_pressure_kib=6340
+rss_drop_kib=384
+PROBE_Z050: PASS
+probe_exit: 0
+--- probe attempt 2 ---
+rss_base_kib=1860
+retained_spans=96
+retained_bytes=393216
+rss_after_free_kib=6588
+calm_decision=0
+calm_released=0
+rss_after_calm_kib=6720
+pressure_decision=2
+pressure_released=96
+retained_after_pressure=0
+rss_after_pressure_kib=6336
+rss_drop_kib=384
+PROBE_Z050: PASS
+probe_exit: 0
+--- probe attempt 3 ---
+rss_base_kib=1864
+retained_spans=96
+retained_bytes=393216
+rss_after_free_kib=6592
+calm_decision=0
+calm_released=0
+rss_after_calm_kib=6724
+pressure_decision=2
+pressure_released=96
+retained_after_pressure=0
+rss_after_pressure_kib=6340
+rss_drop_kib=384
+PROBE_Z050: PASS
+probe_exit: 0
+loadavg_end: 2.11 1.52 1.47 2/1253 802948
+
+=== SUMMARY (tests/perf/summarize_z050.py) ===
+unit_checks_run: 60
+unit_checks_failed: 0
+probe_pass: 3/3
+probe_fail_lines: 0
+Z050 SUMMARY: PASS

@@ -966,6 +966,33 @@ test-z048: $(BUILD)/test_z048_pool
 
 .PHONY: test-z048
 
+# Z-050: trim policy under pressure - the policy suite
+# under tests/core/ (test_z050_trim_policy.c) plus the
+# RSS pressure-cycle probe under tests/perf/ (probe_z050.c),
+# built against the production LIBOBJS (test-only static
+# link, like test-z043). Standalone via make test-z050;
+# NOT part of make test (standing gate counts untouched).
+# Recorded run: tests/perf/recorded_run_z13_z050.txt.
+$(BUILD)/test_z050_trim_policy.o: tests/core/test_z050_trim_policy.c tests/core/mimir_trim_policy_z050.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/test_z050_trim_policy.c -o $@
+
+$(BUILD)/test_z050_trim_policy: $(LIBOBJS) $(BUILD)/test_z050_trim_policy.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z050_trim_policy.o -o $@
+
+test-z050: $(BUILD)/test_z050_trim_policy
+	./$(BUILD)/test_z050_trim_policy
+
+.PHONY: test-z050
+
+$(BUILD)/probe_z050.o: tests/perf/probe_z050.c tests/core/mimir_trim_policy_z050.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_z050.c -o $@
+
+$(BUILD)/probe_z050: $(LIBOBJS) $(BUILD)/probe_z050.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_z050.o -o $@
+
+probe-z050: $(BUILD)/probe_z050
+
+.PHONY: probe-z050
 
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies

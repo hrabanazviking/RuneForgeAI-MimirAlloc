@@ -100,6 +100,70 @@ size_t mimir_core_mapped_bytes(void);
 size_t mimir_core_pool_count(void);
 size_t mimir_core_pool_bytes(void);
 
+/* Z-050 trim policy under pressure (docs/Z13_TRIM_POLICY.md):
+ * the conservative return-to-OS policy over the I-003 trim
+ * surface. Driven by a /proc/pressure/memory sample (PSI) and
+ * by how long the retained pool has been idle. Internal only,
+ * INC-E001-07 shape (b) exactly like drain/trim above: NOT
+ * part of the public surface in include/mimir_alloc.h, bound
+ * local in the shared library (nm -D stays exactly 4); the
+ * test-only redeclaration is
+ * tests/core/mimir_trim_policy_z050.h. */
+struct mimir_pressure_sample {
+    double some_avg10;      /* PSI some avg10, percent */
+    double full_avg10;      /* PSI full avg10, percent */
+    uint64_t some_total_us; /* PSI some total stall, us */
+    uint64_t full_total_us; /* PSI full total stall, us */
+};
+
+/* Decision values of mimir_trim_decision_for /
+ * mimir_core_trim_policy_apply / the tick report. */
+#define MIMIR_TRIM_DECISION_NONE   0
+#define MIMIR_TRIM_DECISION_PARTIAL 1
+#define MIMIR_TRIM_DECISION_FULL   2
+
+struct mimir_trim_policy_report {
+    struct mimir_pressure_sample sample;
+    uint64_t idle_seconds;   /* retained-pool idle time at tick */
+    int decision;            /* MIMIR_TRIM_DECISION_* */
+    size_t released_spans;   /* spans this tick released */
+    size_t retained_before;  /* Q-RETAINED bytes before */
+    size_t retained_after;   /* Q-RETAINED bytes after */
+};
+
+/* Pure parser for /proc/pressure/memory text (both lines,
+ * kernel field order). Returns 0 on success, -1 on any
+ * malformed or missing field; *out is untouched on failure. */
+int mimir_pressure_parse(const char *text,
+                         struct mimir_pressure_sample *out);
+/* Read and parse this host's live /proc/pressure/memory.
+ * Returns 0 on success, -1 if the file cannot be read or
+ * parsed (policy then does nothing: fail-calm, never
+ * fail-trim). */
+int mimir_core_pressure_read(struct mimir_pressure_sample *out);
+/* The decision table of docs/Z13_TRIM_POLICY.md S2, as a pure
+ * function: pressure band x idle seconds -> decision. */
+int mimir_trim_decision_for(const struct mimir_pressure_sample *sample,
+                            uint64_t idle_seconds);
+/* Execute one decision against the retained span pool
+ * (FULL: mimir_core_trim_retained; PARTIAL: half the retained
+ * spans, class-fair, via mimir_core_trim_retained_some;
+ * NONE: nothing). Returns spans actually released and, when
+ * out_decision is non-NULL, stores the decision taken. Once
+ * the Z-048 mapping cache is banked, its full-trim surface
+ * also releases the mapping pool; see the CONDITION-PENDING
+ * section of docs/Z13_TRIM_POLICY.md. */
+size_t mimir_core_trim_policy_apply(
+    const struct mimir_pressure_sample *sample,
+    uint64_t idle_seconds, int *out_decision);
+/* One live policy tick: read PSI, derive the retained pool's
+ * idle time from the J-002 activity counters
+ * (bytes_requested + bytes_released unchanged while bytes
+ * are retained == idle), apply the decision, and file the
+ * report. Returns 0 on success, -1 on a read/snapshot
+ * failure, in which case nothing is trimmed. */
+int mimir_core_trim_policy_tick(struct mimir_trim_policy_report *report);
+
 /* G-007 tuning pair (docs/PHASE_7_TUNING_PARAMETERS_G007.md):
  * the per-class empty-span retention bound setter/getter,
  * defined in mimir_core.c over the one locked scalar.
