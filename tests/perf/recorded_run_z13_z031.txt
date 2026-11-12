@@ -1,0 +1,370 @@
+MimirAlloc Z13 recorded run - Z-031 Small-path verdict run
+slice: Z-031 - Small-path verdict run: small_churn + mixed_batch re-run under the full oracle protocol; verdict vs Z-009 and glibc recorded per workload (roadmap Law 2)
+date: 2026-11-12T09:19:31Z main run (headers below carry each run's own stamp); gate run immediately after, same tree
+base: 8e61167 (branch yrsa/mimiralloc-team-09: merge of seat main c84f021, banked Z-001..Z-020, into the team branch at 22a9cf4 / Z-023; clean merge, no conflicts). The measured allocator is the banked production core at c84f021 (Z-023 added no production code).
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: tests/perf/run_z031.sh, tests/perf/summarize_z031.py, this recorded run. The bench harness is the banked tests/perf/bench_k002.c, unmodified.
+dependency of record (named honestly, per the slice brief): Wave 4's Z-029 (TLS cache: implementation, team-06) and Z-030 (cross-thread frees into TLS-owned blocks, team-08) are being built in parallel and are NOT banked and NOT in this tree. Verified from disk at run time: team-06 branch tip is its Z-020 merge (4640697) with no Z-029 commit; team-08 branch tip is its merge of seat c84f021 with no Z-030 commit; this tree's src/ holds no TLS cache state (no __thread allocator state). This verdict therefore grades the banked small path - the single-global-lock core - on exactly the workloads the roadmap names. The Wave 4 changes whose effect this verdict run exists to judge have not landed yet, and the verdict lines below say so per workload.
+method (docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004, via the protocol's own scripts/z13/run_measured.sh): both legs built into build/z31/ - allocator objects are the production build (Makefile CFLAGS, exactly as make test builds them), bench TU -O2 per the Makefile bench-k002 rule. Every process pinned taskset -c 2 (CCD0 physical core, protocol section 3); 3 warm-up processes per leg, discarded (section 4); measured processes interleaved A,B,A,B as separate processes (sections 5-6); main run 9 reps per leg (headline-of-record count, section 6), identical-leg controls 7 reps per leg; noise bound 5% (section 7), drift bound 8% (section 8); checksums must be exactly one distinct value per workload across both legs of every run (section 9) - they are: small_churn 12756656, mixed_batch 34727552, large_batch 1106008, mixed_lifecycle 40359936, identical to the Z-003/Z-009 checksums of record.
+load state: QUIET WINDOW on the shared host. loadavg 0.34/1.17/1.67 at main-run start and end (header below); a process listing at runner launch showed no heavy co-tenant (the Aesir forge mojo test process seen earlier in the hour had finished; no Tensile build running). Corroborated by the controls: identical legs agree within 3.95% worst case (bound 5%) and no main-run series drifts more than 1.36% (bound 8%). These are this-window medians under the full protocol, not a claim about the host at other times.
+correctness gate: scripts/z13/run_gate.sh in this worktree, log hidden_files/z031_gate.log: GREEN 4988 checks / 0 failed / 77 by-design skips - identical to the Z-001 baseline (4988/0/77); this slice adds no make tests (runner, summariser, recorded run only; no production source changed).
+
+=== RUN HEADERS (scripts/z13/run_measured.sh, verbatim) ===
+run_measured_version: 1
+date_utc: 2026-11-12T09:19:31Z
+leg_a: /home/volmarr/mimiralloc-team-09/build/z31/bench_k002_mimir
+leg_b: /home/volmarr/mimiralloc-team-09/build/z31/bench_k002_glibc
+cpus: 2
+reps: 9
+warmups: 3
+noise_pct: 5
+drift_pct: 8
+loadavg_start: 0.34 1.17 1.67
+--- host_truth (scripts/z13/host_truth.sh, verbatim) ---
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T09:19:31Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 4762364
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 62%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.34 1.17 1.67
+--- end host_truth ---
+loadavg_end: 0.34 1.17 1.67
+run_measured_version: 1
+date_utc: 2026-11-12T09:19:36Z
+leg_a: /home/volmarr/mimiralloc-team-09/build/z31/bench_k002_glibc
+leg_b: /home/volmarr/mimiralloc-team-09/build/z31/bench_k002_glibc
+cpus: 2
+reps: 7
+warmups: 3
+noise_pct: 5
+drift_pct: 8
+loadavg_start: 0.34 1.17 1.67
+--- host_truth (scripts/z13/host_truth.sh, verbatim) ---
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T09:19:36Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2878745
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 61%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.34 1.17 1.67
+--- end host_truth ---
+loadavg_end: 0.39 1.17 1.67
+run_measured_version: 1
+date_utc: 2026-11-12T09:19:36Z
+leg_a: /home/volmarr/mimiralloc-team-09/build/z31/bench_k002_mimir
+leg_b: /home/volmarr/mimiralloc-team-09/build/z31/bench_k002_mimir
+cpus: 2
+reps: 7
+warmups: 3
+noise_pct: 5
+drift_pct: 8
+loadavg_start: 0.39 1.17 1.67
+--- host_truth (scripts/z13/host_truth.sh, verbatim) ---
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T09:19:36Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2910799
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 59%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.39 1.17 1.67
+--- end host_truth ---
+loadavg_end: 0.44 1.16 1.66
+
+=== RAW LINES - main run (legA mimiralloc, legB glibc; 9 reps) ===
+-- legA mimiralloc --
+mimiralloc,small_churn,100000,3417430,29261755.2,34.17,12756656
+mimiralloc,mixed_batch,256000,57311955,4466781.8,223.87,34727552
+mimiralloc,large_batch,9600,25900124,370654.6,2697.93,1106008
+mimiralloc,mixed_lifecycle,307200,249004187,1233714.2,810.56,40359936
+mimiralloc,small_churn,100000,3472013,28801735.5,34.72,12756656
+mimiralloc,mixed_batch,256000,58129996,4403922.5,227.07,34727552
+mimiralloc,large_batch,9600,26745014,358945.4,2785.94,1106008
+mimiralloc,mixed_lifecycle,307200,254327692,1207890.5,827.89,40359936
+mimiralloc,small_churn,100000,3475700,28771182.8,34.76,12756656
+mimiralloc,mixed_batch,256000,56968193,4493735.7,222.53,34727552
+mimiralloc,large_batch,9600,26183554,366642.4,2727.45,1106008
+mimiralloc,mixed_lifecycle,307200,249706120,1230246.2,812.85,40359936
+mimiralloc,small_churn,100000,3413323,29296963.7,34.13,12756656
+mimiralloc,mixed_batch,256000,57027394,4489070.6,222.76,34727552
+mimiralloc,large_batch,9600,26299170,365030.5,2739.50,1106008
+mimiralloc,mixed_lifecycle,307200,250121507,1228203.1,814.20,40359936
+mimiralloc,small_churn,100000,3412542,29303668.6,34.13,12756656
+mimiralloc,mixed_batch,256000,57853168,4424995.4,225.99,34727552
+mimiralloc,large_batch,9600,26319508,364748.5,2741.62,1106008
+mimiralloc,mixed_lifecycle,307200,252694708,1215696.2,822.57,40359936
+mimiralloc,small_churn,100000,3420667,29234064.6,34.21,12756656
+mimiralloc,mixed_batch,256000,57137529,4480417.8,223.19,34727552
+mimiralloc,large_batch,9600,26192050,366523.4,2728.34,1106008
+mimiralloc,mixed_lifecycle,307200,250361575,1227025.4,814.98,40359936
+mimiralloc,small_churn,100000,3462355,28882075.9,34.62,12756656
+mimiralloc,mixed_batch,256000,57613750,4443383.7,225.05,34727552
+mimiralloc,large_batch,9600,26595615,360961.8,2770.38,1106008
+mimiralloc,mixed_lifecycle,307200,252785578,1215259.2,822.87,40359936
+mimiralloc,small_churn,100000,3472433,28798251.8,34.72,12756656
+mimiralloc,mixed_batch,256000,57624039,4442590.4,225.09,34727552
+mimiralloc,large_batch,9600,26888903,357024.6,2800.93,1106008
+mimiralloc,mixed_lifecycle,307200,253394687,1212338.0,824.85,40359936
+mimiralloc,small_churn,100000,3525343,28366034.2,35.25,12756656
+mimiralloc,mixed_batch,256000,57331322,4465272.9,223.95,34727552
+mimiralloc,large_batch,9600,26743010,358972.3,2785.73,1106008
+mimiralloc,mixed_lifecycle,307200,250667127,1225529.7,815.97,40359936
+-- legB glibc --
+glibc,small_churn,100000,333914,299478308.8,3.34,12756656
+glibc,mixed_batch,256000,949495,269617006.9,3.71,34727552
+glibc,large_batch,9600,6577641,1459489.8,685.17,1106008
+glibc,mixed_lifecycle,307200,2150681,142838477.7,7.00,40359936
+glibc,small_churn,100000,336129,297504827.0,3.36,12756656
+glibc,mixed_batch,256000,952501,268766122.0,3.72,34727552
+glibc,large_batch,9600,5162384,1859605.9,537.75,1106008
+glibc,mixed_lifecycle,307200,2240519,137111089.0,7.29,40359936
+glibc,small_churn,100000,382475,261454997.1,3.82,12756656
+glibc,mixed_batch,256000,951670,269000809.1,3.72,34727552
+glibc,large_batch,9600,6403996,1499064.0,667.08,1106008
+glibc,mixed_lifecycle,307200,2134522,143919809.7,6.95,40359936
+glibc,small_churn,100000,337250,296515937.7,3.37,12756656
+glibc,mixed_batch,256000,950819,269241569.6,3.71,34727552
+glibc,large_batch,9600,6376133,1505614.8,664.18,1106008
+glibc,mixed_lifecycle,307200,2216856,138574630.0,7.22,40359936
+glibc,small_churn,100000,333814,299568022.9,3.34,12756656
+glibc,mixed_batch,256000,952521,268760478.8,3.72,34727552
+glibc,large_batch,9600,5231833,1834921.0,544.98,1106008
+glibc,mixed_lifecycle,307200,2123311,144679700.7,6.91,40359936
+glibc,small_churn,100000,337812,296022639.8,3.38,12756656
+glibc,mixed_batch,256000,952502,268765839.9,3.72,34727552
+glibc,large_batch,9600,5331269,1800697.0,555.34,1106008
+glibc,mixed_lifecycle,307200,2215012,138689993.6,7.21,40359936
+glibc,small_churn,100000,336048,297576536.7,3.36,12756656
+glibc,mixed_batch,256000,950167,269426321.9,3.71,34727552
+glibc,large_batch,9600,6672017,1438845.3,695.00,1106008
+glibc,mixed_lifecycle,307200,2170188,141554556.6,7.06,40359936
+glibc,small_churn,100000,337030,296709491.7,3.37,12756656
+glibc,mixed_batch,256000,953052,268610736.9,3.72,34727552
+glibc,large_batch,9600,6574495,1460188.2,684.84,1106008
+glibc,mixed_lifecycle,307200,2208210,139117203.5,7.19,40359936
+glibc,small_churn,100000,332501,300750975.2,3.33,12756656
+glibc,mixed_batch,256000,947813,270095472.4,3.70,34727552
+glibc,large_batch,9600,6477072,1482151.2,674.70,1106008
+glibc,mixed_lifecycle,307200,2213098,138809939.7,7.20,40359936
+
+=== RAW LINES - gg control (glibc vs glibc; 7 reps) ===
+-- legA glibc --
+glibc,small_churn,100000,334286,299145043.5,3.34,12756656
+glibc,mixed_batch,256000,1353431,189148911.2,5.29,34727552
+glibc,large_batch,9600,6860128,1399390.8,714.60,1106008
+glibc,mixed_lifecycle,307200,2310531,132956450.3,7.52,40359936
+glibc,small_churn,100000,332602,300659647.3,3.33,12756656
+glibc,mixed_batch,256000,951329,269097231.3,3.72,34727552
+glibc,large_batch,9600,5358211,1791642.8,558.15,1106008
+glibc,mixed_lifecycle,307200,2163546,141989123.4,7.04,40359936
+glibc,small_churn,100000,340968,293282654.1,3.41,12756656
+glibc,mixed_batch,256000,1060824,241321840.4,4.14,34727552
+glibc,large_batch,9600,6441065,1490436.8,670.94,1106008
+glibc,mixed_lifecycle,307200,2498692,122944324.5,8.13,40359936
+glibc,small_churn,100000,332051,301158557.0,3.32,12756656
+glibc,mixed_batch,256000,1010751,253277018.8,3.95,34727552
+glibc,large_batch,9600,5243456,1830853.5,546.19,1106008
+glibc,mixed_lifecycle,307200,2327733,131973899.1,7.58,40359936
+glibc,small_churn,100000,333974,299424506.1,3.34,12756656
+glibc,mixed_batch,256000,955968,267791390.5,3.73,34727552
+glibc,large_batch,9600,6330869,1516379.5,659.47,1106008
+glibc,mixed_lifecycle,307200,2333394,131653719.9,7.60,40359936
+glibc,small_churn,100000,332762,300515082.9,3.33,12756656
+glibc,mixed_batch,256000,980995,260959536.0,3.83,34727552
+glibc,large_batch,9600,5170309,1856755.6,538.57,1106008
+glibc,mixed_lifecycle,307200,2426067,126624697.5,7.90,40359936
+glibc,small_churn,100000,333554,299801531.4,3.34,12756656
+glibc,mixed_batch,256000,990873,258358033.8,3.87,34727552
+glibc,large_batch,9600,6356016,1510380.1,662.09,1106008
+glibc,mixed_lifecycle,307200,2415697,127168266.5,7.86,40359936
+-- legB glibc --
+glibc,small_churn,100000,334585,298877714.2,3.35,12756656
+glibc,mixed_batch,256000,949586,269591169.2,3.71,34727552
+glibc,large_batch,9600,6997485,1371921.5,728.90,1106008
+glibc,mixed_lifecycle,307200,2251049,136469708.1,7.33,40359936
+glibc,small_churn,100000,333834,299550075.8,3.34,12756656
+glibc,mixed_batch,256000,952922,268647381.4,3.72,34727552
+glibc,large_batch,9600,6654064,1442727.3,693.13,1106008
+glibc,mixed_lifecycle,307200,2180828,140863928.7,7.10,40359936
+glibc,small_churn,100000,350034,285686533.3,3.50,12756656
+glibc,mixed_batch,256000,949525,269608488.5,3.71,34727552
+glibc,large_batch,9600,5277379,1819084.8,549.73,1106008
+glibc,mixed_lifecycle,307200,2543577,120774798.6,8.28,40359936
+glibc,small_churn,100000,366165,273100924.4,3.66,12756656
+glibc,mixed_batch,256000,951769,268972828.5,3.72,34727552
+glibc,large_batch,9600,6459149,1486263.9,672.83,1106008
+glibc,mixed_lifecycle,307200,2247332,136695423.7,7.32,40359936
+glibc,small_churn,100000,333984,299415540.9,3.34,12756656
+glibc,mixed_batch,256000,964834,265330616.5,3.77,34727552
+glibc,large_batch,9600,6352089,1511313.8,661.68,1106008
+glibc,mixed_lifecycle,307200,2444782,125655375.4,7.96,40359936
+glibc,small_churn,100000,332382,300858650.6,3.32,12756656
+glibc,mixed_batch,256000,955657,267878538.0,3.73,34727552
+glibc,large_batch,9600,6344435,1513137.1,660.88,1106008
+glibc,mixed_lifecycle,307200,2260447,135902323.7,7.36,40359936
+glibc,small_churn,100000,332592,300668687.2,3.33,12756656
+glibc,mixed_batch,256000,961097,266362292.3,3.75,34727552
+glibc,large_batch,9600,5295343,1812913.7,551.60,1106008
+glibc,mixed_lifecycle,307200,2497440,123005958.1,8.13,40359936
+
+=== RAW LINES - mm control (mimiralloc vs mimiralloc; 7 reps) ===
+-- legA mimiralloc --
+mimiralloc,small_churn,100000,3430915,29146743.7,34.31,12756656
+mimiralloc,mixed_batch,256000,57052290,4487111.7,222.86,34727552
+mimiralloc,large_batch,9600,26182593,366655.8,2727.35,1106008
+mimiralloc,mixed_lifecycle,307200,251670283,1220644.7,819.24,40359936
+mimiralloc,small_churn,100000,3409406,29330622.4,34.09,12756656
+mimiralloc,mixed_batch,256000,57362110,4462876.3,224.07,34727552
+mimiralloc,large_batch,9600,26725006,359214.1,2783.85,1106008
+mimiralloc,mixed_lifecycle,307200,250176670,1227932.2,814.38,40359936
+mimiralloc,small_churn,100000,3404066,29376633.7,34.04,12756656
+mimiralloc,mixed_batch,256000,57086574,4484416.9,222.99,34727552
+mimiralloc,large_batch,9600,26471944,362648.1,2757.49,1106008
+mimiralloc,mixed_lifecycle,307200,250727660,1225233.8,816.17,40359936
+mimiralloc,small_churn,100000,3428742,29165215.7,34.29,12756656
+mimiralloc,mixed_batch,256000,57192973,4476074.4,223.41,34727552
+mimiralloc,large_batch,9600,26219612,366138.1,2731.21,1106008
+mimiralloc,mixed_lifecycle,307200,251696482,1220517.7,819.32,40359936
+mimiralloc,small_churn,100000,3405358,29365488.2,34.05,12756656
+mimiralloc,mixed_batch,256000,57080603,4484886.0,222.97,34727552
+mimiralloc,large_batch,9600,26540041,361717.6,2764.59,1106008
+mimiralloc,mixed_lifecycle,307200,250551782,1226093.9,815.60,40359936
+mimiralloc,small_churn,100000,3408144,29341483.2,34.08,12756656
+mimiralloc,mixed_batch,256000,58280627,4392540.3,227.66,34727552
+mimiralloc,large_batch,9600,26523089,361948.8,2762.82,1106008
+mimiralloc,mixed_lifecycle,307200,255182240,1203845.5,830.67,40359936
+mimiralloc,small_churn,100000,3404727,29370930.5,34.05,12756656
+mimiralloc,mixed_batch,256000,57098917,4483447.6,223.04,34727552
+mimiralloc,large_batch,9600,26321101,364726.4,2741.78,1106008
+mimiralloc,mixed_lifecycle,307200,252709306,1215626.0,822.62,40359936
+-- legB mimiralloc --
+mimiralloc,small_churn,100000,3406740,29353575.6,34.07,12756656
+mimiralloc,mixed_batch,256000,57429185,4457663.8,224.33,34727552
+mimiralloc,large_batch,9600,26631372,360477.1,2774.10,1106008
+mimiralloc,mixed_lifecycle,307200,251080380,1223512.6,817.32,40359936
+mimiralloc,small_churn,100000,3402082,29393765.3,34.02,12756656
+mimiralloc,mixed_batch,256000,57254448,4471268.3,223.65,34727552
+mimiralloc,large_batch,9600,26090239,367953.7,2717.73,1106008
+mimiralloc,mixed_lifecycle,307200,251191908,1222969.3,817.68,40359936
+mimiralloc,small_churn,100000,3432228,29135593.6,34.32,12756656
+mimiralloc,mixed_batch,256000,57137880,4480390.2,223.19,34727552
+mimiralloc,large_batch,9600,25883534,370892.2,2696.20,1106008
+mimiralloc,mixed_lifecycle,307200,247120695,1243117.3,804.43,40359936
+mimiralloc,small_churn,100000,3399036,29420106.2,33.99,12756656
+mimiralloc,mixed_batch,256000,58972802,4340984.2,230.36,34727552
+mimiralloc,large_batch,9600,26455834,362868.9,2755.82,1106008
+mimiralloc,mixed_lifecycle,307200,251027751,1223769.1,817.15,40359936
+mimiralloc,small_churn,100000,3405108,29367644.1,34.05,12756656
+mimiralloc,mixed_batch,256000,56877262,4500919.9,222.18,34727552
+mimiralloc,large_batch,9600,26580096,361172.5,2768.76,1106008
+mimiralloc,mixed_lifecycle,307200,251827206,1219884.1,819.75,40359936
+mimiralloc,small_churn,100000,3457746,28920574.3,34.58,12756656
+mimiralloc,mixed_batch,256000,57219793,4473976.3,223.51,34727552
+mimiralloc,large_batch,9600,26232496,365958.3,2732.55,1106008
+mimiralloc,mixed_lifecycle,307200,248305350,1237186.4,808.29,40359936
+mimiralloc,small_churn,100000,3406010,29359866.8,34.06,12756656
+mimiralloc,mixed_batch,256000,57153278,4479183.2,223.25,34727552
+mimiralloc,large_batch,9600,26938446,356368.0,2806.09,1106008
+mimiralloc,mixed_lifecycle,307200,252135302,1218393.4,820.75,40359936
+
+=== SUMMARISER OUTPUT (summarize_z031.py, verbatim) ===
+CHECKSUMS: exactly one distinct value per workload in every run
+
+== Identical-leg controls (protocol section 7, bound 5%) ==
+glibc      small_churn      A median       3.34  B median       3.34  agreement  0.00%  AGREE
+glibc      mixed_batch      A median       3.87  B median       3.72  agreement  3.95%  AGREE
+glibc      large_batch      A median     659.47  B median     661.68  agreement  0.33%  AGREE
+glibc      mixed_lifecycle  A median       7.60  B median       7.36  agreement  3.21%  AGREE
+mimiralloc small_churn      A median      34.08  B median      34.06  agreement  0.06%  AGREE
+mimiralloc mixed_batch      A median     223.04  B median     223.51  agreement  0.21%  AGREE
+mimiralloc large_batch      A median    2757.49  B median    2755.82  agreement  0.06%  AGREE
+mimiralloc mixed_lifecycle  A median     819.24  B median     817.32  agreement  0.23%  AGREE
+
+== Main run: mimiralloc vs glibc (median ns/op, protocol section 6) ==
+workload              glibc      mimir   factor  grade  spreads and drift
+small_churn            3.36      34.62   10.30x   LOSS  glibc 3.33..3.82 drift 0.15% | mimir 34.13..35.25 drift 0.51%
+mixed_batch            3.72     223.95   60.20x   LOSS  glibc 3.70..3.72 drift 0.13% | mimir 222.53..227.07 drift 0.77%
+large_batch          667.08    2741.62    4.11x   LOSS  glibc 537.75..695.00 drift 1.36% | mimir 2697.93..2800.93 drift 1.35%
+mixed_lifecycle        7.19     815.97  113.49x   LOSS  glibc 6.91..7.29 drift 1.11% | mimir 810.56..827.89 drift 1.11%
+
+== Vs Z-009 baseline of record (Z-003 medians; cross-session, indicative) ==
+small_churn: glibc 9.02 -> 3.36 (-62.7%), mimir 93.43 -> 34.62 (-62.9%), factor 10.4x -> 10.3x, grade LOSS
+mixed_batch: glibc 9.90 -> 3.72 (-62.4%), mimir 398.42 -> 223.95 (-43.8%), factor 40.2x -> 60.2x, grade LOSS
+
+== Z-031 verdict lines (focus workloads) ==
+small_churn: STILL LOST - 10.30x vs glibc (mimir 34.62 ns/op, glibc 3.36 ns/op)
+mixed_batch: STILL LOST - 60.20x vs glibc (mimir 223.95 ns/op, glibc 3.72 ns/op)
+
+Z031 PROTOCOL GATE: PASS
+
+=== SUPPLEMENTARY PROTOCOL EVIDENCE (review fold-in, computed from the raw lines in this file) ===
+Pin verification specimen (protocol section 3 rule 5, same launch form run_measured.sh uses): taskset -c 2 grep Cpus_allowed_list /proc/self/status -> "Cpus_allowed_list: 2". The runner also aborts before measuring if taskset refuses the mask; the mask was accepted for every process of all three runs.
+Headline auditability: every per-process ns/op value behind every median in the summariser table is present in the raw sections above (184 CSV lines: main 36+36, gg 28+28, mm 28+28); the medians, spreads and drifts recompute from those lines alone.
+Control-run drift (protocol section 8 applied to the controls as well; bound 8%): gg legA small_churn 0.15%, mixed_batch 7.49%, large_batch 10.33%, mixed_lifecycle 2.76%; gg legB 0.45%, 0.81%, 4.81%, 4.48%; mm legA 0.07%, 0.11%, 0.19%, 0.59%; mm legB 0.04%, 0.12%, 1.62%, 0.14%. One control series exceeds the drift bound: gg legA large_batch at 10.33% - a context workload in a control run whose section 7 agreement was 0.33%; it touches no focus workload and no main-run series (all main-run drifts are 1.36% or under), and this slice claims nothing from large_batch beyond the context table. Recorded, not smoothed.
+Load and baseline labelling (protocol section 10): this run is labelled QUIET-WINDOW, baseline-grade for the within-session comparison. The 5/15-minute load averages in the headers (1.17/1.67) are the decaying tail of earlier co-tenant work; the 1-minute load was 0.28 at runner launch, 0.34 at main-run start and end, and 0.34 at gate-log end, and the identical-leg controls bound any residual contamination of the focus workloads to under 3.95% (agreement) with focus drift under 1% in the main run.
+
+=== VERDICT - Z-031 (per workload, roadmap Law 2 grades) ===
+small_churn: LOSS 10.30x vs glibc (mimir 34.62 ns/op, glibc 3.36 ns/op, medians of 9 processes per leg) - STILL LOST, reason named: the measured core has no TLS freelist cache. Z-029 (TLS cache: implementation) has not landed, so every small op still pays the single global lock and the full central-core path - the KL-A wound of record (Z-005: 861.97 vs 82.99 instructions/op; Z-022's hot-spot list names the same path). The number of record is this within-session protocol verdict. Vs Z-009 (factor 10.4x there, 10.30x here): consistent with no change, but INDICATIVE ONLY - Z-003 was unpinned with no process warm-ups and wide per-process spread (glibc small_churn 3.92..10.46 ns/op), and the mixed_batch line below proves session effects can move the two legs asymmetrically, so no cross-session factor from the Z-003 session is treated as precise anywhere in this run. Cross-session, only the direction and rough magnitude are supported: a ~10x small_churn loss in both sessions.
+mixed_batch: LOSS 60.20x vs glibc (mimir 223.95 ns/op, glibc 3.72 ns/op, medians of 9 processes per leg) - STILL LOST, reason named: same missing TLS cache, and the batch shape (256 live blocks spanning all 20 classes, reverse-order frees) pays lock + central-core cost on every op with no batched refill/drain (the Z-029 design point) and no remote-free queue (Z-030, also not landed). Vs Z-009: factor 40.2x -> 60.2x, INDICATIVE ONLY (same Z-003 caveat as above). Both legs ran faster in absolute terms than in the Z-003 session (glibc -62.4%, mimir -43.8%); glibc gained proportionally more, so the ratio widened. No production small-path code is banked between the Z-009 baseline and this run, so the widened ratio cannot be a code regression - it is a session/machine-state effect; the number of record is the within-session protocol verdict: 60.20x, controls agreeing, drift under 1%, checksums clean.
+context workloads (ride along in the K-002 harness; NOT Z-031 gate workloads, no verdict claimed beyond the table above): large_batch LOSS 4.11x (Z-009: 2.4x), mixed_lifecycle LOSS 113.49x (Z-009: 67.2x) - their cross-session factor changes carry the same indicative-only caveat as the focus workloads.
+Gate status: the roadmap gate for Z-031 is "verdict vs Z-009 and glibc recorded per workload (Law 2)" - MET for both named workloads (small_churn, mixed_batch), with the Z-029/Z-030 dependency named in the header and in each verdict line. A proven loss is a bankable result (Law 2). When Z-029/Z-030 bank, this run is the pre-TLS verdict of record they must beat; a post-TLS verdict run belongs to Z-036 (Wave 4 verdict) or a re-run of this slice's harness, which is repeatable as-is: sh tests/perf/run_z031.sh <out-dir>.
+Review fold-in: six Mythic Engineering reviewers audited this slice pre-commit. Arithmetic, dependency/honesty, and scope/hygiene reviewers PASSed outright (all factors and percentages recomputed). The protocol and baseline reviewers FAILed the first draft on: cross-session ratio language that trusted the factor when it agreed and dismissed it when it did not (fixed above - indicative only, both workloads); pinning asserted without a specimen (specimen added in the supplementary section); control-run drift unreported (now reported, including the one over-bound context series); and the load label made explicit (supplementary section). Their "headline unauditable" point is answered by the artifact itself: all 184 raw per-process lines are in this file and every median recomputes from them.
+Bugs: none discovered. No production code touched by this slice; the two build faults the runner could have hit (bench TU flags, leg link order) were settled by following the Makefile's own bench-k002 rule and the Z-020/Z-023 runner pattern, and the first full run passed end to end (runner exit 0, Z031 PROTOCOL GATE: PASS).
+Red-team reviewer (6 of 6) note: the strongest objection was cross-session denominator instability (glibc small_churn 9.02 ns/op in the Z-003 session vs 3.36 here; one session each) - judged NOT fatal to STILL LOST: even against the slower Z-003 glibc median, this run's mimir small_churn median still loses about 3.8x, and the mixed_batch gap exceeds every measured noise bound by orders of magnitude. The factors of record (10.30x, 60.20x) are within-session protocol medians, not cross-session constants - which is how the verdict lines above already scope them.
