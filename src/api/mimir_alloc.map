@@ -1,9 +1,12 @@
 /* mimir_alloc.map - MimirAlloc shared-library export contract (E-002).
  *
  * This version script is the machine-readable record of the
- * libmimiralloc.so dynamic export contract: exactly the four
+ * libmimiralloc.so dynamic export contract: exactly the
  * public entry points declared in include/mimir_alloc.h are
- * exported; every other symbol defined by the library objects
+ * exported (four through Z-073; six from Z-074, which added
+ * the two aligned-allocation entry points of the Z-073
+ * contract as an explicit contract change, recorded in
+ * tests/abi/recorded_run_z13_z074.txt); every other symbol defined by the library objects
  * (the internal mimir_core_* and mimir_platform_* functions) is
  * bound locally and never appears in .dynsym as an exported
  * global.
@@ -24,6 +27,8 @@
     mimir_free;
     mimir_calloc;
     mimir_realloc;
+    mimir_aligned_alloc;
+    mimir_posix_memalign;
   local:
     *;
 };

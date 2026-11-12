@@ -11,10 +11,12 @@
  * docs/PHASE_3_CALLOC_REALLOC_AND_UNSUPPORTED_BEHAVIOR.md
  * (B-008): mimir_malloc, mimir_free, mimir_calloc and
  * mimir_realloc -- the B-008 S7.2 supported-call list, as
- * amended by B-008. Nothing else is declared: no
- * standard-name malloc/free replacement, no
- * explicit-alignment entry point, no usable-size, statistics,
- * trim, or reallocarray entry point. Absent symbols are the
+ * amended by B-008 -- plus, from Z-074 (Wave 9), the two
+ * explicit-alignment entry points of the Z-073 contract:
+ * mimir_aligned_alloc and mimir_posix_memalign. Nothing
+ * else is declared: no standard-name malloc/free
+ * replacement, no usable-size, statistics, trim, or
+ * reallocarray entry point. Absent symbols are the
  * documented unsupported behaviour for those facilities
  * (B-008 S6.1: not present - absence at link time, never a
  * runtime refusal and never a silent fallback to another
@@ -101,8 +103,14 @@
  * - U-15 / V-07: no numeric default alignment value is
  *   claimed. Suitably aligned above is the non-numeric
  *   claim only (B-007 S B.1).
- * - U-11 / V-03: explicit-alignment validity is open and
- *   no explicit-alignment entry point exists here (above).
+ * - U-11 / V-03: explicit-alignment validity was open
+ *   while no entry point existed. The Z-073 contract
+ *   records this host's rules and Z-074 implements them:
+ *   an alignment is valid iff it is a non-zero power of
+ *   two (the posix-shaped entry additionally requires a
+ *   multiple of sizeof(void *)). These are THIS HOST's
+ *   recorded rules, not a portable claim for other
+ *   targets. See the aligned entries' notes below.
  *
  * Other boundaries (by analogy / design record):
  * - Contents of a successful allocation are unspecified -
@@ -163,6 +171,49 @@ void *mimir_calloc(size_t nmemb, size_t size);
  * pointer-identity promise is made; errno is not promised
  * (U-10). */
 void *mimir_realloc(void *ptr, size_t size);
+
+/* Z-074, per the Z-073 contract (by analogy under U-03 to
+ * MA-6.1-ALIGNED-01/-02). A valid alignment is a non-zero
+ * power of two (this host's recorded V-03 rule, above);
+ * any other value -- including 0 -- is a defined failure:
+ * exactly a null return, no allocation. On success the
+ * returned pointer satisfies (uintptr_t)ptr % alignment
+ * == 0 and is releasable by mimir_free exactly once (the
+ * exact returned pointer only; interior pointers are
+ * undefined behaviour, as for every family block). The
+ * size need NOT be a multiple of the alignment -- a
+ * recorded deviation from C11 aligned_alloc, in the
+ * glibc posture. A valid alignment too large to satisfy
+ * is a failure (null), never an invalidity. Zero size is
+ * [UNRESOLVED: U-09]: this implementation returns null as
+ * a posture only. errno is not promised (U-10). A block
+ * from this entry realloc'd through mimir_realloc keeps
+ * the realloc rules above; the RESULT of a realloc makes
+ * no alignment promise beyond the family floor, though a
+ * failure leaves the original block -- and its alignment
+ * -- intact, and same-size / shrink results are the
+ * original pointer in this implementation (facts, not
+ * promises). */
+void *mimir_aligned_alloc(size_t alignment, size_t size);
+
+/* Z-074, per the Z-073 contract (by analogy under U-03 to
+ * MA-6.1-POSIXMA-01/-02; the V-06 error model: the return
+ * value is the error channel and errno is NOT set by this
+ * entry). Validation precedence is fixed: a null memptr
+ * returns EINVAL (POSIX leaves the case undefined; EINVAL
+ * is this implementation's recorded choice); an alignment
+ * that is not a non-zero power of two multiple of
+ * sizeof(void *) returns EINVAL with *memptr unchanged;
+ * a valid but unsatisfiable request returns ENOMEM with
+ * *memptr unchanged; success returns 0 with *memptr set
+ * to a pointer aligned as in mimir_aligned_alloc and
+ * releasable by mimir_free. Zero size is [UNRESOLVED:
+ * U-09]: this implementation returns
+ * ENOMEM with *memptr unchanged, as the Z-073
+ * contract's interim posture for this surface (final
+ * closure is Z-078's). */
+int mimir_posix_memalign(void **memptr, size_t alignment,
+                         size_t size);
 
 #ifdef __cplusplus
 }

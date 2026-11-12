@@ -166,6 +166,7 @@
 #include <time.h>   /* Z-050: clock_gettime(CLOCK_MONOTONIC)
                        * for the retained-pool idle clock. */
 #include <threads.h>
+#include <errno.h> /* Z-074: EINVAL/ENOMEM return values of the posix_memalign-shaped core entry (ISO C header; the values, not the errno variable, are the channel) */
 #include <unistd.h> /* J-007: write(2) / STDERR_FILENO for
                        * the diagnostic channel only (the
                        * INC-J005-05 layer deviation, now the
@@ -1507,6 +1508,137 @@ static void *alloc_locked(size_t size, int zero_user,
      * documented construction/transfer exceptions,
      * B-008 S3.3 / S4.5). */
     return (void *)((unsigned char *)base + usable_offset);
+}
+
+/*
+ * Z-074: aligned construction with the global lock already
+ * held, for alignments above the system page size (the plain
+ * alloc_locked above already returns a page-aligned user
+ * pointer, which satisfies every power-of-two alignment up
+ * to the page size; mimir_core_aligned_alloc routes those
+ * requests there and only larger alignments reach this
+ * variant). The construction is alloc_locked's, with two
+ * differences, both forced by the geometry:
+ *   - the mapping is acquired for the worst-case total
+ *     alignment + page_size + size (checked before evaluate,
+ *     B-007 A3/A4 forms), because the aligned user address
+ *     is round_up(base + page_size, alignment) and the
+ *     offset it lands at is only known once the kernel has
+ *     chosen base: usable_offset lies in
+ *     [page_size, page_size + alignment) and the descriptor
+ *     page (the first page of the mapping) is never inside
+ *     the usable extent;
+ *   - the Z-048 mapping cache is not consulted: a pooled
+ *     mapping's length would have to match this call's
+ *     alignment-dependent total exactly, and the publication
+ *     below is the identical code either way. Retirement of
+ *     an aligned block is the ordinary retire_locked course
+ *     (whole mapping_length from mapping_base), so a freed
+ *     aligned mapping may still ENTER the pool and be
+ *     republished later by any path -- every publication
+ *     rewrites usable_offset in full.
+ * descriptor_is_live admits this shape unchanged: it
+ * requires only usable_offset != 0, usable_offset <=
+ * mapping_length, usable_size == mapping_length -
+ * usable_offset and requested_size <= usable_size, all of
+ * which the publication below writes exactly. On any
+ * failure nothing is published and registry and counters
+ * are unchanged (A.3), exactly as in alloc_locked.
+ */
+static void *alloc_aligned_locked(size_t alignment, size_t size)
+{
+    size_t page_size;
+    size_t total_unrounded;
+    size_t usable_offset;
+    size_t usable_size;
+    void *base = NULL;
+    size_t mapping_length = 0;
+    struct mimir_descriptor *desc;
+    int status;
+    uintptr_t first_usable;
+    uintptr_t user_addr;
+
+    status = mimir_platform_page_size(&page_size);
+    if (status != MIMIR_PLATFORM_OK || page_size == 0) {
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_PAGESIZE);
+    }
+    /* Checked arithmetic, check before evaluate: the
+     * worst-case total is alignment + page_size + size.
+     * A syntactically valid alignment whose worst-case
+     * total cannot be represented is an unsatisfiable
+     * request (failure), never an invalid one. */
+    if (alignment > SIZE_MAX - page_size ||
+        size > SIZE_MAX - page_size - alignment) {
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_ARITHMETIC);
+    }
+    total_unrounded = alignment + page_size + size;
+
+    status = mimir_platform_map_acquire(total_unrounded,
+                                        &base,
+                                        &mapping_length);
+    if (status != MIMIR_PLATFORM_OK) {
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_BACKING);
+    }
+
+    /* The first address past the descriptor page, rounded
+     * up to the requested alignment. alignment is a power
+     * of two (admission checked it), so the mask form is
+     * exact; the wrap guard is defensive -- a mapping of
+     * the acquired length exists, so base + page_size is a
+     * real address and its round-up stays inside the
+     * mapping or the usable-size gate below refuses. */
+    first_usable = (uintptr_t)base + page_size;
+    user_addr = (first_usable + (alignment - 1)) &
+                ~(uintptr_t)(alignment - 1);
+    if (user_addr < first_usable) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
+    }
+    usable_offset = (size_t)(user_addr - (uintptr_t)base);
+
+    if (usable_offset > mapping_length) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
+    }
+    usable_size = mapping_length - usable_offset;
+    if (usable_size < size) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
+    }
+    if (mapping_length > SIZE_MAX - mimir_live_bytes ||
+        mimir_live_mappings == SIZE_MAX) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
+    }
+
+    /* Publication, identical to alloc_locked (B-006 S11.1
+     * step 8; B-007 C1.4) apart from the usable_offset. */
+    desc = (struct mimir_descriptor *)base;
+    desc->magic = MIMIR_DESCRIPTOR_MAGIC;
+    desc->mapping_base = base;
+    desc->mapping_length = mapping_length;
+    desc->usable_offset = usable_offset;
+    desc->requested_size = size;
+    desc->usable_size = usable_size;
+    desc->state = MIMIR_STATE_LIVE;
+    desc->flags = 0;
+    memset(desc->reserved, 0, sizeof desc->reserved);
+    {
+        thrd_t j002_self = thrd_current();
+        memcpy((unsigned char *)base + MIMIR_OWNER_THREAD_OFFSET,
+               &j002_self, sizeof j002_self);
+    }
+
+    registry_insert(desc);
+    mimir_live_mappings += 1;
+    mimir_live_bytes += mapping_length;
+    __atomic_fetch_add(&mimir_audit_alloc_published, 1UL,
+                       __ATOMIC_RELAXED);
+    mimir_stats_bytes_requested += size;
+    mimir_stats_bytes_allocated += usable_size;
+    mimir_stats_peak_update_locked();
+
+    return (void *)user_addr;
 }
 
 /*
@@ -6793,6 +6925,160 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
                                (uint64_t)product);
     }
     return result;
+}
+
+/*
+ * Z-074 -- aligned allocation (Wave 9; roadmap Z-074,
+ * implementing the contract-first slice Z-073's surface:
+ * mimir_aligned_alloc and a posix_memalign-shaped entry,
+ * in docs/contracts.md style under the namespaced U-03
+ * by-analogy posture).
+ *
+ * Validity domain (this host's recorded rules, the V-03 /
+ * U-11 debt the Z-073 contract takes up): an alignment is
+ * VALID iff it is a non-zero power of two. The
+ * posix_memalign-shaped entry additionally requires the
+ * alignment to be a multiple of sizeof(void *), the POSIX
+ * rule. Validity is a property of the value alone: a valid
+ * alignment too large to satisfy is a FAILURE (NULL /
+ * ENOMEM), never an invalidity. The size need NOT be a
+ * multiple of the alignment (a recorded deviation from
+ * C11 aligned_alloc, in the glibc posture). Zero size is
+ * the family posture (U-09 unresolved): NULL from
+ * mimir_core_aligned_alloc; the posix shape is pinned
+ * by the Z-073 contract's interim posture to ENOMEM
+ * with *memptr unchanged (final closure is Z-078's).
+ *
+ * Routing (over the core's machinery, by measurement):
+ *   - alignment <= _Alignof(max_align_t) (16 on this
+ *     host): the ordinary dispatch. Every pointer this
+ *     allocator returns is aligned to the fundamental
+ *     alignment -- small objects sit at multiples of 16
+ *     from a 96-byte span offset with class sizes all
+ *     multiples of 16, and mapping user pointers are
+ *     page-aligned -- so the request is already served,
+ *     the class machinery included.
+ *   - 16 < alignment <= page size: the mapping path
+ *     (alloc_locked) at any size. Its user pointer is
+ *     page-aligned and a power-of-two alignment no larger
+ *     than the page divides the page size, so the pointer
+ *     is aligned as requested. The class machinery is
+ *     deliberately NOT used here: the banked Z-017 audit
+ *     measured it unable to promise these alignments
+ *     (the 64 B class returns every pointer at
+ *     ptr mod 64 == 32; the 48 B class splits 49.41%).
+ *     The price is recorded honestly: such a request pays
+ *     a whole mapping, exactly as a request above the
+ *     1024-byte cutoff already does.
+ *   - alignment > page size: alloc_aligned_locked, the
+ *     mapping construction with a computed usable_offset.
+ * Every aligned block is therefore a mapping-registry
+ * block whose user pointer is exactly mapping_base +
+ * usable_offset: mimir_core_free retires it through the
+ * untouched mapping course, and mimir_core_realloc treats
+ * it as any mapping block (same-size and shrink keep the
+ * pointer and hence its alignment as a construction fact;
+ * a grow move publishes through the ordinary dispatcher
+ * and makes NO alignment promise -- the contract states
+ * the default-alignment floor for realloc results).
+ *
+ * Failure behaviour: mimir_core_aligned_alloc fails with
+ * exactly NULL (the family channel; errno is not promised,
+ * U-10). mimir_core_posix_memalign returns 0 on success,
+ * EINVAL for a null memptr or an invalid alignment (with
+ * *memptr left unchanged in the alignment case; the null
+ * memptr case is POSIX-undefined and is DEFINED here as
+ * EINVAL, a recorded choice), and ENOMEM for a valid
+ * request that cannot be satisfied (with *memptr left
+ * unchanged). Validation precedence is fixed: memptr,
+ * then alignment, then the zero-size posture, then
+ * construction. The posix entry's return value IS its
+ * error channel (the V-06 model); it does not set errno.
+ */
+static int z074_alignment_valid(size_t alignment)
+{
+    return alignment != 0 && (alignment & (alignment - 1)) == 0;
+}
+
+void *mimir_core_aligned_alloc(size_t alignment, size_t size)
+{
+    void *result;
+
+    if (!z074_alignment_valid(alignment)) {
+        mimir_stats_note_failure();
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               MIMIR_DIAG_CAUSE_ARITHMETIC,
+                               (uint64_t)alignment);
+        return NULL;
+    }
+    if (size == 0) {
+        mimir_stats_note_posture();
+        return NULL;
+    }
+    if (alignment <= _Alignof(max_align_t)) {
+        return mimir_core_alloc(size);
+    }
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_failure();
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               MIMIR_DIAG_CAUSE_LOCK,
+                               (uint64_t)size);
+        return NULL;
+    }
+    mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
+    tls_flush_locked();
+    {
+        size_t page_size = 0;
+        if (mimir_platform_page_size(&page_size) !=
+                MIMIR_PLATFORM_OK ||
+            page_size == 0) {
+            mimir_diag_last_cause = MIMIR_DIAG_CAUSE_PAGESIZE;
+            result = NULL;
+        } else if (alignment <= page_size) {
+            result = alloc_locked(size, 0, NULL);
+        } else {
+            result = alloc_aligned_locked(alignment, size);
+        }
+    }
+    if (result == NULL) {
+        mimir_stats_note_failure();
+    }
+    (void)core_global_unlock();
+    if (result == NULL) {
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               mimir_diag_last_cause,
+                               (uint64_t)size);
+    }
+    return result;
+}
+
+int mimir_core_posix_memalign(void **memptr, size_t alignment,
+                              size_t size)
+{
+    void *result;
+
+    if (memptr == NULL) {
+        return EINVAL;
+    }
+    if (!z074_alignment_valid(alignment) ||
+        alignment % sizeof(void *) != 0) {
+        return EINVAL;
+    }
+    if (size == 0) {
+        /* Z-073 interim posture (contract P3, pinned
+         * until Z-078 closes U-09): a zero-size
+         * posix-shaped request is ENOMEM with *memptr
+         * left unchanged -- NOT the 0/NULL outcome an
+         * earlier draft of this slice used; reconciled
+         * to the landed Z-073 contract before banking. */
+        return ENOMEM;
+    }
+    result = mimir_core_aligned_alloc(alignment, size);
+    if (result == NULL) {
+        return ENOMEM;
+    }
+    *memptr = result;
+    return 0;
 }
 
 /*

@@ -1,0 +1,182 @@
+Z-074 -- Aligned allocation: implementation (Wave 9)
+Roadmap gate: the surface implemented over the core's class
+machinery; ABI link proofs in E-series style (C and C++
+consumers). Gate: contract green; ABI recorded runs filed.
+
+SURFACE (the Z-073 contract, docs/Z13_ALIGNED_ALLOCATION_
+CONTRACT.md, rows AL-073-*):
+  void *mimir_aligned_alloc(size_t alignment, size_t size)
+  int   mimir_posix_memalign(void **memptr, size_t alignment,
+                             size_t size)
+Validity is FORM, not magnitude: aligned_alloc valid iff the
+alignment is a non-zero power of two; posix_memalign valid iff
+additionally a multiple of sizeof(void *) (else EINVAL,
+*memptr unchanged; NULL memptr is defined EINVAL, the
+contract's deliberate safer divergence from POSIX UB). No
+size-multiple rule. Failure of a valid request is NULL /
+ENOMEM (*memptr unchanged), never an invalidity; the pointer
+entry's only channel is NULL (errno not promised, U-10), the
+posix entry's only channel is its return value (errno not
+set). Aligned blocks are releasable by mimir_free exactly
+once; alignment does NOT survive mimir_realloc (floor only).
+
+ROUTING (over the core's machinery, by measurement):
+  - alignment <= 16 (_Alignof(max_align_t) on this host):
+    the ordinary dispatch, class machinery included -- every
+    pointer this allocator returns already meets the floor
+    (Z-017: 0 sub-16 in 163,840 blocks per leg).
+  - 16 < alignment <= 4096 (page size): the mapping path at
+    any size; its user pointer is page-aligned and a
+    power-of-two alignment <= the page divides it. The class
+    machinery is deliberately NOT used here: Z-017 measured
+    it unable to promise these alignments (64 B class: every
+    pointer at ptr mod 64 == 32; 48 B class: 49.41% split).
+    PRICE, recorded honestly: such a request pays a whole
+    mapping (>= 2 pages), exactly as any request above the
+    1024-byte cutoff already does.
+  - alignment > 4096: alloc_aligned_locked, the mapping
+    construction with usable_offset computed as
+    round_up(base + page_size, alignment) - base, inside a
+    mapping acquired for the worst-case total
+    alignment + page_size + size. Success is GUARANTEED in
+    this implementation (stronger than the contract's
+    AL-073-06 floor, which permits clean failure beyond the
+    page but never a misaligned success).
+Every aligned block is a mapping-registry block whose user
+pointer is exactly mapping_base + usable_offset, so free and
+realloc flow through the untouched mapping courses;
+descriptor_is_live admits the computed offset unchanged.
+Two E-005-shape audit counters are APPENDED at the L1
+boundary (mimir_audit_call_aligned_alloc /
+mimir_audit_call_posix_memalign), bound local in the .so;
+the export list grows from exactly 4 to exactly 6 as an
+explicit contract change (this slice's whole purpose).
+
+Z-073 RECONCILIATION: Z-073 landed on team-02 (51d94d1)
+while this slice was building. Its contract suite
+(tests/contract/run_z073.sh, 130 checks, RED 125-failed by
+design on the pre-Z-074 core) was copied into this tree as
+an UNTRACKED overlay (the files are Z-073's commit, never
+part of this slice's commit) and run UNMODIFIED against
+this implementation: CHECKS: 130 run, 0 failed, RESULT:
+PASS (section Z1 below). One divergence was found and
+fixed before banking: the posix zero-size outcome. This
+slice's first draft returned 0 with *memptr = NULL; the
+landed contract pins the interim posture as ENOMEM with
+*memptr unchanged (final U-09 closure is Z-078's). Core,
+public header and this slice's own tests were all
+reconciled to the contract; nothing else diverged -- the
+validity domains, the no-size-multiple rule, the error
+models, the realloc floor rule and the beyond-page clause
+already matched.
+
+LOAD STATE: quiet shared-host window (loadavg recorded in
+each section header; ~0.2-0.5 on 32 threads). Every graded
+quantity below is an exact modulus, return code or counter
+-- load-independent; no timing or benchmark verdict is
+claimed by this slice.
+
+FILES (this slice's commit): include/mimir_alloc.h,
+src/api/mimir_alloc.c, src/api/mimir_alloc.map,
+src/core/mimir_core.h, src/core/mimir_core.c, Makefile
+(standalone test-z074 block only), tests/abi/test_z074.c,
+tests/abi/test_z074_dyn.c, tests/abi/test_z074_cpp.cpp,
+tests/abi/header_only_z074.c, tests/abi/header_only_z074.cpp,
+tests/abi/mimir_audit_e005.h (two counter declarations
+appended; the original four untouched),
+tests/abi/run_z074.sh, tests/abi/recorded_run_z13_z074.txt.
+CAMPAIGN_STATE.md is never committed.
+
+=== ABI RUN (tests/abi/run_z074.sh, verbatim) ===
+=== Z-074 ABI recorded run ===
+date_utc: 2026-11-12T20:24:07Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: 43e2a3da92cfc8ddc32b133536d3817e0669ca61
+branch: yrsa/mimiralloc-team-03
+loadavg: 0.06 0.43 0.46 1/1199 1023140
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + z074 consumers (log hidden_files/z074_build.log)
+=== S2 shared library exports (nm -D) - exactly the 6 public symbols ===
+00000000000061a0 T mimir_aligned_alloc
+00000000000055e0 T mimir_calloc
+0000000000004d50 T mimir_free
+0000000000004d30 T mimir_malloc
+00000000000061c0 T mimir_posix_memalign
+0000000000005740 T mimir_realloc
+defined dynamic symbol count: 6
+  [ok] count == 6
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+=== S3 absence proofs - no internal symbol is exported ===
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+=== S4 consumers bind to the .so (DT_NEEDED + undefined symbols) ===
+-- test_z074_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z074_dyn DT_NEEDED names libmimiralloc.so
+                 U mimir_aligned_alloc
+                 U mimir_posix_memalign
+  [ok] test_z074_dyn references both new symbols as undefined (U)
+  [ok] test_z074_dyn does not define the new symbols (not statically absorbed)
+-- test_z074_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z074_cpp DT_NEEDED names libmimiralloc.so
+                 U mimir_aligned_alloc
+                 U mimir_posix_memalign
+  [ok] test_z074_cpp references both new symbols as undefined (U)
+  [ok] test_z074_cpp does not define the new symbols (not statically absorbed)
+-- C++ consumer object: unmangled references --
+                 U mimir_aligned_alloc
+                 U mimir_posix_memalign
+  [ok] test_z074_cpp.o undefined references are unmangled (extern C guards cover the new declarations)
+=== S5 header-only translation units (compile-only) ===
+-rw-r--r-- 1 volmarr volmarr 3896 Nov 12 15:24 build/header_only_z074_c.o
+-rw-r--r-- 1 volmarr volmarr 1336 Nov 12 15:24 build/header_only_z074_cpp.o
+  [ok] header-only C and C++ objects built (header self-contained, exact prototypes)
+=== S6 static contract test ===
+Z-074 aligned allocation contract test (static link)
+Z074 STATIC: 7510 checks, 0 failed
+RESULT: PASS
+  [ok] test_z074 exit 0
+=== S7 dynamic C consumer ===
+Z-074 dynamic consumer (libmimiralloc.so only)
+Z074 DYN: 41 checks, 0 failed
+RESULT: PASS
+  [ok] test_z074_dyn exit 0
+=== S8 C++ consumer ===
+Z-074 C++ consumer (libmimiralloc.so only)
+Z074 CPP: 11 checks, 0 failed
+RESULT: PASS
+  [ok] test_z074_cpp exit 0
+=== S9 neighbour evidence: E-005/E-008 audit readers ===
+0
+e005/e008 sources reference only the original four counters (grep above counts aligned references; 0 expected)
+  [ok] make test-e005 still passes (log hidden_files/z074_test_e005.log)
+=== Z-074 ABI RUN RESULT: PASS ===
+RUNNER_EXIT=0
+
+=== Z1 Z-073 contract suite (unmodified overlay, run in this tree) ===
+# Z-073 contract run: 2026-11-12T20:23:00Z
+# host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+# head: 43e2a3da92cfc8ddc32b133536d3817e0669ca61
+# loadavg: 0.17 0.54 0.50 1/1206 1022933
+CHECKS: 130 run, 0 failed
+RESULT: PASS
+# contract exit code: 0
+CONTRACT_EXIT=0 (log hidden_files/z074_z073_contract_run.log)
+
+=== Z2 standing correctness gate (final tree) ===
+# GATE COUNTS: checks=4988 failed=0 skips=77
+# GATE RESULT: GREEN
+gate log: hidden_files/z074_gate_final.log
+variant compiles of src/core/mimir_core.c (-Werror): MIMIR_LOCK_SHARD OK, MIMIR_LOCK_HIST OK, MIMIR_DEBUG OK, MIMIR_ARENA_CCD OK, MIMIR_OOL_META OK

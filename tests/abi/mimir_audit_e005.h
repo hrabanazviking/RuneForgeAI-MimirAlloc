@@ -51,6 +51,10 @@ extern unsigned long mimir_audit_call_malloc;
 extern unsigned long mimir_audit_call_calloc;
 extern unsigned long mimir_audit_call_realloc;
 extern unsigned long mimir_audit_call_free;
+/* Z-074: appended for the two Wave 9 entry points; the
+ * original four declarations above are unchanged. */
+extern unsigned long mimir_audit_call_aligned_alloc;
+extern unsigned long mimir_audit_call_posix_memalign;
 extern unsigned long mimir_audit_alloc_published;
 extern unsigned long mimir_audit_mapping_retired;
 

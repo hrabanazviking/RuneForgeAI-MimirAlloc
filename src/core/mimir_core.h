@@ -49,6 +49,25 @@ void *mimir_core_calloc(size_t nmemb, size_t size);
  * error (MA-6.1-REALLOC-05). */
 void *mimir_core_realloc(void *ptr, size_t new_size);
 
+/* Aligned allocation (Z-074, Wave 9; the Z-073 contract's
+ * surface, by analogy under U-03): an alignment is valid
+ * iff it is a non-zero power of two (the posix-shaped
+ * entry additionally requires a multiple of sizeof(void *)).
+ * mimir_core_aligned_alloc returns a pointer aligned to a
+ * valid alignment -- (uintptr_t)ptr % alignment == 0 --
+ * releasable by mimir_core_free exactly once, or exactly
+ * NULL on invalid alignment, on the zero-size posture
+ * (U-09 unresolved) and on any unsatisfiable request;
+ * errno is not promised (U-10). mimir_core_posix_memalign
+ * returns 0 with *memptr set on success, EINVAL for a null
+ * memptr or invalid alignment (*memptr unchanged), and
+ * ENOMEM for a valid but unsatisfiable request (*memptr
+ * unchanged); its return value is its error channel and
+ * it does not set errno. Full rules in mimir_core.c. */
+void *mimir_core_aligned_alloc(size_t alignment, size_t size);
+int mimir_core_posix_memalign(void **memptr, size_t alignment,
+                              size_t size);
+
 /* Unload drain (H-001, docs/PHASE_7_UNLOAD_DRAIN_H001.md):
  * under the one global lock, release every retained EMPTY
  * span (live_count == 0) whole through L6 and return how
