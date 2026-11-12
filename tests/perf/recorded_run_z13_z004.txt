@@ -1,0 +1,207 @@
+MimirAlloc Z13 recorded run - Z-004 measurement protocol demonstration
+slice: Z-004 - Measurement law: pinning, affinity, repetition
+date: 2026-11-12T02:39-05:00 (record assembled, America/New_York; passing demo run 02:38 EST)
+base: 5ad882b (branch yrsa/mimiralloc-team-04)
+protocol: docs/Z13_MEASUREMENT_PROTOCOL.md (this slice)
+harness switches: scripts/z13/run_measured.sh and scripts/z13/summarize_measured.py (this slice)
+legs: IDENTICAL - build/bench_k002_glibc vs build/bench_k002_glibc (same binary, sha256 30ab120e50c22a552a4945638d2e5b9198816a9bfbdda1c3a2420404b1ca3986)
+pin: taskset -c 2 (one physical core, CCD0, identical for both legs)
+reps: 15 measured processes per leg; warmups: 3 discarded processes per leg; interleave A,B,A,B
+bounds: noise 5 percent (protocol section 7), drift 8 percent (section 8), one checksum per workload across both legs (section 9)
+load state: loadavg 0.64 / 1.38 / 1.60 at demo start and end (runner header below); no known co-tenant heavy load during the passing attempt; earlier attempts ran under campaign mustering bursts and were voided by the drift rule - see the attempts record
+correctness gate: full make test in this worktree, log hidden_files/z004_make_test.log (team-local, not banked): 4988 checks (18 smoke + 4970 CHECKS across the other 7 targets) / 0 failed, 77 by-design skips, EXIT 0 - identical counts to the Z-001 baseline
+switch probes: --reps 3 refused with exit 2 (minimum 5, protocol section 6); --cpus 99 refused with exit 1 (taskset rejects the mask before any number is taken, section 3 rule 5)
+
+=== HOST TRUTH (seat scripts/z13/host_truth.sh, run at demo time, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T07:39:11Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5100202
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 64%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.74 1.35 1.59
+
+=== RUN HEADER (run_measured.sh) ===
+run_measured_version: 1
+date_utc: 2026-11-12T07:38:50Z
+leg_a: build/bench_k002_glibc
+leg_b: build/bench_k002_glibc
+cpus: 2
+reps: 15
+warmups: 3
+noise_pct: 5
+drift_pct: 8
+loadavg_start: 0.64 1.38 1.60
+host_truth: unavailable in this tree (Z-002 script not present); minimal stamp follows
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+kernel: Linux 7.3.0-10-generic x86_64
+loadavg_end: 0.64 1.38 1.60
+
+=== RAW TABLE leg A (leg,workload,ops,elapsed_ns,ops_per_sec,ns_per_op,checksum) ===
+glibc,small_churn,100000,329085,303872859.6,3.29,12756656
+glibc,mixed_batch,256000,941590,271880542.5,3.68,34727552
+glibc,large_batch,9600,6279528,1528777.3,654.12,1106008
+glibc,mixed_lifecycle,307200,2165177,141882164.8,7.05,40359936
+glibc,small_churn,100000,330207,302840339.5,3.30,12756656
+glibc,mixed_batch,256000,944155,271141920.6,3.69,34727552
+glibc,large_batch,9600,6337857,1514707.6,660.19,1106008
+glibc,mixed_lifecycle,307200,2144930,143221457.1,6.98,40359936
+glibc,small_churn,100000,333564,299792543.6,3.34,12756656
+glibc,mixed_batch,256000,941140,272010540.4,3.68,34727552
+glibc,large_batch,9600,6441140,1490419.4,670.95,1106008
+glibc,mixed_lifecycle,307200,2151461,142786692.4,7.00,40359936
+glibc,small_churn,100000,330338,302720244.1,3.30,12756656
+glibc,mixed_batch,256000,945958,270625122.9,3.70,34727552
+glibc,large_batch,9600,6630013,1447961.0,690.63,1106008
+glibc,mixed_lifecycle,307200,2154257,142601370.2,7.01,40359936
+glibc,small_churn,100000,333834,299550075.8,3.34,12756656
+glibc,mixed_batch,256000,946870,270364464.0,3.70,34727552
+glibc,large_batch,9600,6478009,1481936.8,674.79,1106008
+glibc,mixed_lifecycle,307200,2164787,141907725.8,7.05,40359936
+glibc,small_churn,100000,330798,302299288.4,3.31,12756656
+glibc,mixed_batch,256000,949335,269662447.9,3.71,34727552
+glibc,large_batch,9600,5138865,1868116.8,535.30,1106008
+glibc,mixed_lifecycle,307200,2208518,139097802.2,7.19,40359936
+glibc,small_churn,100000,330036,302997248.8,3.30,12756656
+glibc,mixed_batch,256000,944345,271087367.4,3.69,34727552
+glibc,large_batch,9600,5159785,1860542.6,537.48,1106008
+glibc,mixed_lifecycle,307200,2090888,146923221.1,6.81,40359936
+glibc,small_churn,100000,333363,299973302.4,3.33,12756656
+glibc,mixed_batch,256000,1044883,245003507.6,4.08,34727552
+glibc,large_batch,9600,6375958,1505656.1,664.16,1106008
+glibc,mixed_lifecycle,307200,2101398,146188394.6,6.84,40359936
+glibc,small_churn,100000,331009,302106589.2,3.31,12756656
+glibc,mixed_batch,256000,943784,271248506.0,3.69,34727552
+glibc,large_batch,9600,4945264,1941251.3,515.13,1106008
+glibc,mixed_lifecycle,307200,2146232,143134572.6,6.99,40359936
+glibc,small_churn,100000,371855,268922026.1,3.72,12756656
+glibc,mixed_batch,256000,941901,271790772.1,3.68,34727552
+glibc,large_batch,9600,6550715,1465488.9,682.37,1106008
+glibc,mixed_lifecycle,307200,2145100,143210106.8,6.98,40359936
+glibc,small_churn,100000,625740,159810784.0,6.26,12756656
+glibc,mixed_batch,256000,947872,270078660.4,3.70,34727552
+glibc,large_batch,9600,6432735,1492366.8,670.08,1106008
+glibc,mixed_lifecycle,307200,2201526,139539573.9,7.17,40359936
+glibc,small_churn,100000,330378,302683592.7,3.30,12756656
+glibc,mixed_batch,256000,946609,270439009.1,3.70,34727552
+glibc,large_batch,9600,6368895,1507325.8,663.43,1106008
+glibc,mixed_lifecycle,307200,2149247,142933781.0,7.00,40359936
+glibc,small_churn,100000,331039,302079211.2,3.31,12756656
+glibc,mixed_batch,256000,982828,260472839.6,3.84,34727552
+glibc,large_batch,9600,6293875,1525292.4,655.61,1106008
+glibc,mixed_lifecycle,307200,2404074,127783088.2,7.83,40359936
+glibc,small_churn,100000,331099,302024470.0,3.31,12756656
+glibc,mixed_batch,256000,947010,270324495.0,3.70,34727552
+glibc,large_batch,9600,6342345,1513635.7,660.66,1106008
+glibc,mixed_lifecycle,307200,2227414,137917782.7,7.25,40359936
+glibc,small_churn,100000,586076,170626335.2,5.86,12756656
+glibc,mixed_batch,256000,946700,270413013.6,3.70,34727552
+glibc,large_batch,9600,5171797,1856221.3,538.73,1106008
+glibc,mixed_lifecycle,307200,2297585,133705608.3,7.48,40359936
+=== RAW TABLE leg B ===
+glibc,small_churn,100000,567040,176354401.8,5.67,12756656
+glibc,mixed_batch,256000,941530,271897868.4,3.68,34727552
+glibc,large_batch,9600,5163873,1859069.7,537.90,1106008
+glibc,mixed_lifecycle,307200,2358939,130228039.0,7.68,40359936
+glibc,small_churn,100000,330918,302189666.3,3.31,12756656
+glibc,mixed_batch,256000,936501,273357956.9,3.66,34727552
+glibc,large_batch,9600,6362994,1508723.7,662.81,1106008
+glibc,mixed_lifecycle,307200,2199662,139657820.2,7.16,40359936
+glibc,small_churn,100000,330889,302216151.0,3.31,12756656
+glibc,mixed_batch,256000,942372,271654930.3,3.68,34727552
+glibc,large_batch,9600,6296900,1524559.7,655.93,1106008
+glibc,mixed_lifecycle,307200,2368357,129710174.6,7.71,40359936
+glibc,small_churn,100000,332882,300406750.7,3.33,12756656
+glibc,mixed_batch,256000,943784,271248506.0,3.69,34727552
+glibc,large_batch,9600,6274579,1529983.1,653.60,1106008
+glibc,mixed_lifecycle,307200,2163895,141966222.9,7.04,40359936
+glibc,small_churn,100000,331389,301760167.1,3.31,12756656
+glibc,mixed_batch,256000,946750,270398732.5,3.70,34727552
+glibc,large_batch,9600,6303533,1522955.5,656.62,1106008
+glibc,mixed_lifecycle,307200,2160819,142168316.7,7.03,40359936
+glibc,small_churn,100000,330207,302840339.5,3.30,12756656
+glibc,mixed_batch,256000,943904,271214021.8,3.69,34727552
+glibc,large_batch,9600,5107247,1879681.9,532.00,1106008
+glibc,mixed_lifecycle,307200,2258141,136041106.4,7.35,40359936
+glibc,small_churn,100000,330788,302308427.1,3.31,12756656
+glibc,mixed_batch,256000,943563,271312037.5,3.69,34727552
+glibc,large_batch,9600,5262427,1824253.3,548.17,1106008
+glibc,mixed_lifecycle,307200,2128007,144360427.4,6.93,40359936
+glibc,small_churn,100000,330217,302831168.6,3.30,12756656
+glibc,mixed_batch,256000,942061,271744611.0,3.68,34727552
+glibc,large_batch,9600,5398521,1778264.8,562.35,1106008
+glibc,mixed_lifecycle,307200,2169205,141618703.6,7.06,40359936
+glibc,small_churn,100000,386051,259033132.9,3.86,12756656
+glibc,mixed_batch,256000,945527,270748482.1,3.69,34727552
+glibc,large_batch,9600,6389273,1502518.4,665.55,1106008
+glibc,mixed_lifecycle,307200,2170868,141510216.2,7.07,40359936
+glibc,small_churn,100000,329876,303144211.8,3.30,12756656
+glibc,mixed_batch,256000,943003,271473155.4,3.68,34727552
+glibc,large_batch,9600,6363766,1508540.7,662.89,1106008
+glibc,mixed_lifecycle,307200,2199992,139636871.4,7.16,40359936
+glibc,small_churn,100000,330728,302363271.3,3.31,12756656
+glibc,mixed_batch,256000,944245,271116076.9,3.69,34727552
+glibc,large_batch,9600,6516881,1473097.3,678.84,1106008
+glibc,mixed_lifecycle,307200,2151461,142786692.4,7.00,40359936
+glibc,small_churn,100000,330558,302518771.3,3.31,12756656
+glibc,mixed_batch,256000,944035,271176386.5,3.69,34727552
+glibc,large_batch,9600,6311528,1521026.3,657.45,1106008
+glibc,mixed_lifecycle,307200,2397081,128155869.6,7.80,40359936
+glibc,small_churn,100000,330849,302252689.3,3.31,12756656
+glibc,mixed_batch,256000,996783,256826209.9,3.89,34727552
+glibc,large_batch,9600,5199679,1846267.8,541.63,1106008
+glibc,mixed_lifecycle,307200,2317542,132554232.0,7.54,40359936
+glibc,small_churn,100000,334445,299002825.6,3.34,12756656
+glibc,mixed_batch,256000,946339,270516168.1,3.70,34727552
+glibc,large_batch,9600,6372151,1506555.6,663.77,1106008
+glibc,mixed_lifecycle,307200,2156040,142483441.9,7.02,40359936
+glibc,small_churn,100000,331449,301705541.4,3.31,12756656
+glibc,mixed_batch,256000,946529,270461866.5,3.70,34727552
+glibc,large_batch,9600,6463011,1485375.8,673.23,1106008
+glibc,mixed_lifecycle,307200,2152804,142697616.7,7.01,40359936
+
+=== SUMMARY (summarize_measured.py, protocol defaults) ===
+noise bound: 5.0%   drift bound: 8.0%
+workload            medA_ns    medB_ns  agree%  driftA%  driftB%  verdict
+large_batch          660.66     656.62    0.61     0.07     1.55  AGREE
+                 spreadA 515.13..690.63 spreadB 532.00..678.84 repsA 15 repsB 15 checksum ['1106008']
+mixed_batch            3.70       3.69    0.27     0.27     0.00  AGREE
+                 spreadA 3.68..4.08 spreadB 3.66..3.89 repsA 15 repsB 15 checksum ['34727552']
+mixed_lifecycle        7.01       7.07    0.85     2.28     1.27  AGREE
+                 spreadA 6.81..7.83 spreadB 6.93..7.80 repsA 15 repsB 15 checksum ['40359936']
+small_churn            3.31       3.31    0.00     0.30     0.00  AGREE
+                 spreadA 3.29..6.26 spreadB 3.30..5.67 repsA 15 repsB 15 checksum ['12756656']
+PROTOCOL GATE: PASS
+
+=== ATTEMPTS RECORD (protocol section 8: voided runs are kept, never deleted) ===
+trial (pre-amendment defaults, summarised at 5/8 by flags): PASS - agreement at most 0.65 percent, drift at most 3.28 percent, load 0.01; not used as the official evidence because its runner header recorded the pre-amendment switch defaults
+attempt 1 (reps 7, warmups 1): VOID - DRIFT-REJECT on all 4 workloads, DISAGREE on 2; load 5.13 burst from co-tenant mustering work
+attempt 2 (reps 7, warmups 1): VOID - DRIFT-REJECT mixed_batch (8.87) and mixed_lifecycle (8.09) on leg B; agreement at most 1.24 percent; load about 2.2
+attempt 3 (reps 9, warmups 1): VOID - DRIFT-REJECT large_batch leg B (8.47) and small_churn leg A (13.17; one process spiked to 9.59 ns); load about 1.9
+attempts 4-7 (reps 7, warmups 1): VOID - drift/disagreement on the large_batch and mixed workloads at load 0.77-1.13; pattern found: large_batch first measured processes run about 10 percent slower (a cross-process ramp) - the warm-up amendment in the protocol followed
+attempt 8 (reps 7, warmups 3): VOID - DRIFT-REJECT large_batch leg A (9.42) and mixed_lifecycle leg B (10.10) at load 0.50; agreement at most 1.39 percent
+attempt 9 (reps 15, warmups 3): PASS - the run recorded above; halves of 7 per leg make the split-half drift statistic stable for single-pass K-002 values
+all attempt raw files and summaries: team hidden_files/z004_demo_attemptN.* (team-local, not banked)
+
+=== VERDICT ===
+Z-004 gate met. The protocol doc is filed at docs/Z13_MEASUREMENT_PROTOCOL.md and implemented by scripts/z13/run_measured.sh (pinning, warm-up, interleave and repetition switches) and scripts/z13/summarize_measured.py (median-of-processes, agreement, drift and checksum verdicts). Two identical legs of the banked K-002 harness, pinned to CPU 2 and interleaved over 15 processes each, agree within 0.85 percent worst case against the protocol noise bound of 5 percent, with drift at most 2.28 percent against the 8 percent bound and exactly one checksum per workload across both legs: PROTOCOL GATE PASS. These identical-legs medians (glibc against itself) are a measurement-law proof, not an allocator verdict; the Z-003 loss table stands as the allocator comparison of record. Correctness gate green at the Z-001 baseline counts.
