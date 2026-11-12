@@ -1,0 +1,205 @@
+MimirAlloc Z13 recorded run - Z-060 Pressure cycles on this host
+slice: Z-060 - Pressure cycles on this host (Wave 7: Phase-9 pressure-cycle heritage re-run: cgroup ceilings, trim response, recovery after pressure release (with Z-050's policy). Gate: cycle report; no unbounded retention observed or the bound that failed is named.)
+date: 2026-11-12 (America/Indiana/Indianapolis)
+base: merge 321ba7f of seat main c2ed635 (banked Z-001..Z-056, remote-verified) into yrsa/mimiralloc-team-05 - clean merge, no conflicts; baseline gate on the merged tree GREEN 4988/0/77 before any Z-060 change (hidden_files/z060_baseline_gate.log)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed at the end of this file)
+machine load state: shared host (Aesir forge + Tensile lab co-tenants; the Z-057 soak had finished before this window); run header carries loadavg start/end 0.90 0.82 1.04 - a quiet window; RSS legs are resident-memory measurements, process-local, not timings
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z060_gate.log: 4988 checks / 0 failed / 77 by-design skips, GATE RESULT: GREEN - identical to the merged-tree baseline and to the Z-001 baseline
+neighbouring standalone suites on the final tree: test-z048 57 run / 0 failed PASS; test-z050 60 run / 0 failed PASS; test-z052 35 checks / 0 failures PASS
+nm -D on libmimiralloc.so: exactly 4 public symbols (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free)
+artifacts: docs/Z13_PRESSURE_CYCLES.md (the cycle report and CP-1..CP-5 discharge table), tests/perf/probe_z060.c, tests/perf/run_z060.sh, tests/perf/summarize_z060.py, Makefile probe-z060/test-z060 targets (standalone, NOT in make test). sha256: docs/Z13_PRESSURE_CYCLES.md 04be846e..., probe_z060.c 9a877203..., run_z060.sh b984d2cf..., summarize_z060.py 424bb134..., Makefile 9ae8ac28...
+team structure: 1 lead + 6 Mythic Engineering sub-agents (design, heritage reconciliation, measurement/RSS method, cgroup/risk, gate verification, implementation review) - all six spawned, no 429, inputs folded into the build and the report
+verdict: Z060 SUMMARY: PASS (cycles 3/3 attempts x 5 cycles, tuples identical in all 15 cycles; caps PASS; madv PASS; ceiling PASS inside its scope; hog contained at exit 137; hogfree PASS). NO UNBOUNDED RETENTION OBSERVED: span retention 393216 B at bound 16, mapping pool hard-capped at 64 units / 33554432 B, both returning to exactly 0 under one FULL policy evaluation in every cycle, RSS following to the KiB (drop exactly 7200 KiB = (393216 + 6979584) / 1024). THE BOUND THAT FAILED IS NAMED (a policy bound, not a retention bound): Z-050 CP-3's PARTIAL DONTNEED course does not exist on the banked implementation - PARTIAL released 0 pooled bytes in all 15 cycles (partial_pool_delta=0); CP-2 (LRU-per-bucket eviction order) also NOT DISCHARGED (single-list LIFO is the implementation); CP-4 DISCHARGED-WITH-CORRECTION (byte cap is 32 MiB not 64 MiB; no <=16 MiB eligibility line exists - a 20975616 B mapping pools whole); CP-1 DISCHARGED-PROVEN; CP-5 DISCHARGED BY DECISION (MADV_FREE priced both ways and REJECTED as a trim mechanism - lazy without pressure, first reclaim source under it; re-open condition in docs/Z13_PRESSURE_CYCLES.md S5). Full table and reasoning: docs/Z13_PRESSURE_CYCLES.md.
+
+=== RUN (tests/perf/run_z060.sh output, verbatim) ===
+run_z060_version: 1
+date_local: 2026-11-12T10:37:58-0500
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+loadavg_start: 0.90 0.82 1.04 2/1208 895239
+pressure_memory_live: some avg10=0.00 avg60=0.00 avg300=0.00 total=1831603 full avg10=0.00 avg60=0.00 avg300=0.00 total=1782870 
+runner_cgroup: 0::/system.slice/musegadget.service
+probe_z060_mode=cycles page_size=4096
+rss_base_kib=2076
+expect_pool_bytes=6979584
+cycle=1 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13624
+cycle=1 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=1 full_dec=2 full_rel=96 rss_pre_full_kib=13624 rss_full_kib=6424
+cycle=1 tuple=STABLE
+cycle=2 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13624
+cycle=2 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=2 full_dec=2 full_rel=96 rss_pre_full_kib=13624 rss_full_kib=6424
+cycle=2 tuple=STABLE
+cycle=3 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13624
+cycle=3 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=3 full_dec=2 full_rel=96 rss_pre_full_kib=13624 rss_full_kib=6424
+cycle=3 tuple=STABLE
+cycle=4 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13624
+cycle=4 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=4 full_dec=2 full_rel=96 rss_pre_full_kib=13624 rss_full_kib=6424
+cycle=4 tuple=STABLE
+cycle=5 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13624
+cycle=5 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=5 full_dec=2 full_rel=96 rss_pre_full_kib=13624 rss_full_kib=6424
+cycle=5 tuple=STABLE
+cycles_run=5
+PROBE_Z060_CYCLES: PASS
+probe_z060_mode=caps page_size=4096
+count_cap_pool_count=64
+count_cap_pool_bytes=8781824
+count_cap_expect_bytes=8781824
+count_cap_released_delta=270336
+byte_cap_pool_count=1 byte_cap_len=20975616
+oversize_len=41947136 pool_after=0
+pool_max_count=64
+pool_max_bytes=33554432
+PROBE_Z060_CAPS: PASS
+probe_z060_mode=madv page_size=4096
+madv_rss_touched_kib=34836
+madv_rss_after_dontneed_kib=18560
+madv_rss_after_free_kib=18560
+madv_dontneed_drop_kib=16276
+madv_free_drop_kib=0
+madv_refault_dontneed=4096
+madv_refault_free=0
+madv_free_verdict=LAZY_RSS_RETAINED
+PROBE_Z060_MADV: PASS
+test_z060_exit: 0
+--- cycles attempt 2 ---
+probe_z060_mode=cycles page_size=4096
+rss_base_kib=2064
+expect_pool_bytes=6979584
+cycle=1 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13612
+cycle=1 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=1 full_dec=2 full_rel=96 rss_pre_full_kib=13612 rss_full_kib=6412
+cycle=1 tuple=STABLE
+cycle=2 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13612
+cycle=2 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=2 full_dec=2 full_rel=96 rss_pre_full_kib=13612 rss_full_kib=6412
+cycle=2 tuple=STABLE
+cycle=3 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13612
+cycle=3 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=3 full_dec=2 full_rel=96 rss_pre_full_kib=13612 rss_full_kib=6412
+cycle=3 tuple=STABLE
+cycle=4 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13612
+cycle=4 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=4 full_dec=2 full_rel=96 rss_pre_full_kib=13612 rss_full_kib=6412
+cycle=4 tuple=STABLE
+cycle=5 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13612
+cycle=5 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=5 full_dec=2 full_rel=96 rss_pre_full_kib=13612 rss_full_kib=6412
+cycle=5 tuple=STABLE
+cycles_run=5
+PROBE_Z060_CYCLES: PASS
+cycles_exit: 0
+--- cycles attempt 3 ---
+probe_z060_mode=cycles page_size=4096
+rss_base_kib=2072
+expect_pool_bytes=6979584
+cycle=1 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13620
+cycle=1 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=1 full_dec=2 full_rel=96 rss_pre_full_kib=13620 rss_full_kib=6420
+cycle=1 tuple=STABLE
+cycle=2 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13620
+cycle=2 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=2 full_dec=2 full_rel=96 rss_pre_full_kib=13620 rss_full_kib=6420
+cycle=2 tuple=STABLE
+cycle=3 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13620
+cycle=3 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=3 full_dec=2 full_rel=96 rss_pre_full_kib=13620 rss_full_kib=6420
+cycle=3 tuple=STABLE
+cycle=4 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13620
+cycle=4 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=4 full_dec=2 full_rel=96 rss_pre_full_kib=13620 rss_full_kib=6420
+cycle=4 tuple=STABLE
+cycle=5 ret_spans=96 ret_bytes=393216 pool_count=8 pool_bytes=6979584 rss_free_kib=13620
+cycle=5 partial_dec=1 partial_rel=48 partial_pool_delta=0
+cycle=5 full_dec=2 full_rel=96 rss_pre_full_kib=13620 rss_full_kib=6420
+cycle=5 tuple=STABLE
+cycles_run=5
+PROBE_Z060_CYCLES: PASS
+cycles_exit: 0
+--- ceiling leg (systemd user scope, MemoryMax=512M) ---
+Running as unit: run-p895264-i51205977.scope; invocation ID: 741456e393d14d83967f81e84bc3e25c
+probe_z060_mode=ceiling page_size=4096
+cgroup_path=0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-p895264-i51205977.scope
+ceiling_vmsize_base_kib=7328
+ceiling_headroom_bytes=41943040
+ceiling_soft_bytes=49446912
+ceiling_fill_ok=34 stable_null=1
+ceiling_probe_alloc_ns=2505
+ceiling_health_ns=24236
+ceiling_recovery_ok=1
+PROBE_Z060_CEILING: PASS
+ceiling_exit: 0
+--- hog leg (systemd user scope, MemoryMax=256M) ---
+Running as unit: run-p895330-i51205980.scope; invocation ID: 364f8f7bd6ec4d328eac9ab8b2f744f0
+probe_z060_mode=hog page_size=4096
+cgroup_path=0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-p895330-i51205980.scope
+hog_chunks=1 rss_kib=34832
+hog_chunks=2 rss_kib=67708
+hog_chunks=3 rss_kib=100476
+hog_chunks=4 rss_kib=133244
+hog_chunks=5 rss_kib=166012
+hog_chunks=6 rss_kib=198780
+hog_chunks=7 rss_kib=231548
+./tests/perf/run_z060.sh: line 33: 895330 Killed                     systemd-run --user --scope -p MemoryMax=256M -p MemorySwapMax=0 ./build/probe_z060 hog 2>&1
+hog_exit: 137
+--- hogfree leg (scope MemoryMax=256M, MADV_FREE reclaim) ---
+Running as unit: run-p895336-i51205981.scope; invocation ID: d956977c3eae414d9e13bd6ef418969f
+probe_z060_mode=hogfree page_size=4096
+cgroup_path=0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-p895336-i51205981.scope
+hogfree_touched_chunks=6 rss_kib=198680
+hogfree_free_applied=4 rss_kib=198788
+hogfree_chunks=7 rss_kib=231556
+hogfree_chunks=8 rss_kib=262840
+hogfree_chunks=9 rss_kib=262740
+hogfree_chunks=10 rss_kib=262720
+hogfree_result=FREE_PAGES_RECLAIMED chunks=10
+PROBE_Z060_HOGFREE: PASS
+hogfree_chunks=11 rss_kib=262668
+./tests/perf/run_z060.sh: line 37: 895336 Killed                     systemd-run --user --scope -p MemoryMax=256M -p MemorySwapMax=0 ./build/probe_z060 hogfree 2>&1
+hogfree_exit: 137
+host_alive_after_hog: 0.90 0.82 1.04 4/1218 895351
+loadavg_end: 0.90 0.82 1.04 4/1218 895352
+
+=== SUMMARY (tests/perf/summarize_z060.py) ===
+cycles_pass: 3/3
+caps_pass: 1
+madv_pass: 1
+ceiling_pass: 1
+test_z060_exit: 0
+ceiling_exit: 0
+hogfree_pass: 1
+hog_exit: 137
+hog_contained: True
+host_alive_after_hog: True
+fail_lines: 0
+Z060 SUMMARY: PASS
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured 2026-11-12 in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T15:38:00Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5125100
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 73%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.90 0.82 1.04

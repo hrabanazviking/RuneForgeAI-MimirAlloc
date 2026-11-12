@@ -973,7 +973,7 @@ test-z048: $(BUILD)/test_z048_pool
 # link, like test-z043). Standalone via make test-z050;
 # NOT part of make test (standing gate counts untouched).
 # Recorded run: tests/perf/recorded_run_z13_z050.txt.
-$(BUILD)/test_z050_trim_policy.o: tests/core/test_z050_trim_policy.c tests/core/mimir_trim_policy_z050.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
+$(BUILD)/test_z050_trim_policy.o: tests/core/test_z050_trim_policy.c tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/core/test_z050_trim_policy.c -o $@
 
 $(BUILD)/test_z050_trim_policy: $(LIBOBJS) $(BUILD)/test_z050_trim_policy.o
@@ -984,7 +984,7 @@ test-z050: $(BUILD)/test_z050_trim_policy
 
 .PHONY: test-z050
 
-$(BUILD)/probe_z050.o: tests/perf/probe_z050.c tests/core/mimir_trim_policy_z050.h tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
+$(BUILD)/probe_z050.o: tests/perf/probe_z050.c tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/perf/probe_z050.c -o $@
 
 $(BUILD)/probe_z050: $(LIBOBJS) $(BUILD)/probe_z050.o
@@ -1781,3 +1781,29 @@ ifeq ($(DESTDIR),)
 endif
 
 .PHONY: lib-versioned print-version install
+
+# ------------------------------------------------------------------
+# Z-060: pressure cycles on this host - the cycle probe
+# under tests/perf/ (probe_z060.c: cycles / caps / madv /
+# ceiling / hog modes), built against the production
+# LIBOBJS (test-only static link, like probe-z050).
+# Standalone via make test-z060; NOT part of make test
+# (standing gate counts untouched). Recorded run:
+# tests/perf/recorded_run_z13_z060.txt.
+# ------------------------------------------------------------------
+$(BUILD)/probe_z060.o: tests/perf/probe_z060.c tests/core/mimir_trim_i003.h tests/core/mimir_tune_g007.h tests/core/mimir_pool_z048.h tests/core/mimir_stats_j002.h include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_z060.c -o $@
+
+$(BUILD)/probe_z060: $(LIBOBJS) $(BUILD)/probe_z060.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_z060.o -o $@
+
+probe-z060: $(BUILD)/probe_z060
+
+.PHONY: probe-z060
+
+test-z060: $(BUILD)/probe_z060
+	./$(BUILD)/probe_z060 cycles
+	./$(BUILD)/probe_z060 caps
+	./$(BUILD)/probe_z060 madv
+
+.PHONY: test-z060
