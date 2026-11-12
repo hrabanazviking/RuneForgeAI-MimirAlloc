@@ -1,0 +1,453 @@
+MimirAlloc Z13 recorded run - Z-023 large-path anatomy
+slice: Z-023 - Large-path anatomy (profile of large_batch: what share of the large-path cost is the mmap/munmap pair, what share is bookkeeping, what share is faults; gate: cost split percentages recorded, KL-C's wound sized exactly)
+date: 2026-11-12 (gate run 08:44 UTC, measurement run window 08:46-08:47 UTC, America/New_York 03:44-03:47 EST)
+base: 7b35103 (branch yrsa/mimiralloc-team-09: merge of seat main 0b6c20f, banked Z-001..Z-019, into the team's Z-009 commit 69bcc4e; the merge conflict in docs/Z13_WAVE01_BASELINE.md was resolved by taking the seat version whole - the keeper fold-in is the version of record)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: tests/perf/probe_z023.c, tests/perf/run_z023.sh, tests/perf/summarize_z023.py, this recorded run. No production source changed by this slice.
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004 banked at the seat): every measured value is a separate PROCESS pinned taskset -c 2 (CCD0 physical core); 3 warm-up processes per phase discarded; 7 measured processes per phase; legs interleaved round-robin within each repetition round so drift lands on all legs of a size together; headline = MEDIAN of per-process ns/op. The bench workload code is bench_k002.c included UNMODIFIED by the probe (main renamed away, exactly as Z-019): the mimir and glibc batch legs run the banked w_large_batch itself (sizes {2048, 8192, 16384, 65536, 262144, 1048576}, batches of 32 live, endpoint touch, forward free, 30 warm-up + 300 timed batches). Decomposition legs per size, single block live: op (full allocator path, bench touch), raw/notouch (bare mmap+munmap in EXACTLY MimirAlloc's geometry and flags: length round_up(4096+size, 4096), PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, user area at base+4096), raw/touch (same + the bench endpoint touch), raw/fulltouch (same + one byte per user page; auxiliary dense-touch pricing, NOT part of the bench decomposition). pair = raw/notouch; faults = raw/touch - raw/notouch (fault handling PLUS the populated-teardown premium inside munmap - the two are not separable in a pair timing, and are named together wherever this run says faults); bookkeeping = op/mimir - raw/touch, a RESIDUAL (the one global lock held across both syscalls, descriptor publication, registry insert/remove and the free-side registry walk, J-002/E-005 counters, dispatch, plus any non-additivity between legs measured in different processes - labelled residual, never a directly timed quantity). Batch-shape legs (batchraw) rebuild the 32-live forward-free shape on raw mappings with identical size cycling and seeds, separating batch-shape effects from bookkeeping. Walk legs keep <live> blocks of 65536 live and time the forward free-all pass only, for mimir and for raw munmap at the same live count. Checksum discipline (K-002, protocol s.9): the endpoint-touch checksum family (op/mimir, op/glibc, raw/touch) holds exactly ONE value per size; batch mimir, batch glibc and batchraw/touch all equal the K-002 large_batch checksum 1106008 - ALL OK in the summariser output below. Minor faults per op are counted from /proc/self/stat (field 10) around every timed section.
+load state: SHARED-HOST, CONTENDED - NOT a quiet window and NOT a quiet-machine baseline. /proc/loadavg 6.02 / 5.17 / 3.80 at run start, 4.13 / 4.77 / 3.74 at run end. Co-tenants observed in the window: a sibling team's Z-020 contention-ladder probe (24 threads at run start), Tensile lab python workers (joblib loky processes, later a qwen_fp32 run at 219-291% CPU), and an Aesir forge mojo test process (100% CPU). The run's defence is the protocol's own: pinning, interleave, median-of-processes. Drift (protocol s.8, bound 8%): every decomposition headline series (op, raw per size; batch mimir; batchraw both legs; walk mimir at all live counts) is within bound (max 6.9%). Three comparator/supporting series exceed it and are flagged wherever used: batch glibc 8.5%, walk raw at live=32 19.6% and live=1024 18.0% (walk raw live=1 8.2%). A post-run spot check minutes later, under a heavier co-tenant mix, read batch glibc at 1615-2141 ns/op and walk raw at ~4300-4500 ns/free, while batch mimir reproduced at 2900-2939 ns/op and op mimir 65536 at 3029-3542 ns/op: the glibc leg and the bare-munmap leg are the load-sensitive legs on this shared host; the mimir legs and the decomposition shares are the stable quantities. Absolute ns/op below carry this shared-host label; the SHARES and the mimir-side growth curves are the baseline-of-record content of this run.
+correctness gate: scripts/z13/run_gate.sh in this worktree, log hidden_files/z023_gate.log (team-local, not banked): GATE GREEN, 4988 checks (18 smoke + 4970 CHECKS), 0 failed, 77 by-design SKIP lines, make exit 0 - identical counts to the Z-001 baseline. This slice adds no tests; the probe is not part of make test.
+
+=== VERDICT - THE LARGE-PATH COST SPLIT (roadmap gate) ===
+Gate status: MET. Cost split percentages are recorded below for the large_batch shape and per request size; KL-C's wound is sized in ns/op and as a ratio, per size and for the batch.
+
+THE BATCH (large_batch as the roadmap defines it, 32 live, forward free):
+  mimir total 2880.62 ns/op. Split: mmap/munmap pair 936.72 (32.5%), faults 1441.16 (50.0%), bookkeeping-residual 502.74 (17.5%).
+  KL-C WOUND (batch): 2880.62 - 693.17 = 2187.45 ns/op, ratio 4.16x vs glibc in this run's window (Z-003 recorded 3064.69 vs 1295.68 = 2.4x under its own heavier contention; the wound's ns size is of the same order in both runs, the ratio moves mainly with the load-sensitive glibc leg - see the load note: post-run spot checks put glibc batch anywhere in 693-2141 ns/op while mimir held 2881-2939, so the honest statement is: wound about 2.2 us/op, ratio at least 4.2x in-window and larger when the glibc leg is calm).
+
+PER SIZE (single block live; shares of the mimir total; full table in the summariser output):
+  mean across the six sizes: pair 39.0%, faults 41.4%, bookkeeping-residual 19.6% of a 2713.34 ns/op mean total.
+  The pair share FALLS with size (49.6% at 2048 -> 31.2% at 1048576) because the pair is size-flat (~1019-1157 ns at every size, one mmap + one munmap, untouched-page teardown has no per-page term - cross-checks Z-015) while the fault share grows: at 2048 the single user page faults once (1.000 fault/op counted); at every larger size the endpoint touch faults exactly 2 user pages (2.000/op counted) and the populated-teardown premium inside munmap grows with mapping length.
+  Bookkeeping-residual is 402-810 ns/op (15.3-24.7%) at every size - size-flat, as the source says it must be (fixed descriptor write, O(1) insert/remove, fixed counters; the only count-dependent term is the free-side walk, sized separately below).
+
+WHERE THE FAULTS GO (counted, not inferred): batch mimir faults 2.834 minor faults/op; batchraw touch faults 1.834/op. The difference is exactly +1.000 fault/op: the RESERVE PAGE. alloc_locked writes the 96-byte descriptor and the owner-thread record into the reserve page at publication, so every large allocation faults its reserve page once, on top of the 1-2 user pages the bench touch faults (per batch: rotations fault 58-59 user pages of ~1718-2035 mapped user pages, about 3.4% - the workload's interior pages are never touched). The reserve-page fault rides inside the bookkeeping residual in the split above (it is publication work), and is named here so the residual is not misread as pure CPU bookkeeping: roughly one Z-014 fault (345-505 ns/page quiet) of the 503 ns batch residual is that fault under this window's load. Cross-check vs constants: Z-014's quiet fresh-fault cost is 344-373 ns/page at these sizes; this run's faults delta per counted user fault is 622-722 ns - the delta is fault handling PLUS populated teardown (Z-015: populated munmap ~63-128 ns/page, and a just-faulted region's teardown under load), never fault handling alone; the two runs agree once the teardown term is admitted.
+
+THE REGISTRY WALK (free-side bookkeeping that scales with live count): forward free is the worst geometry by construction - registry_insert is head-insertion and find_candidate_locked walks from the head, so freeing a batch oldest-first costs 32+31+...+1 = 528 pointer comparisons per batch (mean 16.5 per free; a reverse-order free would cost 1 per free). Timed free-all passes at 65536-byte blocks: mimir 1316.40 ns/free at 1 live, 1555.09 at 32, 1870.33 at 256, 4040.17 at 1024 (all drift-clean); raw munmap at the same live counts is flat (~1442-1503 in-window, drift-flagged, load-sensitive - indicative only). The mimir-side growth is the walk plus validation: about +2.7 us/free between 1 and 1024 live, i.e. the walk costs roughly 2-3 ns per live mapping per free on this host under this load, and it is paid on EVERY large free, under the global lock (Z-019: at saturation every cycle of hold is paid once per queued thread as wait). At large_batch's 32-live depth the walk is a minor term (~80 ns/free of excess in-window); at KL-D-style depths (hundreds live) it becomes a first-order term - that is a Z-024/Z-027 input, recorded here as measured.
+
+GLIBC COMPARATOR ANATOMY (why the wound is structural, proven on this host): in a fresh process, glibc 2.44 serves 2048-65536 from the arena (mallinfo2 hblks stays 0; 65536 grows the arena by sbrk) and only 262144 and 1048576 take their own mmap (hblks +1 each) - the mmap threshold is exactly 128 KiB (131072 mmaps). After an mmapped chunk is freed the DYNAMIC threshold rises to that chunk's size (after freeing 1048576, even 1048576 itself is arena-served for the rest of the process). So in this probe's steady-state single-size loops glibc costs 8.31-8.87 ns/op at EVERY size including 1048576 - pure arena reuse, no syscall, no fault - while MimirAlloc pays a fresh mapping per allocation at every size past 1024. The per-size wound table (2278-3264 ns/op, ratios 260-394x) is therefore against glibc's steady state and is labelled as such; the batch wound (4.16x in-window) is the conservative headline because the batch's mixed sizes and 32-live shape partially defeat glibc's caching. KL-C in one sentence: MimirAlloc's large path spends about 2.9 us to do with a fresh mapping what glibc's threshold-and-cache wisdom usually does from memory it already holds - and of that 2.9 us, only about a fifth is MimirAlloc's own bookkeeping; the rest is the kernel mapping work (pair + faults) that a mapping-per-allocation design cannot avoid paying per op.
+
+DENSE-TOUCH PRICING (auxiliary, not the bench): if a workload actually writes every user page, faults stop being sparse: raw/fulltouch costs 1865.64 ns at 2048 (1 page, same as touch) rising to 112928.90 ns at 1048576 (256 pages, ~441 ns/page in-window, cross-checks Z-014). A full-touch 1 MiB op would cost MimirAlloc roughly 113 us of faults alone - 35x its sparse-touch total - and would pay it AGAIN on every re-allocation, where a caching allocator re-faults nothing. The sparse bench understates KL-C for dense real workloads; the direction of the error is recorded, with its size.
+
+DESIGN CONSEQUENCES (inputs to Z-026, no decision taken here): (1) any large-path cache/pool attacks 100% of the pair+fault shares (82.5% of the batch cost) - Z-014 already proved pooling buys no FAULT savings on recycled mappings, so a pool's win would come from avoiding the pair and the reserve-page fault, not from cheaper faults; (2) MADV_HUGEPAGE on pooled mappings at 2 MiB+ (Z-013: faults -89%) is the one lever that shrinks the fault share itself, and the constants doc's 200 MiB pooled-THP row is still OPEN; (3) the walk is a separate, smaller wound with a separate cure (an O(1) owner lookup or a pointer-keyed index), worth ~2-3 ns per live mapping per free; (4) bookkeeping CPU proper (lock, descriptor, counters) is the smallest share - optimising it first would chase the wrong fifth of the cost.
+
+Bugs found/fixed in this slice's own work: (a) probe compile faults (feature-macro collision with the included bench, a now_ns name collision, MAP_ANONYMOUS visibility) caught at first compile and fixed in the probe before any run; (b) a batchraw seed-offset fault (timed batches numbered 30..329 instead of the bench's 0..299) caught by the checksum discipline - batchraw/touch read 1162896 against the K-002 1106008 - fixed and re-proven (1106008) before the recorded run. No allocator (production) bug was discovered by this slice; no production file is changed. One documentation flag from the team's cross-check, recorded for the keeper (outside this slice's artifacts): the Z-013 recorded run's load note claims a quiet window (1-min load <= 0.4) while its own embedded host-truth header records loadavg 4.87 - the Z-013 numbers are corroborated by Z-014/Z-015 and stand, but its load LABEL is wrong; docs/Z13_DESIGN_CONSTANTS.md s.5 repeats the label.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured at run start, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T08:45:52Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5107073
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 92%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 6.02 5.17 3.80
+
+=== SUMMARISER OUTPUT (summarize_z023.py on the raw CSV below, verbatim) ===
+Z-023 large-path anatomy summary (ns/op; headline = median of processes)
+checksum sets per group must hold exactly one value; drift bound 8% (Z-004 s.8)
+
+=== per-process medians by group ===
+   batch glibc     size=      0 live=  32  med=    693.17  spread 565.63..702.52  drift 8.5%  n=7  checksums=[1106008]
+   batch mimir     size=      0 live=  32  med=   2880.62  spread 2860.31..3075.51  drift 2.4%  n=7  checksums=[1106008]
+batchraw notouch   size=      0 live=  32  med=    936.72  spread 836.55..1022.38  drift 5.2%  n=7  checksums=[0]
+batchraw touch     size=      0 live=  32  med=   2377.88  spread 2285.22..2599.06  drift 2.7%  n=7  checksums=[1106008]
+      op glibc     size=   2048 live=   1  med=      8.46  spread 8.19..17.41  drift 0.2%  n=7  checksums=[3826664]
+      op glibc     size=   8192 live=   1  med=      8.81  spread 8.81..10.34  drift 0.2%  n=7  checksums=[3826664]
+      op glibc     size=  16384 live=   1  med=      8.87  spread 8.44..12.47  drift 6.2%  n=7  checksums=[2552560]
+      op glibc     size=  65536 live=   1  med=      8.62  spread 8.53..9.32  drift 1.7%  n=7  checksums=[2552560]
+      op glibc     size= 262144 live=   1  med=      8.57  spread 8.19..8.82  drift 3.0%  n=7  checksums=[1276664]
+      op glibc     size=1048576 live=   1  med=      8.31  spread 8.01..8.46  drift 0.5%  n=7  checksums=[379844]
+      op mimir     size=   2048 live=   1  med=   2330.71  spread 2120.59..3336.33  drift 6.2%  n=7  checksums=[3826664]
+      op mimir     size=   8192 live=   1  med=   2286.74  spread 2276.80..2611.30  drift 1.7%  n=7  checksums=[3826664]
+      op mimir     size=  16384 live=   1  med=   2560.74  spread 2380.26..2701.49  drift 0.4%  n=7  checksums=[2552560]
+      op mimir     size=  65536 live=   1  med=   2933.94  spread 2826.28..2961.15  drift 1.0%  n=7  checksums=[2552560]
+      op mimir     size= 262144 live=   1  med=   2896.06  spread 2714.44..3889.46  drift 0.4%  n=7  checksums=[1276664]
+      op mimir     size=1048576 live=   1  med=   3271.85  spread 2811.41..3977.62  drift 6.9%  n=7  checksums=[379844]
+     raw fulltouch size=   2048 live=   1  med=   1865.64  spread 1646.34..1929.37  drift 3.3%  n=7  checksums=[3820056]
+     raw fulltouch size=   8192 live=   1  med=   1872.14  spread 1860.61..1887.59  drift 0.2%  n=7  checksums=[7640448]
+     raw fulltouch size=  16384 live=   1  med=   2907.83  spread 2740.13..3052.38  drift 0.1%  n=7  checksums=[10187136]
+     raw fulltouch size=  65536 live=   1  med=   8157.04  spread 8028.09..8677.17  drift 0.7%  n=7  checksums=[40770048]
+     raw fulltouch size= 262144 live=   1  med=  28852.27  spread 28525.03..29364.59  drift 0.2%  n=7  checksums=[81588480]
+     raw fulltouch size=1048576 live=   1  med= 112928.90  spread 112151.35..113773.68  drift 0.9%  n=7  checksums=[97920000]
+     raw notouch   size=   2048 live=   1  med=   1157.02  spread 1101.46..1320.88  drift 1.8%  n=7  checksums=[0]
+     raw notouch   size=   8192 live=   1  med=   1006.53  spread 978.27..1034.24  drift 0.9%  n=7  checksums=[0]
+     raw notouch   size=  16384 live=   1  med=   1063.61  spread 1024.70..1122.45  drift 5.1%  n=7  checksums=[0]
+     raw notouch   size=  65536 live=   1  med=   1042.32  spread 891.85..1072.18  drift 1.4%  n=7  checksums=[0]
+     raw notouch   size= 262144 live=   1  med=   1059.78  spread 1040.45..1170.58  drift 0.8%  n=7  checksums=[0]
+     raw notouch   size=1048576 live=   1  med=   1019.41  spread 832.24..1225.26  drift 0.2%  n=7  checksums=[0]
+     raw touch     size=   2048 live=   1  med=   1779.10  spread 1595.36..1964.29  drift 4.6%  n=7  checksums=[3826664]
+     raw touch     size=   8192 live=   1  med=   1884.67  spread 1861.90..1929.90  drift 1.2%  n=7  checksums=[3826664]
+     raw touch     size=  16384 live=   1  med=   2062.46  spread 2002.70..2179.75  drift 4.7%  n=7  checksums=[2552560]
+     raw touch     size=  65536 live=   1  med=   2485.75  spread 2467.02..3148.68  drift 0.8%  n=7  checksums=[2552560]
+     raw touch     size= 262144 live=   1  med=   2422.20  spread 2272.77..3188.82  drift 5.5%  n=7  checksums=[1276664]
+     raw touch     size=1048576 live=   1  med=   2462.25  spread 2331.13..3585.12  drift 0.0%  n=7  checksums=[379844]
+    walk mimir     size=  65536 live=   1  med=   1316.40  spread 1272.80..1389.00  drift 2.1%  n=7  checksums=[0]
+    walk mimir     size=  65536 live=  32  med=   1555.09  spread 1456.41..1918.28  drift 1.7%  n=7  checksums=[2480]
+    walk mimir     size=  65536 live= 256  med=   1870.33  spread 1831.45..2600.39  drift 3.8%  n=7  checksums=[163200]
+    walk mimir     size=  65536 live=1024  med=   4040.17  spread 3862.44..4757.40  drift 3.1%  n=7  checksums=[391680]
+    walk raw       size=  65536 live=   1  med=   1262.40  spread 1196.20..1647.00  drift 8.2%  n=7  checksums=[0]
+    walk raw       size=  65536 live=  32  med=   1473.88  spread 1330.93..2107.56  drift 19.6%  n=7  checksums=[2480]
+    walk raw       size=  65536 live= 256  med=   1442.41  spread 1377.03..1825.28  drift 0.5%  n=7  checksums=[163200]
+    walk raw       size=  65536 live=1024  med=   1502.83  spread 1432.95..2284.44  drift 18.0%  n=7  checksums=[391680]
+
+=== checksum discipline ===
+size 2048: endpoint-touch family checksums [3826664] -> OK
+size 8192: endpoint-touch family checksums [3826664] -> OK
+size 16384: endpoint-touch family checksums [2552560] -> OK
+size 65536: endpoint-touch family checksums [2552560] -> OK
+size 262144: endpoint-touch family checksums [1276664] -> OK
+size 1048576: endpoint-touch family checksums [379844] -> OK
+('batch', 'mimir', 0, 32): checksums [1106008] vs K-002 1106008 -> OK
+('batch', 'glibc', 0, 32): checksums [1106008] vs K-002 1106008 -> OK
+('batchraw', 'touch', 0, 32): checksums [1106008] vs K-002 1106008 -> OK
+batchraw/notouch checksums [0] (expect {0}: no touch, no checksum work)
+checksum verdict: ALL OK
+
+=== DECOMPOSITION per size (single block live) ===
+total = op/mimir; pair = raw/notouch; faults = raw/touch - raw/notouch;
+bookkeeping = residual op/mimir - raw/touch (lock, registry, descriptor,
+counters, dispatch + non-additivity between legs).
+    size     total     glibc      pair  pair%    faults   flt%      book  book%     wound  ratio  flt/op   fullflt
+    2048   2330.71      8.46   1157.02   49.6    622.08   26.7    551.61   23.7   2322.25 275.50   1.000     86.54
+    8192   2286.74      8.81   1006.53   44.0    878.14   38.4    402.07   17.6   2277.93 259.56   2.000    -12.53
+   16384   2560.74      8.87   1063.61   41.5    998.85   39.0    498.28   19.5   2551.87 288.70   2.000    845.37
+   65536   2933.94      8.62   1042.32   35.5   1443.43   49.2    448.19   15.3   2925.32 340.36   2.000   5671.29
+  262144   2896.06      8.57   1059.78   36.6   1362.42   47.0    473.86   16.4   2887.49 337.93   2.000  26430.07
+ 1048576   3271.85      8.31   1019.41   31.2   1442.84   44.1    809.60   24.7   3263.54 393.72   2.001 110466.65
+mean of sizes: total 2713.34  pair 1058.11 (39.0%)  faults 1124.63 (41.4%)  book 530.60 (19.6%)  glibc 8.61  wound 2704.73 ns/op  ratio 315.26x
+(fullflt = extra cost if every user page were touched = raw/fulltouch - raw/touch;
+ the bench touches endpoints only, so the headline fault share is the
+ sparse-touch share; fullflt prices the dense-touch world.)
+
+=== BATCH SHAPE (large_batch, 32 live, forward free) ===
+batch mimir       2880.62 ns/op
+batch glibc        693.17 ns/op
+batchraw touch    2377.88 ns/op (pair+faults, zero bookkeeping)
+batchraw notouch     936.72 ns/op (pair only, batch shape)
+KL-C wound (batch): 2187.45 ns/op, ratio 4.16x
+batch shares of mimir total: pair 32.5%  faults 50.0%  bookkeeping-residual 17.5%
+minor faults/op: batch mimir 2.834, batchraw touch 1.834
+
+=== REGISTRY WALK (65536-byte blocks, forward free) ===
+  live  mimir free  raw munmap  walk+book  per-step
+     1     1316.40     1262.40      54.00          
+    32     1555.09     1473.88      81.21     7.700
+   256     1870.33     1442.41     427.92     1.407
+  1024     4040.17     1502.83    2537.34     2.825
+(per-step = added ns per free for each additional live mapping,
+ between successive live counts; the registry walk is O(live) with
+ oldest-first free order = deepest walk first.)
+
+=== RAW CSV (one line per process: phase,leg,size,live,iters,total_ns,ns_per_op,minflt_delta,checksum) ===
+op,mimir,2048,1,30000,63617613,2120.59,60002,3826664
+op,glibc,2048,1,30000,522356,17.41,3,3826664
+raw,notouch,2048,1,30000,33043910,1101.46,2,0
+raw,touch,2048,1,30000,51959259,1731.98,30002,3826664
+raw,fulltouch,2048,1,30000,54590338,1819.68,30002,3820056
+op,mimir,2048,1,30000,100089982,3336.33,60002,3826664
+op,glibc,2048,1,30000,245699,8.19,3,3826664
+raw,notouch,2048,1,30000,34325096,1144.17,2,0
+raw,touch,2048,1,30000,47860949,1595.36,30002,3826664
+raw,fulltouch,2048,1,30000,49390186,1646.34,30002,3820056
+op,mimir,2048,1,30000,65567428,2185.58,60002,3826664
+op,glibc,2048,1,30000,253724,8.46,3,3826664
+raw,notouch,2048,1,30000,34245636,1141.52,2,0
+raw,touch,2048,1,30000,58928788,1964.29,30002,3826664
+raw,fulltouch,2048,1,30000,55969095,1865.64,30002,3820056
+op,mimir,2048,1,30000,71635460,2387.85,60002,3826664
+op,glibc,2048,1,30000,255568,8.52,3,3826664
+raw,notouch,2048,1,30000,39626516,1320.88,2,0
+raw,touch,2048,1,30000,57417052,1913.90,30002,3826664
+raw,fulltouch,2048,1,30000,57880999,1929.37,30002,3820056
+op,mimir,2048,1,30000,69927858,2330.93,60002,3826664
+op,glibc,2048,1,30000,250808,8.36,3,3826664
+raw,notouch,2048,1,30000,34994707,1166.49,2,0
+raw,touch,2048,1,30000,55433143,1847.77,30002,3826664
+raw,fulltouch,2048,1,30000,56377438,1879.25,30002,3820056
+op,mimir,2048,1,30000,69921397,2330.71,60002,3826664
+op,glibc,2048,1,30000,259135,8.64,3,3826664
+raw,notouch,2048,1,30000,34710676,1157.02,2,0
+raw,touch,2048,1,30000,53373032,1779.10,30002,3826664
+raw,fulltouch,2048,1,30000,50499641,1683.32,30002,3820056
+op,mimir,2048,1,30000,68524566,2284.15,60002,3826664
+op,glibc,2048,1,30000,253224,8.44,3,3826664
+raw,notouch,2048,1,30000,34724622,1157.49,2,0
+raw,touch,2048,1,30000,52670219,1755.67,30002,3826664
+raw,fulltouch,2048,1,30000,56499887,1883.33,30002,3820056
+op,mimir,8192,1,30000,78339062,2611.30,90002,3826664
+op,glibc,8192,1,30000,310150,10.34,2,3826664
+raw,notouch,8192,1,30000,31027260,1034.24,2,0
+raw,touch,8192,1,30000,56977961,1899.27,60002,3826664
+raw,fulltouch,8192,1,30000,56627776,1887.59,60002,7640448
+op,mimir,8192,1,30000,69645802,2321.53,90002,3826664
+op,glibc,8192,1,30000,264855,8.83,2,3826664
+raw,notouch,8192,1,30000,30235821,1007.86,2,0
+raw,touch,8192,1,30000,56116941,1870.56,60002,3826664
+raw,fulltouch,8192,1,30000,56057109,1868.57,60002,7640448
+op,mimir,8192,1,30000,68602251,2286.74,90002,3826664
+op,glibc,8192,1,30000,264174,8.81,2,3826664
+raw,notouch,8192,1,30000,29348222,978.27,2,0
+raw,touch,8192,1,30000,57449933,1915.00,60002,3826664
+raw,fulltouch,8192,1,30000,55818334,1860.61,60002,7640448
+op,mimir,8192,1,30000,68304064,2276.80,90002,3826664
+op,glibc,8192,1,30000,268111,8.94,2,3826664
+raw,notouch,8192,1,30000,29612015,987.07,2,0
+raw,touch,8192,1,30000,55856926,1861.90,60002,3826664
+raw,fulltouch,8192,1,30000,55975076,1865.84,60002,7640448
+op,mimir,8192,1,30000,68515739,2283.86,90002,3826664
+op,glibc,8192,1,30000,264314,8.81,2,3826664
+raw,notouch,8192,1,30000,30371895,1012.40,2,0
+raw,touch,8192,1,30000,57897130,1929.90,60002,3826664
+raw,fulltouch,8192,1,30000,56164110,1872.14,60002,7640448
+op,mimir,8192,1,30000,68779342,2292.64,90002,3826664
+op,glibc,8192,1,30000,264294,8.81,2,3826664
+raw,notouch,8192,1,30000,30195977,1006.53,2,0
+raw,touch,8192,1,30000,56540002,1884.67,60002,3826664
+raw,fulltouch,8192,1,30000,56186372,1872.88,60002,7640448
+op,mimir,8192,1,30000,68425781,2280.86,90002,3826664
+op,glibc,8192,1,30000,264244,8.81,2,3826664
+raw,notouch,8192,1,30000,29751515,991.72,2,0
+raw,touch,8192,1,30000,56094880,1869.83,60002,3826664
+raw,fulltouch,8192,1,30000,56193865,1873.13,60002,7640448
+op,mimir,16384,1,20000,47605230,2380.26,60002,2552560
+op,glibc,16384,1,20000,168785,8.44,2,2552560
+raw,notouch,16384,1,20000,20495142,1024.76,2,0
+raw,touch,16384,1,20000,43595044,2179.75,40002,2552560
+raw,fulltouch,16384,1,20000,59255428,2962.77,80002,10187136
+op,mimir,16384,1,20000,51292824,2564.64,60002,2552560
+op,glibc,16384,1,20000,169747,8.49,2,2552560
+raw,notouch,16384,1,20000,22046433,1102.32,2,0
+raw,touch,16384,1,20000,42817029,2140.85,40002,2552560
+raw,fulltouch,16384,1,20000,57323677,2866.18,80002,10187136
+op,mimir,16384,1,20000,51422967,2571.15,60002,2552560
+op,glibc,16384,1,20000,182682,9.13,2,2552560
+raw,notouch,16384,1,20000,20494080,1024.70,2,0
+raw,touch,16384,1,20000,41249259,2062.46,40002,2552560
+raw,fulltouch,16384,1,20000,58156545,2907.83,80002,10187136
+op,mimir,16384,1,20000,49049169,2452.46,60002,2552560
+op,glibc,16384,1,20000,177141,8.86,2,2552560
+raw,notouch,16384,1,20000,21272115,1063.61,2,0
+raw,touch,16384,1,20000,40637766,2031.89,40002,2552560
+raw,fulltouch,16384,1,20000,57700000,2885.00,80002,10187136
+op,mimir,16384,1,20000,50999856,2549.99,60002,2552560
+op,glibc,16384,1,20000,177341,8.87,2,2552560
+raw,notouch,16384,1,20000,20793661,1039.68,2,0
+raw,touch,16384,1,20000,41107013,2055.35,40002,2552560
+raw,fulltouch,16384,1,20000,54802644,2740.13,80002,10187136
+op,mimir,16384,1,20000,51214717,2560.74,60002,2552560
+op,glibc,16384,1,20000,249386,12.47,2,2552560
+raw,notouch,16384,1,20000,21871696,1093.58,2,0
+raw,touch,16384,1,20000,40053974,2002.70,40002,2552560
+raw,fulltouch,16384,1,20000,61047628,3052.38,80002,10187136
+op,mimir,16384,1,20000,54029820,2701.49,60002,2552560
+op,glibc,16384,1,20000,184184,9.21,2,2552560
+raw,notouch,16384,1,20000,22449065,1122.45,2,0
+raw,touch,16384,1,20000,43110398,2155.52,40002,2552560
+raw,fulltouch,16384,1,20000,58484969,2924.25,80002,10187136
+op,mimir,65536,1,20000,59046568,2952.33,60002,2552560
+op,glibc,65536,1,20000,172422,8.62,2,2552560
+raw,notouch,65536,1,20000,20892034,1044.60,2,0
+raw,touch,65536,1,20000,50722808,2536.14,40002,2552560
+raw,fulltouch,65536,1,20000,165670464,8283.52,320002,40770048
+op,mimir,65536,1,20000,58444903,2922.25,60002,2552560
+op,glibc,65536,1,20000,186438,9.32,2,2552560
+raw,notouch,65536,1,20000,20596432,1029.82,2,0
+raw,touch,65536,1,20000,49340344,2467.02,40002,2552560
+raw,fulltouch,65536,1,20000,162275668,8113.78,320002,40770048
+op,mimir,65536,1,20000,59197561,2959.88,60002,2552560
+op,glibc,65536,1,20000,170599,8.53,2,2552560
+raw,notouch,65536,1,20000,17836994,891.85,2,0
+raw,touch,65536,1,20000,49503669,2475.18,40002,2552560
+raw,fulltouch,65536,1,20000,161937586,8096.88,320002,40770048
+op,mimir,65536,1,20000,56525595,2826.28,60002,2552560
+op,glibc,65536,1,20000,171440,8.57,2,2552560
+raw,notouch,65536,1,20000,21443575,1072.18,2,0
+raw,touch,65536,1,20000,50092089,2504.60,40002,2552560
+raw,fulltouch,65536,1,20000,160561885,8028.09,320002,40770048
+op,mimir,65536,1,20000,58678771,2933.94,60002,2552560
+op,glibc,65536,1,20000,171991,8.60,2,2552560
+raw,notouch,65536,1,20000,20846339,1042.32,2,0
+raw,touch,65536,1,20000,49715034,2485.75,40002,2552560
+raw,fulltouch,65536,1,20000,173543431,8677.17,320002,40770048
+op,mimir,65536,1,20000,59223018,2961.15,60002,2552560
+op,glibc,65536,1,20000,178513,8.93,2,2552560
+raw,notouch,65536,1,20000,20927530,1046.38,2,0
+raw,touch,65536,1,20000,49610408,2480.52,40002,2552560
+raw,fulltouch,65536,1,20000,163140875,8157.04,320002,40770048
+op,mimir,65536,1,20000,58227046,2911.35,60002,2552560
+op,glibc,65536,1,20000,185336,9.27,2,2552560
+raw,notouch,65536,1,20000,20579280,1028.96,2,0
+raw,touch,65536,1,20000,62973669,3148.68,40002,2552560
+raw,fulltouch,65536,1,20000,163652812,8182.64,320002,40770048
+op,mimir,262144,1,10000,38894647,3889.46,30002,1276664
+op,glibc,262144,1,10000,87403,8.74,2,1276664
+raw,notouch,262144,1,10000,10705663,1070.57,2,0
+raw,touch,262144,1,10000,24622016,2462.20,20002,1276664
+raw,fulltouch,262144,1,10000,288522656,28852.27,640002,81588480
+op,mimir,262144,1,10000,27144412,2714.44,30002,1276664
+op,glibc,262144,1,10000,88185,8.82,2,1276664
+raw,notouch,262144,1,10000,10404460,1040.45,2,0
+raw,touch,262144,1,10000,30915271,3091.53,20002,1276664
+raw,fulltouch,262144,1,10000,288827867,28882.79,640002,81588480
+op,mimir,262144,1,10000,29014027,2901.40,30002,1276664
+op,glibc,262144,1,10000,81893,8.19,2,1276664
+raw,notouch,262144,1,10000,10519985,1052.00,2,0
+raw,touch,262144,1,10000,24221999,2422.20,20002,1276664
+raw,fulltouch,262144,1,10000,291682633,29168.26,640002,81588480
+op,mimir,262144,1,10000,28960567,2896.06,30002,1276664
+op,glibc,262144,1,10000,83876,8.39,2,1276664
+raw,notouch,262144,1,10000,10597801,1059.78,2,0
+raw,touch,262144,1,10000,22727746,2272.77,20002,1276664
+raw,fulltouch,262144,1,10000,288477892,28847.79,640002,81588480
+op,mimir,262144,1,10000,37233172,3723.32,30002,1276664
+op,glibc,262144,1,10000,86441,8.64,2,1276664
+raw,notouch,262144,1,10000,11705752,1170.58,2,0
+raw,touch,262144,1,10000,22794200,2279.42,20002,1276664
+raw,fulltouch,262144,1,10000,288150630,28815.06,640002,81588480
+op,mimir,262144,1,10000,28610903,2861.09,30002,1276664
+op,glibc,262144,1,10000,83435,8.34,2,1276664
+raw,notouch,262144,1,10000,10490019,1049.00,2,0
+raw,touch,262144,1,10000,31888240,3188.82,20002,1276664
+raw,fulltouch,262144,1,10000,285250308,28525.03,640002,81588480
+op,mimir,262144,1,10000,28864117,2886.41,30002,1276664
+op,glibc,262144,1,10000,85720,8.57,2,1276664
+raw,notouch,262144,1,10000,10612198,1061.22,2,0
+raw,touch,262144,1,10000,23777638,2377.76,20002,1276664
+raw,fulltouch,262144,1,10000,293645913,29364.59,640002,81588480
+op,mimir,1048576,1,3000,9265350,3088.45,9002,379844
+op,glibc,1048576,1,3000,25257,8.42,2,379844
+raw,notouch,1048576,1,3000,3675791,1225.26,2,0
+raw,touch,1048576,1,3000,7078902,2359.63,6002,379844
+raw,fulltouch,1048576,1,3000,339426893,113142.30,768002,97920000
+op,mimir,1048576,1,3000,11590196,3863.40,9002,379844
+op,glibc,1048576,1,3000,24937,8.31,2,379844
+raw,notouch,1048576,1,3000,2702171,900.72,2,0
+raw,touch,1048576,1,3000,7386749,2462.25,6002,379844
+raw,fulltouch,1048576,1,3000,336454045,112151.35,768002,97920000
+op,mimir,1048576,1,3000,8434236,2811.41,9002,379844
+op,glibc,1048576,1,3000,24015,8.01,2,379844
+raw,notouch,1048576,1,3000,3058227,1019.41,2,0
+raw,touch,1048576,1,3000,7726573,2575.52,6002,379844
+raw,fulltouch,1048576,1,3000,336541159,112180.39,768002,97920000
+op,mimir,1048576,1,3000,8557487,2852.50,9002,379844
+op,glibc,1048576,1,3000,24986,8.33,2,379844
+raw,notouch,1048576,1,3000,2496718,832.24,2,0
+raw,touch,1048576,1,3000,6993383,2331.13,6002,379844
+raw,fulltouch,1048576,1,3000,341321044,113773.68,768002,97920000
+op,mimir,1048576,1,3000,9815538,3271.85,9002,379844
+op,glibc,1048576,1,3000,24636,8.21,2,379844
+raw,notouch,1048576,1,3000,3322250,1107.42,2,0
+raw,touch,1048576,1,3000,7222412,2407.47,6002,379844
+raw,fulltouch,1048576,1,3000,338786686,112928.90,768002,97920000
+op,mimir,1048576,1,3000,11932867,3977.62,9002,379844
+op,glibc,1048576,1,3000,24336,8.11,2,379844
+raw,notouch,1048576,1,3000,2779305,926.43,2,0
+raw,touch,1048576,1,3000,10755375,3585.12,6002,379844
+raw,fulltouch,1048576,1,3000,338565072,112855.02,768002,97920000
+op,mimir,1048576,1,3000,10063101,3354.37,9002,379844
+op,glibc,1048576,1,3000,25377,8.46,2,379844
+raw,notouch,1048576,1,3000,3424281,1141.43,2,0
+raw,touch,1048576,1,3000,7549112,2516.37,6002,379844
+raw,fulltouch,1048576,1,3000,340539573,113513.19,768002,97920000
+batch,mimir,0,32,9600,27653995,2880.62,27204,1106008
+batch,glibc,0,32,9600,6630755,690.70,8407,1106008
+batchraw,notouch,0,32,9600,9814807,1022.38,4,0
+batchraw,touch,0,32,9600,22827693,2377.88,17604,1106008
+batch,mimir,0,32,9600,27576200,2872.52,27204,1106008
+batch,glibc,0,32,9600,6744147,702.52,8407,1106008
+batchraw,notouch,0,32,9600,9109779,948.94,4,0
+batchraw,touch,0,32,9600,23110672,2407.36,17604,1106008
+batch,mimir,0,32,9600,27459010,2860.31,27204,1106008
+batch,glibc,0,32,9600,6701037,698.02,8407,1106008
+batchraw,notouch,0,32,9600,8992510,936.72,4,0
+batchraw,touch,0,32,9600,24950982,2599.06,17604,1106008
+batch,mimir,0,32,9600,27602889,2875.30,27204,1106008
+batch,glibc,0,32,9600,6725502,700.57,8407,1106008
+batchraw,notouch,0,32,9600,8325433,867.23,4,0
+batchraw,touch,0,32,9600,22523043,2346.15,17604,1106008
+batch,mimir,0,32,9600,29524902,3075.51,27204,1106008
+batch,glibc,0,32,9600,5617821,585.19,8407,1106008
+batchraw,notouch,0,32,9600,8030922,836.55,4,0
+batchraw,touch,0,32,9600,21938120,2285.22,17604,1106008
+batch,mimir,0,32,9600,28709438,2990.57,27204,1106008
+batch,glibc,0,32,9600,6654399,693.17,8407,1106008
+batchraw,notouch,0,32,9600,8956743,932.99,4,0
+batchraw,touch,0,32,9600,22466337,2340.24,17604,1106008
+batch,mimir,0,32,9600,27774901,2893.22,27204,1106008
+batch,glibc,0,32,9600,5430011,565.63,8407,1106008
+batchraw,notouch,0,32,9600,9345260,973.46,4,0
+batchraw,touch,0,32,9600,23746059,2473.55,17604,1106008
+walk,mimir,65536,1,5,6653,1330.60,-1,0
+walk,raw,65536,1,5,6011,1202.20,-1,0
+walk,mimir,65536,1,5,6510,1302.00,-1,0
+walk,raw,65536,1,5,6312,1262.40,-1,0
+walk,mimir,65536,1,5,6661,1332.20,-1,0
+walk,raw,65536,1,5,5981,1196.20,-1,0
+walk,mimir,65536,1,5,6582,1316.40,-1,0
+walk,raw,65536,1,5,6712,1342.40,-1,0
+walk,mimir,65536,1,5,6441,1288.20,-1,0
+walk,raw,65536,1,5,8235,1647.00,-1,0
+walk,mimir,65536,1,5,6945,1389.00,-1,0
+walk,raw,65536,1,5,6342,1268.40,-1,0
+walk,mimir,65536,1,5,6364,1272.80,-1,0
+walk,raw,65536,1,5,6262,1252.40,-1,0
+walk,mimir,65536,32,160,306924,1918.28,-1,2480
+walk,raw,65536,32,160,337210,2107.56,-1,2480
+walk,mimir,65536,32,160,239889,1499.31,-1,2480
+walk,raw,65536,32,160,237624,1485.15,-1,2480
+walk,mimir,65536,32,160,246257,1539.11,-1,2480
+walk,raw,65536,32,160,267960,1674.75,-1,2480
+walk,mimir,65536,32,160,252111,1575.69,-1,2480
+walk,raw,65536,32,160,212949,1330.93,-1,2480
+walk,mimir,65536,32,160,265727,1660.79,-1,2480
+walk,raw,65536,32,160,217005,1356.28,-1,2480
+walk,mimir,65536,32,160,248814,1555.09,-1,2480
+walk,raw,65536,32,160,235821,1473.88,-1,2480
+walk,mimir,65536,32,160,233025,1456.41,-1,2480
+walk,raw,65536,32,160,226343,1414.64,-1,2480
+walk,mimir,65536,256,1280,3328493,2600.39,-1,163200
+walk,raw,65536,256,1280,2231862,1743.64,-1,163200
+walk,mimir,65536,256,1280,2344251,1831.45,-1,163200
+walk,raw,65536,256,1280,1846291,1442.41,-1,163200
+walk,mimir,65536,256,1280,2394023,1870.33,-1,163200
+walk,raw,65536,256,1280,1762604,1377.03,-1,163200
+walk,mimir,65536,256,1280,2393114,1869.62,-1,163200
+walk,raw,65536,256,1280,1772954,1385.12,-1,163200
+walk,mimir,65536,256,1280,2381161,1860.28,-1,163200
+walk,raw,65536,256,1280,1879554,1468.40,-1,163200
+walk,mimir,65536,256,1280,2578281,2014.28,-1,163200
+walk,raw,65536,256,1280,2336358,1825.28,-1,163200
+walk,mimir,65536,256,1280,2838045,2217.22,-1,163200
+walk,raw,65536,256,1280,1793973,1401.54,-1,163200
+walk,mimir,65536,1024,3072,12204153,3972.71,-1,391680
+walk,raw,65536,1024,3072,4522865,1472.29,-1,391680
+walk,mimir,65536,1024,3072,14614740,4757.40,-1,391680
+walk,raw,65536,1024,3072,4545686,1479.72,-1,391680
+walk,mimir,65536,1024,3072,11865430,3862.44,-1,391680
+walk,raw,65536,1024,3072,4657858,1516.23,-1,391680
+walk,mimir,65536,1024,3072,13378017,4354.82,-1,391680
+walk,raw,65536,1024,3072,4402008,1432.95,-1,391680
+walk,mimir,65536,1024,3072,12411411,4040.17,-1,391680
+walk,raw,65536,1024,3072,6132674,1996.31,-1,391680
+walk,mimir,65536,1024,3072,12774128,4158.24,-1,391680
+walk,raw,65536,1024,3072,4616679,1502.83,-1,391680
+walk,mimir,65536,1024,3072,12345698,4018.78,-1,391680
+walk,raw,65536,1024,3072,7017788,2284.44,-1,391680
