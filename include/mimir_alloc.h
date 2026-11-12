@@ -93,23 +93,62 @@
  *   the mapping, as design facts only -- callers must
  *   always use the returned pointer.
  *
+ * Settled cases (Z-078, decision D-013 in
+ * docs/DECISION_LEDGER.md) - these ARE contract for this
+ * target, stated here in full; the evidence is
+ * docs/Z13_Z078_ZERO_SIZE_ERRNO.md:
+ * - U-09 SETTLED: a zero-size request is a defined,
+ *   non-failure refusal. mimir_malloc(0), mimir_calloc
+ *   with a zero factor (either or both),
+ *   mimir_realloc(NULL, 0), mimir_reallocarray with a
+ *   zero factor and a null ptr, and mimir_aligned_alloc
+ *   with a valid alignment and size 0 each return
+ *   exactly null; no storage is allocated, no ownership
+ *   passes, and the result owns nothing (there is
+ *   nothing to free; mimir_free(null) is the defined
+ *   no-op above). mimir_posix_memalign with a valid
+ *   alignment and size 0 returns ENOMEM and leaves
+ *   *memptr unchanged. A zero-size refusal is NOT a
+ *   failure: it is counted separately
+ *   (alloc_posture_nulls in the statistics surface, a
+ *   field name kept from its posture era) and never in
+ *   alloc_failures. This target deliberately does NOT
+ *   adopt the glibc unique-freeable-pointer outcome
+ *   (measured on this host, slice doc S2): a live block
+ *   of this allocator always has a non-zero usable
+ *   extent (D-012), so a zero-size live block could
+ *   not be represented honestly.
+ * - U-12 SETTLED: mimir_realloc(ptr, 0) for a live
+ *   ptr, and mimir_reallocarray with a live ptr and a
+ *   zero factor, return exactly null and leave the
+ *   original block live, unchanged in contents and
+ *   ownership, and freeable exactly as before -- the
+ *   block is NOT freed. Every null return of the
+ *   realloc family therefore has one uniform meaning:
+ *   the original block, if any, remains caller-owned.
+ *   Use mimir_free(ptr) to release a block. (glibc
+ *   frees the block in this case; this target does
+ *   not -- the deviation is recorded in D-013.)
+ * - U-10 / V-02 SETTLED: errno is NOT promised, on
+ *   any entry point, in either direction: the
+ *   allocator never sets errno as a contract channel,
+ *   and no caller may rely on its value after any
+ *   call (B-007 S D.1.1). The caller-observable
+ *   channels are exactly the return values (null / 0
+ *   / 1 / -1, and for mimir_posix_memalign the
+ *   returned EINVAL / ENOMEM number, which is a
+ *   return value, not errno). One refinement IS
+ *   promised: on the zero-size paths above and on
+ *   every checked refusal that never reaches the
+ *   operating system (arithmetic overflow, invalid
+ *   alignment, a size refused by arithmetic alone),
+ *   errno is left exactly as it was on entry. On a
+ *   genuine operating-system failure errno is
+ *   unspecified -- an OS call may have set it
+ *   incidentally -- and must not be read.
+ *
  * Unresolved cases - NO behaviour is promised for these,
  * and no observed stub behaviour settles them:
- * - U-09: zero-size requests (mimir_malloc(0), a zero
- *   factor in mimir_calloc, mimir_realloc(NULL, 0)). No
- *   outcome is stated; callers must not rely on any. This
- *   implementation returns null for each of them as a
- *   posture only, which does not settle U-09.
- * - U-12: mimir_realloc(ptr, 0) for a live ptr. No outcome
- *   is stated; callers must not rely on any, and the call
- *   is outside the supported list -- use mimir_free(ptr)
- *   to release a block. This implementation returns null
- *   and leaves the original block live and unchanged, as a
- *   posture only, which does not settle U-12.
- * - U-10 / V-02: errno on failure is NOT promised. The only
- *   caller-observable failure channel of mimir_malloc is
- *   the null return; no test or caller may rely on errno
- *   from either declared function (B-007 S D.1.1).
  * - U-15 / V-07: no numeric default alignment value is
  *   claimed. Suitably aligned above is the non-numeric
  *   claim only (B-007 S B.1).
@@ -149,7 +188,8 @@ extern "C" {
 
 /* By analogy to MA-6.1-MALLOC-01/-02/-04. See header notes:
  * failure is a null return only; errno is not promised
- * (U-10); zero-size is unresolved (U-09); no numeric
+ * (U-10, settled by D-013); zero-size is the D-013
+ * contract null (U-09, settled by Z-078); no numeric
  * alignment value is claimed (U-15). */
 void *mimir_malloc(size_t size);
 
@@ -163,10 +203,10 @@ void mimir_free(void *ptr);
  * aligned), MA-6.1-CALLOC-02 (overflow checked before the
  * multiplication is relied on: null, no wrapped
  * allocation) and MA-6.1-CALLOC-03 (other failure: null
- * only). A zero factor is [UNRESOLVED: U-09]
- * (MA-6.1-CALLOC-04): this implementation returns null as
- * a posture only (see header notes); errno is not promised
- * (U-10). */
+ * only). A zero factor is the D-013 contract null
+ * (MA-6.1-CALLOC-04; U-09 settled by Z-078: exactly
+ * null, not a failure, see header notes); errno is not
+ * promised (U-10, settled by D-013). */
 void *mimir_calloc(size_t nmemb, size_t size);
 
 /* C-005, per B-008 S4. By analogy to MA-6.1-REALLOC-01
@@ -174,13 +214,14 @@ void *mimir_calloc(size_t nmemb, size_t size);
  * MA-6.1-REALLOC-06 (grow tail unspecified, not zeroed),
  * MA-6.1-REALLOC-02 (failure: null, original unchanged
  * and caller-owned) and MA-6.1-REALLOC-03 (NULL ptr acts
- * as mimir_malloc). mimir_realloc(ptr, 0) is [UNRESOLVED:
- * U-12] (MA-6.1-REALLOC-04): this implementation returns
- * null and leaves the original live, as a posture only
+ * as mimir_malloc). mimir_realloc(ptr, 0) is the D-013
+ * contract case (MA-6.1-REALLOC-04; U-12 settled by
+ * Z-078): exactly null, and the original block stays
+ * live, unchanged and caller-owned -- it is NOT freed
  * (see header notes). Invalid pointers are undefined
  * behaviour (MA-6.1-REALLOC-05). No in-place or
  * pointer-identity promise is made; errno is not promised
- * (U-10). */
+ * (U-10, settled by D-013). */
 void *mimir_realloc(void *ptr, size_t size);
 /* Z-077 (Wave 9), per the contracts.md S2.8 conditional
  * rows MA-COND-REALLOCARRAY-01/-02/-03, taken up directly
@@ -195,14 +236,14 @@ void *mimir_realloc(void *ptr, size_t size);
  * success it behaves exactly as mimir_realloc(ptr,
  * nmemb * size), including min(old, new) preservation;
  * a null ptr behaves as mimir_malloc(product). A zero
- * factor makes the product zero: the case is
- * [UNRESOLVED: U-09] (null ptr) / [UNRESOLVED: U-12]
- * (live ptr); this implementation returns null and
- * leaves the original block live and unchanged, as a
- * posture only, which settles neither -- Z-078 owns the
- * closure. errno is not promised (U-10). Invalid
- * pointers are undefined behaviour (MA-6.1-REALLOC-05
- * by analogy). */
+ * factor makes the product zero: the case is the D-013
+ * contract null (U-09 settled for a null ptr, U-12
+ * settled for a live ptr, both by Z-078): exactly null,
+ * and a live original block stays live, unchanged and
+ * caller-owned -- it is NOT freed. errno is not
+ * promised (U-10, settled by D-013). Invalid pointers
+ * are undefined behaviour (MA-6.1-REALLOC-05 by
+ * analogy). */
 void *mimir_reallocarray(void *ptr, size_t nmemb,
                          size_t size);
 
@@ -229,7 +270,7 @@ void *mimir_reallocarray(void *ptr, size_t nmemb,
  * non-terminal and idempotent: the allocator stays
  * fully usable, and a second identical call with
  * nothing left to release returns 0. No errno is
- * promised (U-10 by analogy). */
+ * promised (U-10, settled by D-013). */
 int mimir_trim(size_t pad);
 
 
@@ -245,9 +286,10 @@ int mimir_trim(size_t pad);
  * size need NOT be a multiple of the alignment -- a
  * recorded deviation from C11 aligned_alloc, in the
  * glibc posture. A valid alignment too large to satisfy
- * is a failure (null), never an invalidity. Zero size is
- * [UNRESOLVED: U-09]: this implementation returns null as
- * a posture only. errno is not promised (U-10). A block
+ * is a failure (null), never an invalidity. Zero size
+ * with a valid alignment is the D-013 contract null
+ * (U-09 settled by Z-078): exactly null, not a failure.
+ * errno is not promised (U-10, settled by D-013). A block
  * from this entry realloc'd through mimir_realloc keeps
  * the realloc rules above; the RESULT of a realloc makes
  * no alignment promise beyond the family floor, though a
@@ -268,11 +310,10 @@ void *mimir_aligned_alloc(size_t alignment, size_t size);
  * a valid but unsatisfiable request returns ENOMEM with
  * *memptr unchanged; success returns 0 with *memptr set
  * to a pointer aligned as in mimir_aligned_alloc and
- * releasable by mimir_free. Zero size is [UNRESOLVED:
- * U-09]: this implementation returns
- * ENOMEM with *memptr unchanged, as the Z-073
- * contract's interim posture for this surface (final
- * closure is Z-078's). */
+ * releasable by mimir_free. Zero size with a valid
+ * alignment is the D-013 contract case (U-09 settled
+ * by Z-078, making the Z-073 contract's interim
+ * posture final): ENOMEM with *memptr unchanged. */
 int mimir_posix_memalign(void **memptr, size_t alignment,
                          size_t size);
 

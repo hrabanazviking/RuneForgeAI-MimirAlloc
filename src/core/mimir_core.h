@@ -43,8 +43,8 @@ void *mimir_core_calloc(size_t nmemb, size_t size);
  * updates only the requested-size record; any failure
  * returns NULL with the original block LIVE, unchanged and
  * caller-owned. new_size == 0 with a live ptr: returns NULL
- * with the original preserved, as an implementation posture
- * only; U-12 remains UNRESOLVED (MA-6.1-REALLOC-04).
+ * with the original preserved -- since Z-078 the D-013
+ * contract case (MA-6.1-REALLOC-04; U-12 settled).
  * Invalid pointers are undefined behaviour with no defined
  * error (MA-6.1-REALLOC-05). */
 void *mimir_core_realloc(void *ptr, size_t new_size);
@@ -58,12 +58,12 @@ void *mimir_core_realloc(void *ptr, size_t new_size);
  * alloc_failures, reported on the J-007 channel as op
  * REALLOC / cause ARITHMETIC with req = SIZE_MAX, no wrapped
  * allocation, and the original block (if any) live,
- * unchanged and caller-owned. A zero factor is a posture
- * NULL exactly like the calloc zero-factor gate (counted in
- * alloc_posture_nulls, original untouched): [UNRESOLVED:
- * U-09] for the product-zero case and U-12 where a live ptr
- * meets a zero product -- neither is settled here; Z-078
- * owns the closure. Non-overflow calls forward to
+ * unchanged and caller-owned. A zero factor is the D-013
+ * contract NULL exactly like the calloc zero-factor gate
+ * (counted in alloc_posture_nulls, original untouched):
+ * U-09 settled for the product-zero case and U-12 settled
+ * where a live ptr meets a zero product, both by Z-078.
+ * Non-overflow calls forward to
  * mimir_core_realloc(ptr, product) unchanged, so every
  * realloc case above (NULL ptr as alloc, same-size, shrink,
  * grow, failure preservation) applies verbatim. errno is
@@ -79,9 +79,10 @@ void *mimir_core_reallocarray(void *ptr, size_t nmemb,
  * mimir_core_aligned_alloc returns a pointer aligned to a
  * valid alignment -- (uintptr_t)ptr % alignment == 0 --
  * releasable by mimir_core_free exactly once, or exactly
- * NULL on invalid alignment, on the zero-size posture
- * (U-09 unresolved) and on any unsatisfiable request;
- * errno is not promised (U-10). mimir_core_posix_memalign
+ * NULL on invalid alignment, on the zero-size contract
+ * null (U-09 settled by D-013) and on any unsatisfiable
+ * request; errno is not promised (U-10, settled by
+ * D-013). mimir_core_posix_memalign
  * returns 0 with *memptr set on success, EINVAL for a null
  * memptr or invalid alignment (*memptr unchanged), and
  * ENOMEM for a valid but unsatisfiable request (*memptr

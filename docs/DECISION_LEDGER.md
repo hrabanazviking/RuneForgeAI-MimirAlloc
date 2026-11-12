@@ -54,6 +54,7 @@ leaves open. Statuses in this ledger mean:
 | D-011 | Z13 diagnostics emission gate (L-07): the opt-in gate stands as the permanent posture; INC-J007-01 discharged | Adopted | Z13 roadmap Z-071; INC-J007-01 (docs/PHASE_10_DIAGNOSTICS.md S5) | Z-071 (settler) |
 | D-012 | Z13 usable size: namespaced mimir_usable_size taken (malloc_usable_size shape NOT declared/exported); exact per-class semantics defined for this target (V-05) | Adopted | Z13 roadmap Z-075; contracts.md S2.9 (MA-COND-USABLE-01..04) | Z-075 (settler) |
 | D-012 | Z13 public statistics (L-04): mimir_stats_snapshot + versioned struct mimir_stats_v1; INC-J002-01 and INC-J002-02 CLOSED, INC-J002-05 PRICED | Adopted | Z13 roadmap Z-076; INC-J002-01/-02/-05; docs/Z13_PUBLIC_STATISTICS.md | Z-076 (settler) |
+| D-013 | Z13 zero-size and errno closure (L-09): zero-size is a defined non-failure contract NULL (U-09); realloc-to-zero preserves the block (U-12); errno never promised, checked refusals leave it untouched (U-10) | Adopted | Z13 roadmap Z-078; contracts.md V-01/V-02/V-04; docs/Z13_Z078_ZERO_SIZE_ERRNO.md | Z-078 (settler) |
 
 ---
 
@@ -556,6 +557,100 @@ leaves open. Statuses in this ledger mean:
   grading of lock_contention (INC-J002-02) in
   docs/PHASE_10_STATISTICS.md S2/S6, and the
   internal-only half of limitation L-04.
+  **Status of entry:** Current.
+
+---
+
+## D-013 - Z13 zero-size and errno closure (L-09) at Z-078: the postures adopted as contract
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice
+  Z-078 (Wave 9), which requires U-09 / U-12 / U-10 to be
+  decided by recorded decision, implemented, and stated
+  in the public header as contract, with header text and
+  tests matching the decision byte for byte in behaviour.
+  The open items are docs/contracts.md variation rows
+  V-01 (zero-size), V-04 (realloc(p, 0)) and V-02 (errno),
+  carried as U-09, U-12 and U-10 in its S7 register, and
+  limitation L-09 in docs/LIMITATIONS_AND_KNOWN_DEFECTS.md.
+  This entry IS the per-target record those rows wait for
+  (the U-02 register-level decision for this target).
+- **Decision:** (1) U-09 -- zero-size is a defined,
+  non-failure refusal: mimir_malloc(0), mimir_calloc with
+  a zero factor (either or both), mimir_realloc(NULL, 0),
+  mimir_reallocarray with a zero factor and a null ptr,
+  and mimir_aligned_alloc with a valid alignment and
+  size 0 return exactly NULL; mimir_posix_memalign with
+  a valid alignment and size 0 returns ENOMEM with
+  *memptr unchanged (the Z-073 contract P3 interim
+  posture, made final). No storage is allocated and no
+  ownership passes. The refusal is counted in
+  alloc_posture_nulls -- the J-002 field keeps its name
+  (it is a field of the versioned public struct; renaming
+  would break the v1 layout) and now counts contract
+  nulls -- and never in alloc_failures (the I-002 S3.2
+  separation stands). The glibc outcome measured on this
+  host (unique freeable pointer per zero-size call;
+  docs/Z13_Z078_ZERO_SIZE_ERRNO.md S2) is NOT adopted: a
+  live block of this allocator always has a non-zero
+  usable extent (D-012), so a zero-size live block could
+  not be represented honestly, and consuming a real class
+  slot for a zero request would falsify the statistics
+  ledger this line keeps balanced. (2) U-12 --
+  mimir_realloc(ptr, 0) for a live ptr, and
+  mimir_reallocarray with a live ptr and a zero factor,
+  return exactly NULL and leave the original block live,
+  unchanged in contents and ownership, and freeable
+  exactly as before; the block is NOT freed. Grounds:
+  every NULL return of the realloc family then has one
+  uniform meaning (the original, if any, remains
+  caller-owned -- the MA-6.1-REALLOC-02 shape with no
+  exceptions to audit), and the codebase's standing
+  non-destructive course (B-006 S8.3: never retire on an
+  ambiguous call) is preserved. Recorded deviation:
+  glibc frees the block here (measured on this host), and
+  C23 made realloc(p, 0) undefined precisely because
+  implementations diverged; this target chooses the
+  non-destructive reading and says so in the header.
+  (3) U-10 -- errno is NOT promised on any entry point,
+  in either direction: the allocator's own code never
+  assigns the errno variable (inspection: the name
+  appears under src/ only in includes, in comments, and
+  as the EINVAL / ENOMEM return VALUES of the
+  posix-shaped entry, whose return value is its error
+  channel under the V-06 model). The caller-observable
+  channels are exactly the return values. One refinement
+  IS promised and is pinned by test: on the zero-size
+  paths and on every checked refusal that never reaches
+  the operating system (arithmetic overflow, invalid
+  alignment, a size refused by arithmetic alone) errno
+  is left exactly as it was on entry. On a genuine
+  operating-system failure errno is unspecified -- an OS
+  call may have set it incidentally -- and must not be
+  read. The glibc ENOMEM-on-failure convention (measured
+  on this host) is NOT adopted: several failure classes
+  here (lock refusal, arithmetic refusal, detected
+  corruption) have no honest errno value, and a partial
+  convention would be a trap.
+- **Implementation note:** no behaviour changes. The
+  implementation already exhibited exactly these
+  outcomes as postures since C-001 / C-005 / Z-074; this
+  slice changes their STATUS (posture to contract) in
+  the public header and the src/ comments, and pins them
+  as contract in tests/abi/test_z078.c. The slice adds
+  no public symbol: the export list stays exactly ten.
+- **Evidence:** docs/Z13_Z078_ZERO_SIZE_ERRNO.md;
+  tests/abi/recorded_run_z13_z078.txt (make test-z078:
+  static contract test, dynamic and C++ consumers,
+  header-only objects, export count exactly 10), with
+  the standing gate green (4988/0/77) on the final tree.
+- **Supersedes:** the posture-only statements of L-09 in
+  docs/LIMITATIONS_AND_KNOWN_DEFECTS.md and every
+  [UNRESOLVED: U-09 / U-12] / U-10-unresolved statement
+  in include/mimir_alloc.h, src/api/mimir_alloc.c,
+  src/core/mimir_core.c and src/core/mimir_core.h (the
+  contracts.md rows themselves are amended by Z-081's
+  appendix audit, which owns that file's next revision).
   **Status of entry:** Current.
 
 ---

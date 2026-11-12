@@ -30,11 +30,11 @@
  *   (MA-6.1-MALLOC-02/-04, MA-6.2-020/-024 by analogy).
  *   errno is not promised (U-10); the null return is the only
  *   caller-observable failure channel (B-007 D.0).
- * - mimir_malloc(0): returns NULL in this implementation.
- *   Zero-size behaviour is [UNRESOLVED: U-09]: this is an
- *   implementation posture, continuous with the C-001 stub,
- *   NOT a contract claim, and no caller or test may cite it
- *   as settling U-09 (B-006 F-05; B-007 A1/A4).
+ * - mimir_malloc(0): returns NULL -- since Z-078 the
+ *   D-013 contract null (U-09 settled): a defined,
+ *   non-failure refusal, continuous with the C-001 stub's
+ *   posture, now stated as contract in the public header
+ *   (B-006 F-05; B-007 A1/A4).
  * - Allocation contents are unspecified -- NOT zero-guaranteed
  *   (B-007 C1). The allocator never touches user bytes.
  * - mimir_free(ptr) of a live pointer from this allocator
@@ -53,10 +53,10 @@
  *   /-05 by analogy) -- calloc DOES promise zeroed user
  *   contents, unlike mimir_malloc (B-007 C1); other failure
  *   is exactly a null return (MA-6.1-CALLOC-03 by analogy).
- *   A zero factor returns NULL as an implementation posture
- *   only: the case is [UNRESOLVED: U-09] (MA-6.1-CALLOC-04),
- *   NOT a contract claim (tests/core/NOTES_C005.md,
- *   INC-C005-01).
+ *   A zero factor returns NULL: the D-013 contract null
+ *   since Z-078 (MA-6.1-CALLOC-04; U-09 settled; the
+ *   C-005 posture it began as is recorded in
+ *   tests/core/NOTES_C005.md, INC-C005-01).
  * - mimir_realloc(ptr, new_size), new_size > 0 (C-005,
  *   B-008 S4 by analogy): success preserves the first
  *   min(old, new) requested bytes byte-for-byte, whether
@@ -71,10 +71,10 @@
  *   mimir_realloc(NULL, n) behaves as mimir_malloc(n) for
  *   n > 0, success and failure alike (MA-6.1-REALLOC-03 by
  *   analogy). mimir_realloc(ptr, 0) returns NULL with the
- *   original block left LIVE and unchanged, as an
- *   implementation posture only: the case is [UNRESOLVED:
- *   U-12] (MA-6.1-REALLOC-04), outside the supported list,
- *   NOT a contract claim (INC-C005-01). An invalid ptr is
+ *   original block left LIVE, unchanged and caller-owned:
+ *   since Z-078 the D-013 contract case (MA-6.1-REALLOC-
+ *   04; U-12 settled; the C-005 posture it began as is
+ *   recorded in INC-C005-01). An invalid ptr is
  *   undefined behaviour with no defined error
  *   (MA-6.1-REALLOC-05 by analogy).
  * - No async-signal-safety and no fork-safety is claimed.

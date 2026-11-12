@@ -1,0 +1,96 @@
+=== Z-078 ABI recorded run ===
+date_utc: 2026-11-12T22:38:54Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: 5804ac62ec4cc7aa9c40ab5e4432a99658e8bc15
+branch: yrsa/mimiralloc-team-02
+loadavg: 0.80 0.88 0.75 2/1301 2689249
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + z078 consumers (log hidden_files/z078_build.log)
+=== S2 shared library exports (nm -D) - exactly the 10 public symbols, unchanged by Z-078 ===
+00000000000063e0 T mimir_aligned_alloc
+0000000000006230 T mimir_calloc
+00000000000058f0 T mimir_free
+00000000000058d0 T mimir_malloc
+0000000000006400 T mimir_posix_memalign
+00000000000063c0 T mimir_realloc
+0000000000006f50 T mimir_reallocarray
+00000000000065e0 T mimir_stats_snapshot
+0000000000006da0 T mimir_trim
+0000000000006480 T mimir_usable_size
+defined dynamic symbol count: 10
+  [ok] count == 10
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_usable_size
+  [ok] exported: mimir_stats_snapshot
+  [ok] exported: mimir_trim
+  [ok] exported: mimir_reallocarray
+=== S3 absence proofs - no internal symbol is exported ===
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+=== S4 consumers bind to the .so (DT_NEEDED + undefined symbols) ===
+-- test_z078_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z078_dyn DT_NEEDED names libmimiralloc.so
+                 U mimir_aligned_alloc
+                 U mimir_calloc
+                 U mimir_malloc
+                 U mimir_posix_memalign
+                 U mimir_realloc
+                 U mimir_reallocarray
+  [ok] test_z078_dyn references the allocation-family symbols as undefined (U)
+  [ok] test_z078_dyn does not define the family symbols (not statically absorbed)
+-- test_z078_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z078_cpp DT_NEEDED names libmimiralloc.so
+                 U mimir_aligned_alloc
+                 U mimir_calloc
+                 U mimir_malloc
+                 U mimir_posix_memalign
+                 U mimir_realloc
+                 U mimir_reallocarray
+  [ok] test_z078_cpp references the allocation-family symbols as undefined (U)
+  [ok] test_z078_cpp does not define the family symbols (not statically absorbed)
+-- C++ consumer object: unmangled references --
+                 U mimir_aligned_alloc
+                 U mimir_calloc
+                 U mimir_malloc
+                 U mimir_posix_memalign
+                 U mimir_realloc
+                 U mimir_reallocarray
+  [ok] test_z078_cpp.o undefined references are unmangled (extern C guards cover the declarations)
+=== S5 header-only translation units (compile-only) ===
+-rw-r--r-- 1 volmarr volmarr 5416 Nov 12 17:38 build/header_only_z078_c.o
+-rw-r--r-- 1 volmarr volmarr 1816 Nov 12 17:38 build/header_only_z078_cpp.o
+  [ok] header-only C and C++ objects built (header self-contained, exact prototypes)
+=== S6 static contract test ===
+=== test_z078: zero-size + errno contract (D-013) ===
+-- S1 zero-size malloc/calloc --
+-- S2 realloc-to-zero --
+-- S3 reallocarray zero factors --
+-- S4 aligned zero-size / precedence --
+-- S5 posix_memalign rows --
+-- S6 arithmetic failures, errno untouched --
+-- S7 worker thread --
+-- S8 audit counters --
+malloc calls: 9, calloc calls: 5, realloc calls: 6, reallocarray calls: 5, aligned calls: 6, posix calls: 7, free calls: 7
+test_z078: 103 checks, 0 failed
+RESULT: PASS
+  [ok] test_z078 exit 0
+=== S7 dynamic C consumer ===
+test_z078_dyn: PASS
+  [ok] test_z078_dyn exit 0
+=== S8 C++ consumer ===
+test_z078_cpp: PASS
+  [ok] test_z078_cpp exit 0
+=== S9 neighbour evidence: E-005 audit readers ===
+  [ok] make test-e005 still passes (log hidden_files/z078_test_e005.log)
+=== Z-078 ABI RUN RESULT: PASS ===

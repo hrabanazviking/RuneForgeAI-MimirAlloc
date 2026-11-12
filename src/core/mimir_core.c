@@ -79,12 +79,14 @@
  * No allocation, no constructor, no init step is needed or
  * performed before the first call.
  *
- * Zero-size (U-09 UNRESOLVED): B-006 F-05 and B-007 A1/A4 give
- * mimir_malloc(0) NO behaviour, and B-008 prescribes none for
- * it either. This implementation returns NULL for size == 0
- * as an implementation posture only, continuous with the
- * C-001 stub's posture. It does NOT settle U-09 and no caller
- * or test may cite it as doing so.
+ * Zero-size (U-09 SETTLED by Z-078, decision D-013): B-006
+ * F-05 and B-007 A1/A4 gave mimir_malloc(0) no behaviour
+ * and B-008 prescribed none; the implementation's NULL
+ * answer, continuous with the C-001 stub's posture, is
+ * adopted by D-013 as this target's contract: size == 0
+ * is a defined, non-failure refusal (exactly NULL,
+ * counted as a posture null, never a failure), stated in
+ * the public header and proven by tests/abi/test_z078.c.
  *
  * C-004 addendum (B-007 completeness audit): two literal gaps
  * in this file were closed -- the B-007 A9 pointer-range check
@@ -105,8 +107,10 @@
  * adds the B-008 S4 cases (NULL / zero posture / same-size /
  * shrink-in-place bookkeeping / grow-by-move with the
  * original preserved on any failure). Zero cases remain
- * postures only (U-09 / U-12 unresolved). The slice record
- * is tests/core/NOTES_C005.md.
+ * contract since Z-078 (D-013), behaviour unchanged --
+ * they began as postures only (U-09 / U-12 then
+ * unresolved). The slice record is
+ * tests/core/NOTES_C005.md.
  *
  * G-003 addendum (Phase 7 small-object path, per the
  * banked G-002 design): requests of 1..1024 bytes are
@@ -6878,7 +6882,8 @@ static void retire_any_locked(void *ptr,
 
 /* L2 admission (B-007 A1) + L4 lock wrapper over
  * alloc_locked: zero-size is not admitted as a supported
- * call (posture only: NULL, U-09 unresolved). On lock
+ * call (contract NULL since Z-078: U-09 settled by
+ * D-013). On lock
  * failure fail with no ownership passing (F-07). The lock
  * is never held across the return (S9.4 item 1); if unlock
  * itself fails there is no safe report channel under the
@@ -6936,12 +6941,12 @@ void *mimir_core_alloc(size_t size)
  *
  * Order of operations is B-008 S3.2 exactly:
  *   step 0: zero-factor gate before any arithmetic -- a
- *     zero factor is [UNRESOLVED: U-09] (MA-6.1-CALLOC-04)
- *     and is NOT routed through admission as a product of
- *     zero. This implementation returns NULL as a posture
- *     only, continuous with mimir_core_alloc(0); it does
- *     not settle U-09 and no caller or test may cite it as
- *     doing so (tests/core/NOTES_C005.md, INC-C005-01).
+ *     zero factor is the D-013 contract null (MA-6.1-
+ *     CALLOC-04; U-09 settled by Z-078) and is NOT routed
+ *     through admission as a product of zero. The NULL
+ *     answer is continuous with mimir_core_alloc(0); it
+ *     began as a C-005 posture (tests/core/NOTES_C005.md,
+ *     INC-C005-01) and is contract since Z-078.
  *   step 1: the product is checked before the
  *     multiplication is relied on (MA-6.1-CALLOC-02;
  *     B-007 A6 multiply form: nmemb <= SIZE_MAX / size,
@@ -7028,10 +7033,10 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
  * ENOMEM), never an invalidity. The size need NOT be a
  * multiple of the alignment (a recorded deviation from
  * C11 aligned_alloc, in the glibc posture). Zero size is
- * the family posture (U-09 unresolved): NULL from
- * mimir_core_aligned_alloc; the posix shape is pinned
- * by the Z-073 contract's interim posture to ENOMEM
- * with *memptr unchanged (final closure is Z-078's).
+ * the family contract null (U-09 settled by D-013 at
+ * Z-078): NULL from mimir_core_aligned_alloc; the posix
+ * shape is ENOMEM with *memptr unchanged -- the Z-073
+ * contract's interim posture, made final by D-013.
  *
  * Routing (over the core's machinery, by measurement):
  *   - alignment <= _Alignof(max_align_t) (16 on this
@@ -7149,11 +7154,11 @@ int mimir_core_posix_memalign(void **memptr, size_t alignment,
         return EINVAL;
     }
     if (size == 0) {
-        /* Z-073 interim posture (contract P3, pinned
-         * until Z-078 closes U-09): a zero-size
-         * posix-shaped request is ENOMEM with *memptr
-         * left unchanged -- NOT the 0/NULL outcome an
-         * earlier draft of this slice used; reconciled
+        /* D-013 contract (Z-078 closed U-09, making the
+         * Z-073 contract P3 interim posture final): a
+         * zero-size posix-shaped request is ENOMEM with
+         * *memptr left unchanged -- NOT the 0/NULL outcome
+         * an earlier draft of this slice used; reconciled
          * to the landed Z-073 contract before banking. */
         return ENOMEM;
     }
@@ -7314,17 +7319,17 @@ static void *grow_mremap_locked(struct mimir_descriptor *desc,
  *     (MA-6.1-REALLOC-03), including its failure cases and
  *     its zero-size posture (new_size == 0 inherits the
  *     U-09 posture by inheritance, B-008 S4.7).
- *   - new_size == 0 with a non-null ptr: [UNRESOLVED:
- *     U-12] (MA-6.1-REALLOC-04). Like the calloc
- *     zero-factor gate it is decided before any allocator
- *     state is touched: zero is not admitted at L2 (B-007
- *     A1), so this implementation returns NULL and leaves
- *     the original block LIVE, unchanged and caller-owned,
- *     exactly as an admission failure would. Posture only
- *     -- it does not settle U-12, it is outside the B-008
- *     S7.2 supported list, and no caller or test may cite
- *     it as passing hook C-006 (tests/core/NOTES_C005.md,
- *     INC-C005-01).
+ *   - new_size == 0 with a non-null ptr: the D-013
+ *     contract case (MA-6.1-REALLOC-04; U-12 settled by
+ *     Z-078). Like the calloc zero-factor gate it is
+ *     decided before any allocator state is touched: zero
+ *     is not admitted at L2 (B-007 A1), so the call
+ *     returns NULL and leaves the original block LIVE,
+ *     unchanged and caller-owned, exactly as an admission
+ *     failure would -- the block is NOT freed. It began
+ *     as a C-005 posture outside the B-008 S7.2 supported
+ *     list (tests/core/NOTES_C005.md, INC-C005-01); hook
+ *     C-006's per-target policy for this target is D-013.
  *   - invalid ptr (not a live in-scope block): UB
  *     (MA-6.1-REALLOC-05). This baseline takes the same
  *     non-destructive course as free: nothing is allocated,
@@ -7602,10 +7607,10 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
  *   step 0: zero-factor gate before any arithmetic -- a
  *     zero factor makes the product zero, which is the
  *     U-09 case with a null ptr and the U-12 case with a
- *     live one; BOTH are posture here (NULL, original
- *     block live and untouched, counted as a posture null,
- *     never routed into mimir_core_realloc) and NEITHER is
- *     settled by this slice -- Z-078 owns the closure.
+ *     live one; BOTH are the D-013 contract null since
+ *     Z-078 (NULL, original block live and untouched,
+ *     counted as a posture null, never routed into
+ *     mimir_core_realloc).
  *   step 1: the product is checked before the
  *     multiplication is relied on (nmemb <= SIZE_MAX / size,
  *     with size > 0 guaranteed by step 0).
