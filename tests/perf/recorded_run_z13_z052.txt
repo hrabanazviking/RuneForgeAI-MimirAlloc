@@ -1,0 +1,138 @@
+Z-052 RECORDED RUN - mremap growth (MIMIRALLOC_Z13_ROADMAP.md Wave 6)
+=====================================================================
+Slice doc: docs/Z13_MREMAP_GROWTH.md (audit, bounds, mechanics)
+Base: merge a253021 of seat main f8ee668 (banked Z-001..Z-049)
+Tree: yrsa/mimiralloc-team-06 with the Z-052 slice applied
+Run date: 2026-11-12 (America/Indiana/Indianapolis)
+
+ENVIRONMENT STAMP (Z-004 protocol: scripts/z13/host_truth.sh verbatim)
+---------------------------------------------------------------------
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T13:00:18Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5116890
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 59%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.12 0.58 0.98
+
+LOAD STATE
+---------------------------------------------------------------------
+Ladder window: loadavg 0.12 0.58 0.98 at start, 0.18 0.58 0.97 at end -
+a quiet window on the shared host (Aesir/Lifthrasir/Tensile are
+co-tenants; no heavy co-tenant work observed during the ladder).
+Governor: performance (host truth above). Pin: taskset -c 2 (CCD0).
+
+CONTRACT TEST (make test-z052, standalone; NOT part of make test)
+---------------------------------------------------------------------
+Z-052 mremap growth contract test
+Case 1: freed-neighbour extension 34 -> 48 MiB
+Case 2: mremap ladder 34 -> 48 -> 64 MiB
+  info: 34->48 MiB RELOCATED by kernel
+  info: 48->64 MiB STAYED in place
+Case 3: cacheable growth 4096 -> 8192 moves
+Case 4: by-record grow after shrink (40 MiB, ->100, ->39 MiB)
+Case 5: unsatisfiable grows preserve the original
+Case 6: single jump 2048 -> 40 MiB
+  info: jump grow RELOCATED by kernel
+checks=35 failures=0
+RESULT: PASS
+
+Contract verdict: PASS 35 checks / 0 failures, reproduced across
+5 runs in this session with identical info lines (34->48 RELOCATED,
+48->64 STAYED, jump RELOCATED; freed-neighbour extension STAYED).
+
+STANDING GATE (scripts/z13/run_gate.sh, final run on the slice tree)
+---------------------------------------------------------------------
+# head: a2530210a5c1d65276dd5287da7f114ce54edefa
+# GATE COUNTS: checks=4988 failed=0 skips=77
+# GATE RESULT: GREEN
+Gate verdict: GREEN 4988 checks / 0 failed / 77 by-design skips
+(log hidden_files/z052_gate_final.log; pre-slice merged-tree gate
+also GREEN 4988/0/77, hidden_files/z052_gate_pre.log).
+
+PUBLIC SURFACE (make lib; nm -D build/libmimiralloc.so)
+---------------------------------------------------------------------
+00000000000044b0 T mimir_calloc
+0000000000003fd0 T mimir_free
+0000000000003fb0 T mimir_malloc
+00000000000045f0 T mimir_realloc
+Exactly the 4 public symbols; the L6 grow primitive stays local.
+
+GROWTH LADDER (Z-004 protocol: separate process per value, pinned
+taskset -c 2, 3 warm-up processes per leg discarded, 7 measured
+processes per leg interleaved round-robin, headline = median)
+Ladder: malloc 34 MiB, realloc 40, 48, 56, 64, 80, 96, 128 MiB;
+whole extent pattern-touched after every step; prefix verified
+page-sampled before every grow. Raw: hidden_files/z052_raw.txt
+---------------------------------------------------------------------
+mimir_after,growth_ladder,8,34678371,4334796.38,5,7405568
+mimir_before,growth_ladder,8,130155456,16269432.00,0,7405568
+glibc,growth_ladder,8,34632264,4329033.00,5,7405568
+mimir_after,growth_ladder,8,34669865,4333733.12,5,7405568
+mimir_before,growth_ladder,8,130380687,16297585.88,0,7405568
+glibc,growth_ladder,8,34543128,4317891.00,5,7405568
+mimir_after,growth_ladder,8,34881170,4360146.25,5,7405568
+mimir_before,growth_ladder,8,133050651,16631331.38,0,7405568
+glibc,growth_ladder,8,34657311,4332163.88,5,7405568
+mimir_after,growth_ladder,8,34761116,4345139.50,5,7405568
+mimir_before,growth_ladder,8,131256355,16407044.38,0,7405568
+glibc,growth_ladder,8,34648635,4331079.38,5,7405568
+mimir_after,growth_ladder,8,34790190,4348773.75,5,7405568
+mimir_before,growth_ladder,8,131096516,16387064.50,0,7405568
+glibc,growth_ladder,8,34650208,4331276.00,5,7405568
+mimir_after,growth_ladder,8,34701415,4337676.88,5,7405568
+mimir_before,growth_ladder,8,130420871,16302608.88,0,7405568
+glibc,growth_ladder,8,34577292,4322161.50,5,7405568
+mimir_after,growth_ladder,8,34809076,4351134.50,5,7405568
+mimir_before,growth_ladder,8,130523424,16315428.00,0,7405568
+glibc,growth_ladder,8,34599995,4324999.38,5,7405568
+
+SUMMARY (python3 tests/perf/summarize_z052.py on the raw above;
+re-running the summariser on the preserved raw reproduces this
+byte-identically - verified this session)
+---------------------------------------------------------------------
+Z-052 growth-ladder summary (median of processes, Z-004 protocol)
+  glibc          n=7 median   4329033.00 ns/op min   4317891.00 max   4332163.88 inplace median 5/7 checksums [7405568]
+  mimir_after    n=7 median   4345139.50 ns/op min   4333733.12 max   4360146.25 inplace median 5/7 checksums [7405568]
+  mimir_before   n=7 median  16315428.00 ns/op min  16269432.00 max  16631331.38 inplace median 0/7 checksums [7405568]
+  checksum proof: distinct across legs = [7405568] -> OK (one workload, all legs)
+  after vs before (this slice): 0.266x -> WIN (saves 73.4% of the before price)
+  after vs glibc (roadmap): 1.004x -> TIE
+  before vs glibc (audit start): 3.769x -> LOSS
+
+VERDICTS (roadmap grades)
+---------------------------------------------------------------------
+Audit: large realloc NEVER grew in place on the banked tree;
+every growth beyond the record was acquire+memcpy+retire.
+In-place-only mremap (flags=0): NOT IMPLEMENTABLE for fresh
+allocator mappings on this host - top-down placement packs each
+fresh mapping against the VMA above it (fresh 34 MiB mapping ends
+exactly at libc base in /proc/self/maps; raw flags=0 mremap of a
+fresh 34 MiB mapping returns ENOMEM). Implemented instead:
+mremap MREMAP_MAYMOVE growth beyond the Z-048 cache bound -
+extends in place where the room is free (contract Case 1),
+kernel page-table relocation (zero copy) where it is not.
+Growth ladder: after vs before 0.266x WIN; after vs glibc
+1.004x TIE (before vs glibc was LOSS 3.77x).
+Roadmap gate: growth-ladder table before/after RECORDED above;
+contract tests GREEN (standing gate 4988/0/77 + test-z052 35/0).
+GATE MET.

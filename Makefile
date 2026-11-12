@@ -993,6 +993,24 @@ $(BUILD)/probe_z050: $(LIBOBJS) $(BUILD)/probe_z050.o
 probe-z050: $(BUILD)/probe_z050
 
 .PHONY: probe-z050
+# ------------------------------------------------------------------
+# Z-052 mremap growth contract test (tests/core/
+# test_z052_mremap.c), built against the internal query
+# headers exactly like test-z048. Standalone via
+# make test-z052; NOT part of make test.
+# Recorded evidence: tests/perf/recorded_run_z13_z052.txt.
+# ------------------------------------------------------------------
+$(BUILD)/test_z052_mremap.o: tests/core/test_z052_mremap.c tests/core/mimir_pool_z048.h tests/core/mimir_trim_i003.h tests/core/mimir_integrity_j006.h include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z052_mremap.c -o $@
+
+$(BUILD)/test_z052_mremap: $(LIBOBJS) $(BUILD)/test_z052_mremap.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z052_mremap.o -o $@
+
+test-z052: $(BUILD)/test_z052_mremap
+	./$(BUILD)/test_z052_mremap
+
+.PHONY: test-z052
+
 
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies

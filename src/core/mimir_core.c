@@ -5891,6 +5891,146 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
 }
 
 /*
+ * Z-052 mremap growth (roadmap Wave 6): attempt to grow a
+ * LIVE mapping-registry block through the L6 mremap
+ * primitive, caller holds the lock and has already
+ * validated the descriptor LIVE. Returns the grown block's
+ * user pointer on success (the input pointer when the
+ * kernel extended in place, a relocated pointer when it
+ * moved the mapping), or NULL when the attempt is refused
+ * -- in which case the block is completely untouched and
+ * the caller runs the banked S4.5 move, whose own failure
+ * semantics are unchanged. A growth that cannot be
+ * satisfied either way is therefore exactly the banked
+ * MA-6.1-REALLOC-02 failure: NULL, original preserved.
+ *
+ * The attempt is made ONLY when all of these hold:
+ *   (a) the request outgrows the mapping itself
+ *       (new_size > usable_size). A growth the recorded
+ *       mapping already serves keeps the banked by-record
+ *       move semantics (test_g004 F6 pins them: growth is
+ *       judged by the requested-size record, not by usable
+ *       slack), so no mremap shortcut exists there.
+ *   (b) the grown mapping length exceeds the Z-048 mapping
+ *       cache's byte bound MIMIR_POOL_MAX_BYTES. Inside the
+ *       bound the banked move is the cache's own road (the
+ *       retired mapping is pooled for exact-length reuse,
+ *       and the I-004 fault legs pin the acquire/copy/
+ *       retire behaviour there); beyond the bound a
+ *       retired mapping can never be pooled, so the move
+ *       pays a full acquire + copy + unmap for nothing the
+ *       cache can reuse -- that is the growth mremap
+ *       exists for. (The bound is also glibc's own
+ *       mmap-threshold ceiling, 32 MiB: above it glibc
+ *       likewise grows its mmapped chunks by mremap.)
+ *
+ * Why MAYMOVE and not in-place-only: measured on this
+ * host (docs/Z13_MREMAP_GROWTH.md), the kernel's top-down
+ * placement packs each fresh mapping directly against the
+ * VMA above it (a fresh 34 MiB mapping ends exactly where
+ * libc begins in /proc/self/maps), so an in-place-only
+ * mremap of a fresh allocator mapping is refused ENOMEM
+ * essentially always. MREMAP_MAYMOVE keeps the win in
+ * both shapes: extension in place when the room above is
+ * free (e.g. a freed neighbour), and a kernel page-table
+ * relocation -- zero bytes copied -- when it is not.
+ *
+ * Mechanics under the lock: the descriptor is unlinked
+ * from the live registry BEFORE the call (the neighbours
+ * hold its address, which a relocation invalidates; its
+ * own links are the only other registry pointers to it),
+ * and re-linked at its resulting base after. The
+ * descriptor itself rides inside the mapping's reserve
+ * page, so its contents -- including the J-002 owner
+ * record past it -- arrive intact at the new base; only
+ * mapping_base, mapping_length, usable_size and
+ * requested_size are rewritten, together, so every
+ * relation descriptor_is_live checks stays exact. Live
+ * bytes move by the mapping delta, the J-002
+ * requested/allocated counters by the admitted deltas,
+ * and the peak sampler re-runs. The E-005 audit counters
+ * do NOT move: nothing was published and nothing retired
+ * (published - retired still equals the live count). On
+ * a kernel refusal the descriptor is re-linked at its
+ * old base with every field untouched (mremap failure
+ * leaves the old mapping intact), and NULL returns.
+ * The arithmetic is the checked page round-up of
+ * alloc_locked (check before evaluate, B-007 A5 form),
+ * all of it tested before the registry is touched.
+ */
+static void *grow_mremap_locked(struct mimir_descriptor *desc,
+                                void *user_ptr, size_t new_size)
+{
+    size_t page_size;
+    size_t total_unrounded;
+    size_t want_length;
+    size_t old_length = desc->mapping_length;
+    size_t old_usable = desc->usable_size;
+    size_t old_requested = desc->requested_size;
+    size_t usable_offset = desc->usable_offset;
+    void *old_base = desc->mapping_base;
+    void *new_base = NULL;
+    size_t delta;
+
+    if (new_size <= old_usable) {
+        return NULL; /* (a): by-record move, banked semantics */
+    }
+    if (mimir_platform_page_size(&page_size) != MIMIR_PLATFORM_OK ||
+        page_size == 0) {
+        return NULL;
+    }
+    /* Checked arithmetic, check before evaluate (B-007
+     * A3/A5 forms, as in alloc_locked): total =
+     * usable_offset + new_size, then its page round-up. */
+    if (new_size > SIZE_MAX - usable_offset) {
+        return NULL;
+    }
+    total_unrounded = usable_offset + new_size;
+    if (total_unrounded > SIZE_MAX - (page_size - 1)) {
+        return NULL;
+    }
+    want_length = ((total_unrounded + page_size - 1) /
+                   page_size) * page_size;
+    if (want_length <= MIMIR_POOL_MAX_BYTES) {
+        return NULL; /* (b): the mapping cache's road */
+    }
+    if (want_length <= old_length) {
+        return NULL; /* unreachable given (a); never shrink */
+    }
+    delta = want_length - old_length;
+    if (delta > SIZE_MAX - mimir_live_bytes) {
+        return NULL; /* counter-overflow guard, pre-change */
+    }
+
+    registry_remove(desc);
+    if (mimir_platform_map_grow(old_base, old_length,
+                                want_length, &new_base) !=
+        MIMIR_PLATFORM_OK) {
+        registry_insert(desc); /* old base, fields untouched */
+        return NULL;
+    }
+    /* The descriptor rode the mapping to new_base (the
+     * same address when the kernel extended in place). */
+    desc = (struct mimir_descriptor *)new_base;
+    desc->mapping_base = new_base;
+    desc->mapping_length = want_length;
+    desc->usable_size = want_length - usable_offset;
+    desc->requested_size = new_size;
+    registry_insert(desc);
+    mimir_live_bytes += delta;
+    /* J-002: the grow admits the requested delta and
+     * grants the usable delta; no other counter moves
+     * (see the header: publication/retirement counts are
+     * exact). */
+    mimir_stats_bytes_requested += (uint64_t)(new_size - old_requested);
+    mimir_stats_bytes_allocated +=
+        (uint64_t)(desc->usable_size - old_usable);
+    mimir_stats_peak_update_locked();
+    (void)user_ptr; /* the caller returns what we return */
+    return (void *)((unsigned char *)new_base + usable_offset);
+}
+
+/*
  * mimir_core_realloc -- C-005, per B-008 S4 (design, by
  * analogy under U-03; contract IDs MA-6.1-REALLOC-*).
  *
@@ -5925,8 +6065,13 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
  *     exactly the recorded mapping length (B-008 S4.4). A
  *     shrink frees no system memory and allocates nothing,
  *     so it cannot enter the null-return failure path.
- *   - grow: always a move (B-008 S4.4: no in-place grow
- *     exists in this machine). The B-008 S4.5 sequence runs
+ *   - grow: a move (B-008 S4.4: no in-place grow existed
+ *     in this machine), EXCEPT the Z-052 mremap case: a
+ *     growth whose new mapping length exceeds the Z-048
+ *     mapping cache's byte bound is first attempted via
+ *     the L6 mremap primitive (grow_mremap_locked below);
+ *     only a refused attempt runs the S4.5 sequence. The
+ *     B-008 S4.5 sequence runs
  *     under the one lock: validate, admit, construct the
  *     new block completely (alloc_locked; its registry
  *     publication is the internal step of MA-6.2-024 --
@@ -6006,6 +6151,21 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
             desc->requested_size = new_size;
             (void)mimir_platform_global_unlock();
             return ptr;
+        }
+
+        /* Z-052: an uncacheable growth is attempted via
+         * mremap first (grow_mremap_locked names its exact
+         * bounds and its rollback); on success it returns
+         * the grown block's user pointer -- the SAME pointer
+         * when the kernel extended the mapping in place, a
+         * kernel-relocated one when it did not -- with no
+         * copy, publication or retirement having happened. */
+        {
+            void *grown = grow_mremap_locked(desc, ptr, new_size);
+            if (grown != NULL) {
+                (void)mimir_platform_global_unlock();
+                return grown;
+            }
         }
 
         /* Grow: construct the new block completely first

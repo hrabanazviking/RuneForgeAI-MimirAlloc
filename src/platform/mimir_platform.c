@@ -13,10 +13,10 @@
 /* MAP_ANONYMOUS is POSIX.1-2024; glibc exposes it under the
  * default feature set, so request that alongside POSIX 200809. */
 #define _DEFAULT_SOURCE 1
-#ifdef MIMIR_ARENA_CCD
-/* Z-037: sched_getcpu is a GNU extension on this libc. */
+/* _GNU_SOURCE is unconditional since Z-052: mremap (the
+ * in-place growth primitive below) is a GNU extension on
+ * this libc, as is sched_getcpu (Z-037, arena builds). */
 #define _GNU_SOURCE 1
-#endif
 
 #include "mimir_platform.h"
 
@@ -133,6 +133,48 @@ int mimir_platform_map_release(void *base, size_t length)
     if (munmap(base, length) != 0) {
         return MIMIR_PLATFORM_ERR_UNMAP;
     }
+    return MIMIR_PLATFORM_OK;
+}
+
+/*
+ * Z-052 mremap growth (see the header for the contract and
+ * for why the no-relocation form is not offered). mremap
+ * with MREMAP_MAYMOVE: the kernel extends the mapping at
+ * its address when the room above it is free and otherwise
+ * relocates the whole mapping by moving page-table entries
+ * -- in neither case is any byte copied by the kernel or
+ * by this layer, which is the entire point beside the
+ * acquire + copy + release sequence it replaces. The grown
+ * extent arrives as readable/writable anonymous pages with
+ * the same protection as the old mapping, matching the
+ * acquire form above. Length admission mirrors the layer's
+ * checked discipline: both lengths must be whole system
+ * pages and the growth strict, tested before the call.
+ */
+int mimir_platform_map_grow(void *base, size_t old_length,
+                            size_t new_length, void **out_base)
+{
+    size_t page_size;
+    void *result;
+    int status;
+
+    if (base == NULL || out_base == NULL || old_length == 0 ||
+        new_length <= old_length) {
+        return MIMIR_PLATFORM_ERR_INVALID;
+    }
+    *out_base = NULL;
+    status = mimir_platform_page_size(&page_size);
+    if (status != MIMIR_PLATFORM_OK) {
+        return status;
+    }
+    if (old_length % page_size != 0 || new_length % page_size != 0) {
+        return MIMIR_PLATFORM_ERR_INVALID;
+    }
+    result = mremap(base, old_length, new_length, MREMAP_MAYMOVE);
+    if (result == MAP_FAILED) {
+        return MIMIR_PLATFORM_ERR_MAP;
+    }
+    *out_base = result;
     return MIMIR_PLATFORM_OK;
 }
 

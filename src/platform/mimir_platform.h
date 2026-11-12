@@ -90,6 +90,38 @@ int mimir_platform_map_acquire(size_t requested_bytes,
 int mimir_platform_map_release(void *base, size_t length);
 
 /*
+ * Z-052: grow one live mapping to a larger exact length by
+ * mremap: base must be a mapping previously returned by
+ * mimir_platform_map_acquire, old_length its exact acquired
+ * length, and new_length a whole number of system pages
+ * strictly greater than old_length (both lengths are exact:
+ * this layer performs no rounding here -- the caller owns
+ * the checked page arithmetic, exactly as release owns the
+ * exact acquired pair). The kernel either extends the
+ * mapping at its existing address (when the address room
+ * above it is free) or relocates it whole -- page tables
+ * only, the contents are never copied by anyone -- and
+ * *out_base receives the resulting base, which equals the
+ * input base exactly in the extension case. After a
+ * successful call the old address is invalid whenever
+ * *out_base differs from base, exactly as after a release.
+ * On any failure the status is non-OK, *out_base is NULL,
+ * and the original mapping is untouched at its old length
+ * and old address. A no-relocation variant of this call
+ * was measured and rejected on this host before this form
+ * was chosen: the kernel's top-down placement packs every
+ * fresh mapping directly against the VMA above it, so an
+ * in-place-only extension of a fresh mapping is refused
+ * (ENOMEM) essentially always -- the audit and the maps
+ * evidence are recorded in docs/Z13_MREMAP_GROWTH.md.
+ * This is the only facility in the layer that can change
+ * a live mapping's length, and it exists for realloc's
+ * growth path (MIMIRALLOC_Z13_ROADMAP.md Z-052).
+ */
+int mimir_platform_map_grow(void *base, size_t old_length,
+                            size_t new_length, void **out_base);
+
+/*
  * The one simple global lock of B-006 S9: a single coarse mutex,
  * statically initialised in the implementation (no allocation, no
  * constructor dependency; B-006 S9.1). Lock/unlock return OK or
