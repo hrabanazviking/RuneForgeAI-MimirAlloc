@@ -1,0 +1,42 @@
+MimirAlloc Z13 recorded run - Z-029 TLS cache: implementation
+slice: Z-029 - per-thread bins for the hot classes, lock-free on cache hit, batched refill/drain to the central core on miss; implements the Z-028 contract (docs/Z13_TLS_CACHE_CONTRACT.md, tests/contract/mimir_tls_cache_z028.h) unmodified
+date_utc: 2026-11-12T09:40:58Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+branch_head_at_run: b1b5e94fa21db9efb714b3d2c6375834249bc5d1 (merge of seat main c84f021, banked Z-001..Z-020, into yrsa/mimiralloc-team-06; slice commit follows this run)
+loadavg_at_final_runs: 0.19 0.22 0.58 at gate start, 0.26 0.23 0.59 at contract end - quiet window on the shared host (Aesir/Lifthrasir/Tensile co-tenants idle at these stamps); both suites are deterministic correctness with no timing assertions, so load moves no count; recorded for honesty
+
+=== VERDICT ===
+Roadmap gate: Z-028 contract green; standing gate (Z-008) green.
+Z-028 contract: CHECKS: 119 run, 0 failed, RESULT: PASS, exit 0 - GREEN (was RED BY DESIGN on the pre-Z-029 core: 119 run, 96 failed; Z-028 recorded run)
+Standing gate: scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, make exit 0 (hidden_files/z029_gate_final.log) - counts IDENTICAL to the Z-001..Z-020 baseline; the slice adds no make tests and moves no gate count
+Determinism: contract suite run 3 times on the final build, identical output all three times (CHECKS: 119 run, 0 failed / RESULT: PASS, exit 0); a 4th run taken for this record, same result
+
+=== CONTRACT RUN (tests/contract/run_z028.sh, final run, log hidden_files/z028_contract_run.log) ===
+# Z-028 contract run: (final) 
+CHECKS: 119 run, 0 failed
+RESULT: PASS
+# contract exit code: 0
+Phases P0..P10 all pass, including: P2 exact-batch refill (miss + 1 refill of exactly 8, LIFO hit), P3 capacity bound with S3 batch-drain-before-caching, P5 calloc bin-head zeroing + calloc_served, P7 exited-owner free counted remote and returned via the central span LIFO head on a miss, P8 exit drain of exactly 7 blocks with stats + metadata reconciliation, P9 public regression.
+
+=== SYMBOL PROOFS ===
+-- core object (expect all six surface symbols defined, T):
+00000000000022e0 T mimir_tls_cache_exit_drains
+00000000000022f0 T mimir_tls_cache_exit_drain_blocks
+0000000000002300 T mimir_tls_cache_bin_capacity
+0000000000002320 T mimir_tls_cache_batch
+0000000000002340 T mimir_tls_cache_snapshot
+0000000000002430 T mimir_tls_cache_drain_thread
+-- shared library (make lib; expect nm -D defined-only == exactly 4):
+0000000000001320 T mimir_malloc
+0000000000001340 T mimir_free
+0000000000001360 T mimir_calloc
+0000000000001380 T mimir_realloc
+count: 4 - the TLS surface is bound local by the E-002 version script, exactly like every internal surface; no mimir_tls_cache symbol in .dynsym.
+
+=== FLAVOUR CHECKS ===
+MIMIR_LOCK_HIST compile: cc -DMIMIR_LOCK_HIST -c src/core/mimir_core.c - OK (no warnings, -Wall -Wextra -Werror).
+MIMIR_DEBUG flavour: make DEBUG=1 test-debug exit pattern on the Z-029 core: test_smoke 0, test_core 0, test_b007 1, test_c005 0, test_c006 1, test_c007 0, test_c008 0, test_d004 0, test_j004 0. The SAME pattern on the unmodified banked core (control run, core files restored from backup): identical, exit for exit. The two debug exits are pre-existing in this tree's partial debug flavour (J-006 record), NOT a Z-029 regression; the cache is bypassed under MIMIR_DEBUG by design (slice doc S7).
+
+=== DESIGN NOTES OF RECORD ===
+Accounting: cached blocks are FREE at core level (contract S9 TLS-ACCT) via per-thread pending transitions flushed at every locked core entry; per-span binned tally keeps free_nodes + live_count + tally == carve_count at every instant and blocks any span release while tally > 0 (slice doc S3).
+Tension recorded: contract doc S2 says exited-owner frees do NOT count remote; the suite P7 requires remote +1 for exactly that case. The implementation follows the SUITE (gate-named form); see slice doc S4.

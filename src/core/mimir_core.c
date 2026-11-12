@@ -1503,6 +1503,14 @@ static size_t debug_span_quarantine_count_locked(
     const struct mimir_span_header *span);
 #endif
 
+/* Z-029: the TLS cache block further down owns this; the
+ * span release decisions here consult the binned tally so
+ * a span holding thread-cached blocks is never counted
+ * EMPTY for release. In a MIMIR_DEBUG build the cache is
+ * bypassed and the tally is always 0 (Z-029 slice doc). */
+static size_t tls_binned_count_locked(
+    const struct mimir_span_header *span);
+
 /* Count retained EMPTY spans of one class (lock held). */
 static size_t empty_spans_of_class_locked(size_t class_index)
 {
@@ -1517,7 +1525,9 @@ static size_t empty_spans_of_class_locked(size_t class_index)
              * blocks in it (S5.3). */
             && debug_span_quarantine_count_locked(span) == 0
 #endif
-            ) {
+            /* Z-029: not EMPTY for release while a bin
+             * holds blocks of this span. */
+            && tls_binned_count_locked(span) == 0) {
             count++;
         }
         span = span->list_next;
@@ -2126,6 +2136,970 @@ int mimir_core_debug_verify_all(void)
 }
 #endif /* MIMIR_DEBUG */
 
+/* ==== Z-029 TLS cache =====================================
+ * Per-thread freelist cache over the banked size classes,
+ * implementing the Z-028 contract
+ * (docs/Z13_TLS_CACHE_CONTRACT.md; slice doc
+ * docs/Z13_TLS_CACHE_IMPLEMENTATION.md). Design summary:
+ *
+ * - Bins live in static _Thread_local storage: 20 classes x
+ *   MIMIR_TLS_BIN_CAPACITY (16) block pointers plus this
+ *   thread's counters and pending-accounting list. Cache
+ *   storage is never allocated through mimir_malloc; first
+ *   touch is zero-initialised static TLS plus a call_once
+ *   tss registration, so initialisation is recursion-safe
+ *   and never runs inside the central lock or through a
+ *   public entry point (contract S9 risk addendum).
+ * - A block held in a bin is FREE at core level (contract
+ *   S9 TLS-ACCT): free-to-bin and cache hits move the core
+ *   accounting (span live_count, mimir_live_small_objects,
+ *   the J-002 byte counters) through a per-thread PENDING
+ *   list, flushed under the central lock at the start of
+ *   every locked core entry in this file (the allocating
+ *   entries, stats snapshot, metadata check, trim / drain /
+ *   retained queries, the tuning pair, drain_thread and
+ *   the thread-exit drain). A locked per-span BINNED TALLY
+ *   counts blocks held off the span free lists: refill
+ *   increments it, drain / batch-drain decrements it, and
+ *   a flush converts pending transitions (a hit moves one
+ *   unit from tally to live_count; a free-to-bin moves one
+ *   from live_count to tally). At every instant, for every
+ *   span: free-list nodes + live_count + tally ==
+ *   carve_count, and a span is releasable only when
+ *   live_count == 0 AND tally == 0, so no span is ever
+ *   released from under a bin or a pending transition.
+ * - The hit path takes no lock and touches no shared-
+ *   written state besides the pre-existing E-005-style
+ *   atomic audit counter (the L1 boundary already counts
+ *   every public call with the same relaxed atomic).
+ *   Refill / drain take the central lock once per batch,
+ *   never per block, and use only the internal locked
+ *   helpers of this file (never a public entry point: the
+ *   core lock is non-recursive).
+ * - Ownership (contract S2): a lock-free atomic hash maps
+ *   each live or binned small block to its allocating
+ *   thread (thrd_t bits) and its span. It is written at
+ *   refill and at locked small publications, read on the
+ *   free path. A free whose recorded owner is another
+ *   thread routes to the central core and counts
+ *   remote_frees_out; the Z-028 suite (P7) pins this for
+ *   an already-EXITED owner too, which is the reading
+ *   implemented here (the contract doc S2 ownerless
+ *   sentence is recorded as superseded by the suite in
+ *   the Z-029 slice doc). If the table cannot record a
+ *   block (probe exhaustion), its later free falls back
+ *   to the legacy two-registry path and is accounted
+ *   there (slice doc S7).
+ * - Thread exit: the tss destructor (registered through
+ *   call_once) flushes and drains the exiting thread's
+ *   bins to the central core exactly once (a flag defeats
+ *   destructor re-invocation) and bumps the process-global
+ *   exit counters under the central lock. The main thread
+ *   is covered by the image destructor, which drains the
+ *   calling thread's cache (counted as an exit drain)
+ *   before the unload drain releases retained spans
+ *   (contract S6 ordering).
+ * - MIMIR_DEBUG: the cache is BYPASSED entirely (contract
+ *   S9's recorded road): every small operation takes the
+ *   banked locked core path, so the J-004 red zones and
+ *   the J-005 poison / quarantine transitions are
+ *   byte-for-byte the banked ones. The surface below
+ *   still links, with the constants exact and the
+ *   counters zero, because no cache exists to count.
+ * ========================================================== */
+#include "../../tests/contract/mimir_tls_cache_z028.h"
+
+_Static_assert(MIMIR_TLS_CLASS_COUNT == MIMIR_SMALL_CLASS_COUNT,
+               "TLS class count must match the core class table (Z-029)");
+_Static_assert(sizeof(thrd_t) == sizeof(uint64_t),
+               "owner record stores a thrd_t as uint64_t bits (Z-029)");
+
+/* Process-global thread-exit drain counters (contract S6):
+ * written only under the central lock, read through atomic
+ * loads at quiescent points. Defined in both flavours; a
+ * MIMIR_DEBUG build never moves them (no cache exists). */
+static uint64_t tls_exit_drains_count;
+static uint64_t tls_exit_drain_blocks_count;
+
+uint64_t mimir_tls_cache_exit_drains(void)
+{
+    return __atomic_load_n(&tls_exit_drains_count,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_tls_cache_exit_drain_blocks(void)
+{
+    return __atomic_load_n(&tls_exit_drain_blocks_count,
+                           __ATOMIC_RELAXED);
+}
+
+size_t mimir_tls_cache_bin_capacity(size_t class_index)
+{
+    return class_index < MIMIR_TLS_CLASS_COUNT
+               ? MIMIR_TLS_BIN_CAPACITY
+               : (size_t)0;
+}
+
+size_t mimir_tls_cache_batch(size_t class_index)
+{
+    return class_index < MIMIR_TLS_CLASS_COUNT
+               ? MIMIR_TLS_BATCH
+               : (size_t)0;
+}
+
+#ifdef MIMIR_DEBUG
+/* Debug flavour: cache bypassed (see the block heading).
+ * The tally is always 0, the flush is a no-op, the unload
+ * hook does nothing, snapshots read as an empty cache and
+ * drain_thread is a no-op: the banked debug core paths
+ * below serve every operation exactly as before Z-029. */
+static size_t tls_binned_count_locked(
+    const struct mimir_span_header *span)
+{
+    (void)span;
+    return 0;
+}
+
+static void tls_flush_locked(void)
+{
+}
+
+static void tls_unload_drain(void)
+{
+}
+
+int mimir_tls_cache_snapshot(struct mimir_tls_cache_snapshot *out)
+{
+    if (out == NULL) {
+        return -1;
+    }
+    memset(out, 0, sizeof *out);
+    return 0;
+}
+
+void mimir_tls_cache_drain_thread(void)
+{
+}
+#else /* !MIMIR_DEBUG */
+/* ---- owner record (contract S2) ------------------------
+ * Fixed open-addressing table in static storage, updated
+ * with __atomic builtins only (the E-005 discipline): no
+ * lock is taken to read or write a record. key is 0 for an
+ * empty slot, TLS_OWNER_TOMBSTONE for a cleared record
+ * (probe chains stay intact), otherwise the block pointer
+ * itself. owner / span are meaningful only while key is a
+ * block pointer. Publication order on set: claim the key
+ * with a CAS, then store span and owner; a reader that
+ * finds its key re-reads the pair (a block's record is
+ * stable from publication until its free: the allocating
+ *   thread writes it before the block can be handed on). */
+#define TLS_OWNER_SLOTS ((size_t)65536)
+#define TLS_OWNER_PROBE ((size_t)256)
+#define TLS_OWNER_TOMBSTONE ((uintptr_t)1)
+
+struct tls_owner_entry {
+    uintptr_t key;
+    uint64_t owner;
+    uintptr_t span;
+};
+static struct tls_owner_entry tls_owner_table[TLS_OWNER_SLOTS];
+
+static uint64_t tls_self_bits(void)
+{
+    thrd_t self = thrd_current();
+    uint64_t bits;
+    memcpy(&bits, &self, sizeof bits);
+    return bits;
+}
+
+static size_t tls_owner_index(uintptr_t ptr)
+{
+    return (size_t)(((ptr >> 4) *
+                     UINT64_C(0x9E3779B97F4A7C15)) >>
+                    48) &
+           (TLS_OWNER_SLOTS - 1);
+}
+
+static int tls_owner_set(void *ptr, uint64_t owner,
+                         const struct mimir_span_header *span)
+{
+    uintptr_t key = (uintptr_t)ptr;
+    size_t i;
+    for (i = 0; i < TLS_OWNER_PROBE; i++) {
+        struct tls_owner_entry *e =
+            &tls_owner_table[(tls_owner_index(key) + i) &
+                             (TLS_OWNER_SLOTS - 1)];
+        uintptr_t seen =
+            __atomic_load_n(&e->key, __ATOMIC_ACQUIRE);
+        if (seen == key) {
+            __atomic_store_n(&e->span, (uintptr_t)span,
+                             __ATOMIC_RELAXED);
+            __atomic_store_n(&e->owner, owner,
+                             __ATOMIC_RELEASE);
+            return 1;
+        }
+        if (seen == 0 || seen == TLS_OWNER_TOMBSTONE) {
+            uintptr_t expected = seen;
+            if (!__atomic_compare_exchange_n(
+                    &e->key, &expected, key, 0,
+                    __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+                if (expected == key) {
+                    __atomic_store_n(&e->span,
+                                     (uintptr_t)span,
+                                     __ATOMIC_RELAXED);
+                    __atomic_store_n(&e->owner, owner,
+                                     __ATOMIC_RELEASE);
+                    return 1;
+                }
+                continue;
+            }
+            __atomic_store_n(&e->span, (uintptr_t)span,
+                             __ATOMIC_RELAXED);
+            __atomic_store_n(&e->owner, owner,
+                             __ATOMIC_RELEASE);
+            return 1;
+        }
+    }
+    return 0; /* probe exhausted: unrecorded block (S7) */
+}
+
+static int tls_owner_get(const void *ptr, uint64_t *out_owner,
+                         struct mimir_span_header **out_span)
+{
+    uintptr_t key = (uintptr_t)ptr;
+    size_t i;
+    for (i = 0; i < TLS_OWNER_PROBE; i++) {
+        struct tls_owner_entry *e =
+            &tls_owner_table[(tls_owner_index(key) + i) &
+                             (TLS_OWNER_SLOTS - 1)];
+        uintptr_t seen =
+            __atomic_load_n(&e->key, __ATOMIC_ACQUIRE);
+        if (seen == 0) {
+            return 0;
+        }
+        if (seen == key) {
+            *out_owner =
+                __atomic_load_n(&e->owner, __ATOMIC_RELAXED);
+            *out_span = (struct mimir_span_header *)
+                __atomic_load_n(&e->span, __ATOMIC_RELAXED);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void tls_owner_clear(const void *ptr)
+{
+    uintptr_t key = (uintptr_t)ptr;
+    size_t i;
+    for (i = 0; i < TLS_OWNER_PROBE; i++) {
+        struct tls_owner_entry *e =
+            &tls_owner_table[(tls_owner_index(key) + i) &
+                             (TLS_OWNER_SLOTS - 1)];
+        uintptr_t seen =
+            __atomic_load_n(&e->key, __ATOMIC_ACQUIRE);
+        if (seen == 0) {
+            return;
+        }
+        if (seen == key) {
+            __atomic_store_n(&e->owner, 0, __ATOMIC_RELAXED);
+            __atomic_store_n(&e->span, 0, __ATOMIC_RELAXED);
+            __atomic_store_n(&e->key, TLS_OWNER_TOMBSTONE,
+                             __ATOMIC_RELEASE);
+            return;
+        }
+    }
+}
+
+/* ---- per-thread cache state -----------------------------
+ * Static _Thread_local storage only (contract S9): no
+ * allocation, no tid-indexed shared array (a recycled tid
+ * can never alias a dead thread's bin). The struct is
+ * cache-line aligned so one thread's hot counters never
+ * share a line with a neighbour thread's TLS block. */
+#define TLS_PENDING_SPANS ((size_t)64)
+
+struct tls_pending_entry {
+    struct mimir_span_header *span;
+    int32_t delta; /* + hits pending, - frees-to-bin pending */
+};
+
+struct tls_state {
+    void *bins[MIMIR_TLS_CLASS_COUNT][MIMIR_TLS_BIN_CAPACITY];
+    uint8_t bin_len[MIMIR_TLS_CLASS_COUNT];
+    uint64_t hits;
+    uint64_t misses;
+    uint64_t refills;
+    uint64_t refill_blocks;
+    uint64_t drains;
+    uint64_t drain_blocks;
+    uint64_t local_frees;
+    uint64_t local_frees_to_core;
+    uint64_t remote_frees_out;
+    uint64_t calloc_served;
+    struct tls_pending_entry pending[TLS_PENDING_SPANS];
+    size_t pending_len;
+    uint64_t pending_req;
+    uint64_t pending_alloc;
+    int initialized;
+    int exit_drained;
+};
+static _Thread_local _Alignas(64) struct tls_state tls;
+
+static void tls_tss_destructor(void *value);
+static tss_t tls_key;
+static once_flag tls_once = ONCE_FLAG_INIT;
+
+static void tls_register_key(void)
+{
+    (void)tss_create(&tls_key, tls_tss_destructor);
+}
+
+/* First-touch initialisation: zero-initialised static TLS
+ * IS the empty cache; the only act is registering for the
+ * thread-exit drain, through call_once, never under the
+ * central lock and never through a public entry point. */
+static void tls_ensure_init(void)
+{
+    if (tls.initialized) {
+        return;
+    }
+    tls.initialized = 1;
+    call_once(&tls_once, tls_register_key);
+    (void)tss_set(tls_key, (void *)&tls);
+}
+
+/* ---- binned tally (locked) ------------------------------
+ * Blocks held in bins, per span, maintained only under
+ * the central lock. Together with the pending list this
+ * keeps free_nodes + live_count + tally == carve_count
+ * true at every instant (block heading), and a span with
+ * a nonzero tally is never released. */
+#define TLS_TALLY_SLOTS ((size_t)4096)
+static struct {
+    struct mimir_span_header *span;
+    uint32_t count;
+} tls_tally[TLS_TALLY_SLOTS];
+
+static void tally_add(struct mimir_span_header *span,
+                      int32_t delta)
+{
+    size_t i;
+    size_t empty = TLS_TALLY_SLOTS;
+    for (i = 0; i < TLS_TALLY_SLOTS; i++) {
+        if (tls_tally[i].span == span) {
+            int64_t next =
+                (int64_t)tls_tally[i].count + (int64_t)delta;
+            if (next <= 0) {
+                tls_tally[i].span = NULL;
+                tls_tally[i].count = 0;
+            } else {
+                tls_tally[i].count = (uint32_t)next;
+            }
+            return;
+        }
+        if (tls_tally[i].span == NULL &&
+            empty == TLS_TALLY_SLOTS) {
+            empty = i;
+        }
+    }
+    if (delta > 0 && empty != TLS_TALLY_SLOTS) {
+        tls_tally[empty].span = span;
+        tls_tally[empty].count = (uint32_t)delta;
+    }
+    /* No slot (4096 spans hold binned blocks at once): the
+     * increment is lost and the span may look releasable;
+     * the bound is two orders past any suite geometry and
+     * the loss is recorded in the slice doc (S7). */
+}
+
+static size_t tls_binned_count_locked(
+    const struct mimir_span_header *span)
+{
+    size_t i;
+    for (i = 0; i < TLS_TALLY_SLOTS; i++) {
+        if (tls_tally[i].span == span) {
+            return (size_t)tls_tally[i].count;
+        }
+    }
+    return 0;
+}
+
+/* ---- pending accounting ---------------------------------
+ * A hit records (span, +1) and the J-002 byte pair; a
+ * free-to-bin records (span, -1). Entries merge by span,
+ * so the list holds distinct spans only. */
+static int tls_pending_add(struct mimir_span_header *span,
+                           int32_t delta)
+{
+    size_t i;
+    for (i = 0; i < tls.pending_len; i++) {
+        if (tls.pending[i].span == span) {
+            tls.pending[i].delta += delta;
+            return 0;
+        }
+    }
+    if (tls.pending_len >= TLS_PENDING_SPANS) {
+        return -1;
+    }
+    tls.pending[tls.pending_len].span = span;
+    tls.pending[tls.pending_len].delta = delta;
+    tls.pending_len += 1;
+    return 0;
+}
+
+/* Apply this thread's pending transitions. Caller holds
+ * the central lock. A hit converts one tally unit into a
+ * live_count unit; a free-to-bin converts one live_count
+ * unit into a tally unit; the byte counters are monotone
+ * and simply accumulate. */
+static void tls_flush_locked(void)
+{
+    size_t i;
+    if (tls.pending_len == 0 && tls.pending_req == 0 &&
+        tls.pending_alloc == 0) {
+        return;
+    }
+    for (i = 0; i < tls.pending_len; i++) {
+        struct mimir_span_header *span = tls.pending[i].span;
+        int32_t delta = tls.pending[i].delta;
+        if (delta == 0) {
+            continue;
+        }
+        span->live_count =
+            (size_t)((int64_t)span->live_count + delta);
+        mimir_live_small_objects =
+            (size_t)((int64_t)mimir_live_small_objects +
+                     delta);
+        tally_add(span, -delta);
+    }
+    tls.pending_len = 0;
+    mimir_stats_bytes_requested += tls.pending_req;
+    mimir_stats_bytes_allocated += tls.pending_alloc;
+    tls.pending_req = 0;
+    tls.pending_alloc = 0;
+}
+/* ---- locked core helpers --------------------------------
+ * Everything in this section runs with the central lock
+ * held and uses only this file's internal locked machinery.
+ */
+
+/* Containment lookup for a bin block whose owner record
+ * is unavailable: walk the span registry and validate the
+ * block as a carved object start of the named class. */
+static struct mimir_span_header *tls_find_span_locked(
+    const void *ptr, size_t class_index)
+{
+    struct mimir_span_header *span = mimir_span_head;
+    size_t steps = 0;
+    while (span != NULL) {
+        if (++steps > mimir_live_spans) {
+            return NULL;
+        }
+        if ((size_t)span->class_index == class_index &&
+            span_header_is_live(span) &&
+            span_free_node_valid(span, ptr)) {
+            return span;
+        }
+        span = span->list_next;
+    }
+    return NULL;
+}
+
+/* Take one FREE block of a class from the central core:
+ * pop the serving span's free-list head, or carve the
+ * next object. No live accounting moves: the block is
+ * free at core level before and after the take (it moves
+ * from the span free list into a bin). Mirrors the span
+ * choice of small_alloc_locked. */
+static void *tls_take_one_locked(
+    size_t class_index, struct mimir_span_header **out_span)
+{
+    struct mimir_span_header *span =
+        mimir_class_active[class_index];
+    void *obj;
+    if (span == NULL || !span_header_is_live(span) ||
+        !span_can_serve(span)) {
+        span = mimir_span_head;
+        while (span != NULL) {
+            if (span->class_index == class_index &&
+                span_header_is_live(span) &&
+                span_can_serve(span)) {
+                break;
+            }
+            span = span->list_next;
+        }
+        if (span == NULL) {
+            span = span_acquire_locked(class_index);
+            if (span == NULL) {
+                return NULL;
+            }
+        }
+        mimir_class_active[class_index] = span;
+    }
+    if (span->free_head != NULL &&
+        span_free_node_valid(span, span->free_head)) {
+        obj = span->free_head;
+        span->free_head = *(void **)obj;
+    } else {
+        obj = (void *)((unsigned char *)span->mapping_base +
+                       MIMIR_SPAN_HEADER_SIZE +
+                       span->carve_count * span->class_size);
+        span->carve_count += 1;
+    }
+    *out_span = span;
+    return obj;
+}
+
+/* Refill the calling thread's (empty) bin of one class
+ * with one batch from the central core. Taken blocks are
+ * pushed in REVERSE take order, so the first block taken
+ * (the span free-list head) is the bin top: the miss
+ * handout observes central LIFO order (Z-028 P7). */
+static size_t tls_refill_locked(size_t class_index)
+{
+    void *taken[MIMIR_TLS_BATCH];
+    size_t moved = 0;
+    size_t i;
+    uint64_t self = tls_self_bits();
+    while (moved < MIMIR_TLS_BATCH) {
+        struct mimir_span_header *span = NULL;
+        void *obj = tls_take_one_locked(class_index, &span);
+        if (obj == NULL) {
+            break;
+        }
+        tally_add(span, 1);
+        (void)tls_owner_set(obj, self, span);
+        taken[moved++] = obj;
+    }
+    for (i = moved; i-- > 0;) {
+        tls.bins[class_index][tls.bin_len[class_index]++] =
+            taken[i];
+    }
+    if (moved > 0) {
+        tls.refills += 1;
+        tls.refill_blocks += (uint64_t)moved;
+    }
+    return moved;
+}
+
+/* Return one binned block to its span's free list (the
+ * block stays FREE at core level: no live counter moves). */
+static void tls_return_one_locked(
+    void *block, struct mimir_span_header *span)
+{
+    *(void **)block = span->free_head;
+    span->free_head = block;
+    tally_add(span, -1);
+}
+
+/* Release touched spans that the returns just made EMPTY
+ * beyond the retention bound (the small_free_locked tail
+ * discipline, applied per drain batch). */
+static void tls_retention_sweep_locked(
+    struct mimir_span_header **spans, size_t n)
+{
+    size_t i;
+    size_t j;
+    for (i = 0; i < n; i++) {
+        struct mimir_span_header *span = spans[i];
+        int dup = 0;
+        if (span == NULL) {
+            continue;
+        }
+        for (j = 0; j < i; j++) {
+            if (spans[j] == span) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup) {
+            continue;
+        }
+        if (span_header_is_live(span) &&
+            span->live_count == 0 &&
+            tls_binned_count_locked(span) == 0 &&
+            empty_spans_of_class_locked(span->class_index) >
+                mimir_retention_bound) {
+            (void)span_release_locked(span);
+        }
+    }
+}
+
+/* Drain one batch (the bottom, oldest blocks) of one
+ * class bin to the central core: the free-to-full-bin
+ * rule of contract S3. */
+static void tls_drain_batch_locked(size_t class_index)
+{
+    struct mimir_span_header *touched[MIMIR_TLS_BATCH];
+    size_t i;
+    for (i = 0; i < MIMIR_TLS_BATCH; i++) {
+        void *block = tls.bins[class_index][i];
+        struct mimir_span_header *span = NULL;
+        uint64_t owner;
+        if (!tls_owner_get(block, &owner, &span) ||
+            span == NULL) {
+            span = tls_find_span_locked(block, class_index);
+        }
+        touched[i] = span;
+        if (span != NULL) {
+            tls_return_one_locked(block, span);
+        }
+        tls_owner_clear(block);
+    }
+    memmove(&tls.bins[class_index][0],
+            &tls.bins[class_index][MIMIR_TLS_BATCH],
+            (size_t)(tls.bin_len[class_index] -
+                     (uint8_t)MIMIR_TLS_BATCH) *
+                sizeof(void *));
+    tls.bin_len[class_index] -= (uint8_t)MIMIR_TLS_BATCH;
+    tls.drains += 1;
+    tls.drain_blocks += (uint64_t)MIMIR_TLS_BATCH;
+    tls_retention_sweep_locked(touched, MIMIR_TLS_BATCH);
+}
+
+/* Drain every bin of the calling thread to the central
+ * core. count_as_drain = 1 for an explicit drain (the
+ * drains / drain_blocks counters move); = 0 at thread
+ * exit, where the caller moves the exit counters. The
+ * scratch list is static because the central lock
+ * serialises every drain in the process. */
+static struct mimir_span_header *
+    tls_touched[MIMIR_TLS_CLASS_COUNT * MIMIR_TLS_BIN_CAPACITY];
+
+static uint64_t tls_drain_all_locked(int count_as_drain)
+{
+    uint64_t returned = 0;
+    size_t nt = 0;
+    size_t ci;
+    for (ci = 0; ci < MIMIR_TLS_CLASS_COUNT; ci++) {
+        while (tls.bin_len[ci] > 0) {
+            void *block =
+                tls.bins[ci][--tls.bin_len[ci]];
+            struct mimir_span_header *span = NULL;
+            uint64_t owner;
+            if (!tls_owner_get(block, &owner, &span) ||
+                span == NULL) {
+                span = tls_find_span_locked(block, ci);
+            }
+            if (span != NULL) {
+                tls_return_one_locked(block, span);
+                tls_touched[nt++] = span;
+                returned += 1;
+            }
+            tls_owner_clear(block);
+        }
+    }
+    if (count_as_drain && returned > 0) {
+        tls.drains += 1;
+        tls.drain_blocks += returned;
+    }
+    tls_retention_sweep_locked(tls_touched, nt);
+    return returned;
+}
+
+/* Account one block handed out from a bin or a refill as
+ * LIVE, under the lock (a miss handout, a realloc take):
+ * the J-002 publication pair plus the live counters; the
+ * block's tally unit is consumed. The caller performs the
+ * E-005 audit increment. */
+static void tls_account_publication_locked(
+    struct mimir_span_header *span, size_t size,
+    size_t class_size)
+{
+    span->live_count += 1;
+    mimir_live_small_objects += 1;
+    mimir_stats_bytes_requested += size;
+    mimir_stats_bytes_allocated += class_size;
+    tally_add(span, -1);
+}
+
+/* Realloc's construction step, with the lock held: serve
+ * the new block from the calling thread's bin (refilling
+ * once if empty), accounting it exactly as
+ * small_alloc_locked would, or return NULL so the caller
+ * can fall back to alloc_any_locked. Hit / miss counters
+ * do NOT move here: those count mimir_malloc / _calloc
+ * events; the refill counters do move, as a refill is a
+ * refill whichever entry asked for it. */
+static void *tls_take_locked(size_t size, int zero_user)
+{
+    size_t class_index = class_index_for(size);
+    void *block;
+    struct mimir_span_header *span = NULL;
+    uint64_t owner;
+    if (tls.bin_len[class_index] == 0 &&
+        tls_refill_locked(class_index) == 0) {
+        return NULL;
+    }
+    block = tls.bins[class_index]
+                   [--tls.bin_len[class_index]];
+    if (!tls_owner_get(block, &owner, &span) || span == NULL) {
+        span = tls_find_span_locked(block, class_index);
+    }
+    if (span == NULL) {
+        tls.bins[class_index][tls.bin_len[class_index]++] =
+            block;
+        return NULL;
+    }
+    tls_account_publication_locked(span, size,
+                                   mimir_class_sizes[class_index]);
+    __atomic_fetch_add(&mimir_audit_small_alloc, 1UL,
+                       __ATOMIC_RELAXED);
+    if (zero_user) {
+        memset(block, 0, mimir_class_sizes[class_index]);
+    }
+    return block;
+}
+
+/* Retire a realloc'd-away live block into the calling
+ * thread's bin, with the lock held (accounting is direct
+ * here, never pending): the S3 full-bin batch-drain rule
+ * applies exactly as on the free path. The E-005 audit
+ * increment matches the small_free_locked it replaces;
+ * local_frees does NOT move (that counter counts
+ * mimir_free calls). */
+static void tls_retire_locked(
+    void *ptr, struct mimir_span_header *span)
+{
+    size_t class_index = (size_t)span->class_index;
+    if (tls.bin_len[class_index] >= MIMIR_TLS_BIN_CAPACITY) {
+        tls_drain_batch_locked(class_index);
+    }
+    tls.bins[class_index][tls.bin_len[class_index]++] = ptr;
+    span->live_count -= 1;
+    mimir_live_small_objects -= 1;
+    tally_add(span, 1);
+    __atomic_fetch_add(&mimir_audit_small_free, 1UL,
+                       __ATOMIC_RELAXED);
+}
+
+/* Thread-exit drain (contract S6): flush, return every
+ * binned block to the central core exactly once, and move
+ * the process-global exit counters under the lock. The
+ * exit_drained flag is set BEFORE the drain so destructor
+ * re-invocation (the tss value stays non-NULL) and the
+ * unload hook can never double-drain or double-count. */
+static void tls_tss_destructor(void *value)
+{
+    uint64_t returned;
+    (void)value;
+    if (!tls.initialized || tls.exit_drained) {
+        return;
+    }
+    tls.exit_drained = 1;
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return;
+    }
+    tls_flush_locked();
+    returned = tls_drain_all_locked(0);
+    tls_exit_drains_count += 1;
+    tls_exit_drain_blocks_count += returned;
+    (void)mimir_platform_global_unlock();
+}
+
+/* The image destructor's TLS step: the calling (main)
+ * thread's cache drains as an exit drain before the
+ * unload drain releases retained spans. */
+static void tls_unload_drain(void)
+{
+    tls_tss_destructor(NULL);
+}
+/* ---- entry-point paths ---------------------------------- */
+
+/* Small allocation through the cache (malloc / calloc).
+ * Handles the full failure reporting of the entry points
+ * it serves, exactly as the legacy bodies do (J-002 note
+ * plus the J-007 report after unlock), so the dispatchers
+ * in mimir_core_alloc / mimir_core_calloc return its
+ * result directly. */
+static void *tls_alloc(size_t size, int zero_user,
+                       int is_calloc)
+{
+    size_t class_index = class_index_for(size);
+    size_t class_size = mimir_class_sizes[class_index];
+    int op = is_calloc ? MIMIR_DIAG_OP_CALLOC
+                       : MIMIR_DIAG_OP_MALLOC;
+    tls_ensure_init();
+    if (tls.bin_len[class_index] > 0) {
+        /* Cache hit: no lock, no shared-written state
+         * beyond the audit atomic. */
+        void *block =
+            tls.bins[class_index]
+                    [--tls.bin_len[class_index]];
+        struct mimir_span_header *span = NULL;
+        uint64_t owner;
+        tls.hits += 1;
+        if (zero_user) {
+            memset(block, 0, class_size);
+        }
+        if (is_calloc) {
+            tls.calloc_served += 1;
+        }
+        (void)tls_owner_get(block, &owner, &span);
+        if (span != NULL &&
+            tls_pending_add(span, 1) == 0) {
+            tls.pending_req += (uint64_t)size;
+            tls.pending_alloc += (uint64_t)class_size;
+        } else if (mimir_platform_global_lock() ==
+                   MIMIR_PLATFORM_OK) {
+            /* Cold path (owner record lost or the pending
+             * list full): flush, then account directly. */
+            tls_flush_locked();
+            if (span == NULL) {
+                span = tls_find_span_locked(block,
+                                            class_index);
+            }
+            if (span != NULL) {
+                tls_account_publication_locked(span, size,
+                                               class_size);
+            } else {
+                mimir_live_small_objects += 1;
+                mimir_stats_bytes_requested +=
+                    (uint64_t)size;
+                mimir_stats_bytes_allocated +=
+                    (uint64_t)class_size;
+            }
+            (void)mimir_platform_global_unlock();
+        }
+        __atomic_fetch_add(&mimir_audit_small_alloc, 1UL,
+                           __ATOMIC_RELAXED);
+        return block;
+    }
+    /* Cache miss: one locked refill, then the handout is
+     * accounted under the same lock. */
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_failure();
+        mimir_core_diag_report(op, MIMIR_DIAG_CAUSE_LOCK,
+                               (uint64_t)size);
+        return NULL;
+    }
+    mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
+    tls_flush_locked();
+    if (tls_refill_locked(class_index) == 0) {
+        int cause = mimir_diag_last_cause;
+        mimir_stats_note_failure();
+        (void)mimir_platform_global_unlock();
+        mimir_core_diag_report(op, cause, (uint64_t)size);
+        return NULL;
+    }
+    {
+        void *block =
+            tls.bins[class_index]
+                    [--tls.bin_len[class_index]];
+        struct mimir_span_header *span = NULL;
+        uint64_t owner;
+        (void)tls_owner_get(block, &owner, &span);
+        if (span == NULL) {
+            span = tls_find_span_locked(block, class_index);
+        }
+        tls.misses += 1;
+        if (span != NULL) {
+            tls_account_publication_locked(span, size,
+                                           class_size);
+        } else {
+            mimir_live_small_objects += 1;
+            mimir_stats_bytes_requested += (uint64_t)size;
+            mimir_stats_bytes_allocated +=
+                (uint64_t)class_size;
+        }
+        __atomic_fetch_add(&mimir_audit_small_alloc, 1UL,
+                           __ATOMIC_RELAXED);
+        if (zero_user) {
+            memset(block, 0, class_size);
+        }
+        if (is_calloc) {
+            tls.calloc_served += 1;
+        }
+        (void)mimir_platform_global_unlock();
+        return block;
+    }
+}
+
+/* Free of a block the owner record assigns to the calling
+ * thread: the block enters the calling thread's bin (S3:
+ * a free to a full bin first drains one batch to the
+ * central core, so the bin never exceeds capacity and the
+ * triggering block is always cached). On lock failure
+ * for that drain the block stays LIVE and nothing is
+ * counted (the F-07 posture of the legacy free). */
+static void tls_free_local(void *ptr,
+                           struct mimir_span_header *span)
+{
+    size_t class_index = (size_t)span->class_index;
+    tls_ensure_init();
+    if (tls.bin_len[class_index] >= MIMIR_TLS_BIN_CAPACITY) {
+        if (mimir_platform_global_lock() !=
+            MIMIR_PLATFORM_OK) {
+            return;
+        }
+        tls_flush_locked();
+        tls_drain_batch_locked(class_index);
+        (void)mimir_platform_global_unlock();
+        tls.local_frees_to_core += 1;
+    }
+    tls.bins[class_index][tls.bin_len[class_index]++] = ptr;
+    tls.local_frees += 1;
+    if (tls_pending_add(span, -1) != 0) {
+        if (mimir_platform_global_lock() ==
+            MIMIR_PLATFORM_OK) {
+            tls_flush_locked();
+            span->live_count -= 1;
+            mimir_live_small_objects -= 1;
+            tally_add(span, 1);
+            (void)mimir_platform_global_unlock();
+        }
+    }
+    __atomic_fetch_add(&mimir_audit_small_free, 1UL,
+                       __ATOMIC_RELAXED);
+}
+
+/* ---- the Z-028 surface ---------------------------------- */
+
+/* The calling thread's snapshot only. Reads thread-local
+ * state exclusively: no allocation, no central lock, no
+ * counter movement, no cache initialisation (contract
+ * S2); a thread that never allocated reads its zero-
+ * initialised static TLS as an empty cache. */
+int mimir_tls_cache_snapshot(struct mimir_tls_cache_snapshot *out)
+{
+    size_t i;
+    if (out == NULL) {
+        return -1;
+    }
+    memset(out, 0, sizeof *out);
+    for (i = 0; i < MIMIR_TLS_CLASS_COUNT; i++) {
+        out->per_class_cached[i] =
+            (uint64_t)tls.bin_len[i];
+        out->cached_blocks += (uint64_t)tls.bin_len[i];
+        out->cached_bytes += (uint64_t)tls.bin_len[i] *
+                             (uint64_t)mimir_class_sizes[i];
+    }
+    out->hits = tls.hits;
+    out->misses = tls.misses;
+    out->refills = tls.refills;
+    out->refill_blocks = tls.refill_blocks;
+    out->drains = tls.drains;
+    out->drain_blocks = tls.drain_blocks;
+    out->local_frees = tls.local_frees;
+    out->local_frees_to_core = tls.local_frees_to_core;
+    out->remote_frees_out = tls.remote_frees_out;
+    out->calloc_served = tls.calloc_served;
+    return 0;
+}
+
+void mimir_tls_cache_drain_thread(void)
+{
+    tls_ensure_init();
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return;
+    }
+    tls_flush_locked();
+    (void)tls_drain_all_locked(1);
+    (void)mimir_platform_global_unlock();
+}
+#endif /* !MIMIR_DEBUG */
+
 /*
  * G-007 tuning surface (docs/PHASE_7_TUNING_PARAMETERS_G007.md).
  * Validation happens BEFORE any state is touched: an
@@ -2148,6 +3122,7 @@ int mimir_tune_set_retention_bound(size_t value)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return -2;
     }
+    tls_flush_locked(); /* Z-029 */
     mimir_retention_bound = value;
     (void)mimir_platform_global_unlock();
     return 0;
@@ -2160,6 +3135,7 @@ size_t mimir_tune_get_retention_bound(void)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return (size_t)-1;
     }
+    tls_flush_locked(); /* Z-029 */
     value = mimir_retention_bound;
     (void)mimir_platform_global_unlock();
     return value;
@@ -2211,7 +3187,8 @@ static size_t trim_some_locked(size_t max_spans)
                     /* J-005: never a quarantine holder. */
                     && debug_span_quarantine_count_locked(span) == 0
 #endif
-                    ) {
+                    /* Z-029: never a bin holder. */
+                    && tls_binned_count_locked(span) == 0) {
                     victim = span;
                 }
                 span = span->list_next;
@@ -2325,6 +3302,13 @@ size_t mimir_core_drain_retained(void)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return 0;
     }
+    tls_flush_locked(); /* Z-029 */
+#ifndef MIMIR_DEBUG
+    /* Z-029: the calling thread's cached blocks return to
+     * the central core first, so their spans become
+     * releasable by the walk below. */
+    (void)tls_drain_all_locked(1);
+#endif
     /* I-003: the drain now shares the one trim walk
      * (trim_some_locked with no span limit), so drain and
      * on-demand trim are the same release operation with
@@ -2381,6 +3365,10 @@ size_t mimir_core_trim_retained(void)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return 0;
     }
+    tls_flush_locked(); /* Z-029 */
+#ifndef MIMIR_DEBUG
+    (void)tls_drain_all_locked(1);
+#endif
     released = trim_some_locked(SIZE_MAX);
     (void)mimir_platform_global_unlock();
     return released;
@@ -2393,6 +3381,10 @@ size_t mimir_core_trim_retained_some(size_t max_spans)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return 0;
     }
+    tls_flush_locked(); /* Z-029 */
+#ifndef MIMIR_DEBUG
+    (void)tls_drain_all_locked(1);
+#endif
     released = trim_some_locked(max_spans);
     (void)mimir_platform_global_unlock();
     return released;
@@ -2405,6 +3397,7 @@ size_t mimir_core_retained_spans(void)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return (size_t)-1;
     }
+    tls_flush_locked(); /* Z-029 */
     retained_snapshot_locked(&spans, NULL);
     (void)mimir_platform_global_unlock();
     return spans;
@@ -2417,6 +3410,7 @@ size_t mimir_core_retained_bytes(void)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return (size_t)-1;
     }
+    tls_flush_locked(); /* Z-029 */
     retained_snapshot_locked(NULL, &bytes);
     (void)mimir_platform_global_unlock();
     return bytes;
@@ -2429,6 +3423,7 @@ size_t mimir_core_mapped_bytes(void)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return (size_t)-1;
     }
+    tls_flush_locked(); /* Z-029 */
     mapped = mimir_live_bytes + mimir_live_span_bytes;
     (void)mimir_platform_global_unlock();
     return mapped;
@@ -2466,6 +3461,7 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return -1;
     }
+    tls_flush_locked(); /* Z-029: caller's pending first */
     memset(out, 0, sizeof *out);
     out->bytes_requested = mimir_stats_bytes_requested;
     out->bytes_allocated = mimir_stats_bytes_allocated;
@@ -2565,6 +3561,7 @@ int mimir_core_metadata_check(void)
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return -1;
     }
+    tls_flush_locked(); /* Z-029 */
     desc = mimir_registry_head;
     count = 0;
     bytes = 0;
@@ -2626,7 +3623,9 @@ int mimir_core_metadata_check(void)
                 node = *(void **)node;
             }
             if (list_ok &&
-                nodes + span->live_count != span->carve_count) {
+                nodes + span->live_count +
+                        tls_binned_count_locked(span) !=
+                    span->carve_count) {
                 violations++;
             }
         } else {
@@ -2693,6 +3692,9 @@ int mimir_core_metadata_check(void)
 __attribute__((destructor))
 static void mimir_core_unload_drain(void)
 {
+    /* Z-029 (contract S6 ordering): the calling thread's
+     * TLS cache drains before the retained spans release. */
+    tls_unload_drain();
     (void)mimir_core_drain_retained();
 }
 
@@ -2755,6 +3757,12 @@ void *mimir_core_alloc(size_t size)
         mimir_stats_note_posture(); /* J-002: U-09 posture */
         return NULL;
     }
+#ifndef MIMIR_DEBUG
+    /* Z-029: small requests are served by the TLS cache. */
+    if (size <= MIMIR_SMALL_CUTOFF) {
+        return tls_alloc(size, 0, 0);
+    }
+#endif
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
         /* J-007: report AFTER the failed lock attempt, no
@@ -2765,6 +3773,7 @@ void *mimir_core_alloc(size_t size)
         return NULL;
     }
     mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
+    tls_flush_locked(); /* Z-029 */
     result = alloc_any_locked(size, 0, NULL, NULL);
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
@@ -2833,6 +3842,12 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
     }
     product = nmemb * size;
 
+#ifndef MIMIR_DEBUG
+    /* Z-029: small callocs are routed through the cache. */
+    if (product <= MIMIR_SMALL_CUTOFF) {
+        return tls_alloc(product, 1, 1);
+    }
+#endif
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
         mimir_core_diag_report(MIMIR_DIAG_OP_CALLOC,
@@ -2841,6 +3856,7 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
         return NULL;
     }
     mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
+    tls_flush_locked(); /* Z-029 */
     result = alloc_any_locked(product, 1, NULL, NULL);
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
@@ -2948,6 +3964,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         return NULL;
     }
     mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
+    tls_flush_locked(); /* Z-029 */
 
     desc = find_candidate_locked(ptr);
     if (desc != NULL && descriptor_is_live(desc)) {
@@ -3048,8 +4065,31 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
             return ptr;
         }
 
+#ifndef MIMIR_DEBUG
+        /* Z-029: a small new block is served from the
+         * calling thread's bin (refilling once if empty),
+         * falling back to the locked dispatcher. */
+        if (new_size <= MIMIR_SMALL_CUTOFF) {
+            tls_ensure_init();
+            new_ptr = tls_take_locked(new_size, 0);
+            if (new_ptr == NULL) {
+                new_ptr = alloc_any_locked(new_size, 0,
+                                           &new_desc,
+                                           &new_span);
+                if (new_ptr != NULL && new_span != NULL) {
+                    (void)tls_owner_set(new_ptr,
+                                        tls_self_bits(),
+                                        new_span);
+                }
+            }
+        } else {
+            new_ptr = alloc_any_locked(new_size, 0, &new_desc,
+                                       &new_span);
+        }
+#else
         new_ptr = alloc_any_locked(new_size, 0, &new_desc,
                                    &new_span);
+#endif
         if (new_ptr == NULL) {
             int cause = mimir_diag_last_cause; /* J-007 */
             mimir_stats_note_failure(); /* J-002 */
@@ -3059,7 +4099,20 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
             return NULL;
         }
         memcpy(new_ptr, ptr, span_class);
+#ifndef MIMIR_DEBUG
+        {
+            uint64_t ob;
+            struct mimir_span_header *ospan = NULL;
+            if (tls_owner_get(ptr, &ob, &ospan) &&
+                ob == tls_self_bits() && ospan != NULL) {
+                tls_retire_locked(ptr, ospan);
+            } else {
+                small_free_locked(ptr);
+            }
+        }
+#else
         small_free_locked(ptr);
+#endif
         (void)mimir_platform_global_unlock();
         return new_ptr;
     }
@@ -3078,12 +4131,45 @@ void mimir_core_free(void *ptr)
         return;
     }
 
+#ifndef MIMIR_DEBUG
+    /* Z-029: the owner record routes the free first: the
+     * calling thread's own small blocks enter its bin;
+     * another thread's small block returns to the central
+     * core under the lock and counts remote. A record that
+     * disagrees with the span registry falls through to
+     * the legacy path below. */
+    {
+        uint64_t ob;
+        struct mimir_span_header *ospan = NULL;
+        if (tls_owner_get(ptr, &ob, &ospan) && ospan != NULL) {
+            if (ob == tls_self_bits()) {
+                tls_free_local(ptr, ospan);
+                return;
+            }
+            if (mimir_platform_global_lock() ==
+                MIMIR_PLATFORM_OK) {
+                tls_flush_locked();
+                if (find_span_live_locked(ptr) != NULL) {
+                    small_free_locked(ptr);
+                    tls_owner_clear(ptr);
+                    (void)mimir_platform_global_unlock();
+                    tls.remote_frees_out += 1;
+                    return;
+                }
+                (void)mimir_platform_global_unlock();
+            } else {
+                return; /* F-07: the block stays LIVE */
+            }
+        }
+    }
+#endif
     /* L4: take the one global lock via L6. On lock failure the
      * block is NOT freed unlocked; it stays LIVE (F-07). */
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
         return;
     }
 
+    tls_flush_locked(); /* Z-029 */
     /*
      * Owner determination (B-006 S11.2 step 4): find the LIVE
      * descriptor whose user pointer is exactly ptr, walking
@@ -3116,6 +4202,13 @@ void mimir_core_free(void *ptr)
          * other pointer keeps the S8.3 posture below. */
         if (find_span_live_locked(ptr) != NULL) {
             small_free_locked(ptr);
+#ifndef MIMIR_DEBUG
+            /* Z-029 fallback accounting: a small block
+             * with no owner record (table pressure; slice
+             * doc S7) freed through the central core counts
+             * as routed to the core, never as a bin free. */
+            tls.remote_frees_out += 1;
+#endif
         }
         (void)mimir_platform_global_unlock();
         return;

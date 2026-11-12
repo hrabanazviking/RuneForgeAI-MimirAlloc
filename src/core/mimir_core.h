@@ -352,4 +352,25 @@ int mimir_core_lock_hist_snapshot(struct mimir_lock_hist *out);
 void mimir_core_lock_hist_reset(void);
 #endif /* MIMIR_LOCK_HIST */
 
+/* Z-029 TLS cache surface (contract
+ * docs/Z13_TLS_CACHE_CONTRACT.md; slice doc
+ * docs/Z13_TLS_CACHE_IMPLEMENTATION.md): the six functions
+ * of tests/contract/mimir_tls_cache_z028.h, defined in
+ * mimir_core.c over the per-thread freelist cache.
+ * Internal only, INC-E001-07 shape (b) exactly like the
+ * surfaces above: NOT part of the public surface in
+ * include/mimir_alloc.h, bound local in the shared
+ * library (nm -D stays exactly 4). The snapshot struct is
+ * forward-declared here; its full definition is the
+ * contract header's, so a signature drift between this
+ * file and the defining translation unit (which includes
+ * both) is a compile error, never a silent miss. */
+struct mimir_tls_cache_snapshot;
+int mimir_tls_cache_snapshot(struct mimir_tls_cache_snapshot *out);
+size_t mimir_tls_cache_bin_capacity(size_t class_index);
+size_t mimir_tls_cache_batch(size_t class_index);
+void mimir_tls_cache_drain_thread(void);
+uint64_t mimir_tls_cache_exit_drains(void);
+uint64_t mimir_tls_cache_exit_drain_blocks(void);
+
 #endif /* MIMIR_CORE_H */
