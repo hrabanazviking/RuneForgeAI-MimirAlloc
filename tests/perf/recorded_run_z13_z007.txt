@@ -1,0 +1,404 @@
+MimirAlloc Z13 recorded run - Z-007 energy leg
+slice: Z-007 - Energy leg (RAPL package-energy measurement per workload for both legs, idle-baseline subtraction)
+date: 2026-11-12T03:08:32-05:00 to 2026-11-12T03:10:02-05:00 (energy run window, America/New_York)
+base: 5ad882b (branch yrsa/mimiralloc-team-07, seat founding commit)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+arch: x86_64 (uname -m)
+pagesize: 4096 (getconf PAGESIZE)
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, nproc 32
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+compiler: gcc (Ubuntu 15.3.0-4ubuntu1) 15.3.0, repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2
+harness: tests/perf/bench_k002.c UNMODIFIED (sha256 30dd0d9a8da12b03aa511fd35a4a098cf593b79c0e9ad352026ecb11eacc7d37 - identical to the Z-003/Z-005 recorded hash). The energy leg is built AROUND it: tests/perf/probe_z007.c #includes bench_k002.c with its main() renamed away and adds no workload code of its own - the workload functions, size tables, op definition (one allocation plus its matching free) and checksums are exactly the banked ones. bench_k002 runs all four workloads inside one process, so perf stat around the bench binary could only produce whole-process counters; the probe runs ONE workload per process (argv-selected), one warm-up pass at 1/10 scale exactly as bench_k002, then R timed passes (R per workload: small_churn 200, mixed_batch 30, large_batch 100, mixed_lifecycle 15). Runner: tests/perf/run_energy_z007.sh, 7 measured processes per leg per workload (56 workload blocks), legs alternating process by process (glibc, mimiralloc) per workload, workload processes pinned to CPU 2 (CCD0) per the Z-004 protocol. One idle sample (perf stat -a around sleep 3) before each workload block and one at the end: 5 idle samples, 61 blocks total. Summariser: tests/perf/summarize_z007.py.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh at the seat, Z-002, run verbatim 2026-11-12T03:11:58-05:00, immediately after the run window) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T08:11:58Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5129283
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 63%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.52 2.53 2.07
+
+=== RAPL EXPOSURE ON THIS HOST - MEASURED, NOT ASSUMED ===
+RAPL IS exposed on this host, so the roadmap gate is discharged with the joules/op table below, not with the not-exposed proof.
+  /sys/class/powercap/intel-rapl:0 (name package-0) and intel-rapl:0:0 (name core) EXIST on this AMD Strix Halo host.
+  energy_uj is root-only: unprivileged read returns "Permission denied" (file mode -r--------).
+  max_energy_range_uj = 65532610987 uJ (read via sudo; no counter wrap is possible across these windows: the largest single block is 221.47 J).
+  perf events power/energy-pkg/ and power_core/energy-core/ EXIST. They are system-wide counters: they are measured with `perf stat -a`; there is no per-process energy attribution on this host.
+  Unprivileged perf_event_open is blocked entirely: /proc/sys/kernel/perf_event_paranoid = 4 (same proof as Z-005).
+Method used (no host setting changed): every block below was measured with `sudo -n perf stat -a -x '|' -e power/energy-pkg/,power_core/energy-core/` (passwordless sudo already granted on this host). No sysctl, powercap, or any other host setting was modified.
+Named fallback if RAPL ever becomes unmeasurable on this host: record the exposure proof in a superseding recorded run and estimate joules/op as package power (from the last good idle/workload perf samples) x the Z-003/Z-005 per-op times. That path was NOT needed here.
+
+=== METHOD - IDLE-BASELINE SUBTRACTION (stated per the roadmap) ===
+  idle_W  = median over the 5 interleaved idle samples of (idle package J / idle wall s)
+  net_J   = gross package J - idle_W x wall_s          (per measured process)
+  J/op    = net_J / total timed ops                    (per measured process)
+Headline per (leg, workload) is the MEDIAN of the per-process net J/op values (Z-004 protocol: median of processes). Gross J/op (no subtraction) is printed alongside as a cross-check. Verdict bands on the median net J/op ratio mimiralloc/glibc: WIN < 0.95x, TIE 0.95..1.05x, LOSS > 1.05x (band stated here; energy noise on a shared package is larger than timing noise, so a narrower band would be fiction).
+perf -a measures the WHOLE package (all co-tenants, CPU + iGPU package domain), never the process alone; the idle subtraction removes the idle floor at the median idle level, not co-tenant load during a block. The READING section below grades each workload by how much of its number survives that limit, and claims no more than the data carries.
+Counters cover warm-up + timed passes + process start-up; J/op divides by TIMED ops only. Warm-up share of executed ops per workload at these rep counts: small_churn 0.05%, mixed_batch 0.33%, large_batch 0.10%, mixed_lifecycle 0.66% - negligible, and identical in structure for both legs.
+Checksum proof: every one of the 56 workload blocks has checksum == reps x the Z-003 recorded per-pass checksum (small_churn 12756656, mixed_batch 34727552, large_batch 1106008, mixed_lifecycle 40359936) - the summariser reports 0 mismatches / 0 bad blocks, so the measured work is proven to be the banked K-002 work, byte for byte, on both legs.
+Measurement windows (perf wall per process): glibc - small_churn 0.085..0.091 s, mixed_batch 0.041..0.046 s, large_batch 0.586..0.806 s, mixed_lifecycle 0.045..0.054 s. mimiralloc - small_churn 0.703..0.714 s, mixed_batch 1.766..1.849 s, large_batch 2.676..3.044 s, mixed_lifecycle 4.148..4.458 s. The two short glibc windows (mixed_batch, mixed_lifecycle, under 55 ms) sit close to the subtraction floor; see READING.
+
+=== LOAD STATE - SHARED MACHINE, CONTENDED WINDOW, RECORDED HONESTLY ===
+This run was measured on a SHARED machine and is NOT a quiet-machine baseline. Load averages (1/5/15 min): 1.30/1.58/1.53 at the 03:05 pre-check; 8.65/3.39/2.15 at run start (03:08:32, a co-tenant burst); 3.67/3.12/2.17 at run end (03:10:02); 1.52/2.53/2.07 at the host-truth capture (03:11:58). Visible co-tenants at the 03:05 process check: a Tensile library build (TensileCreateLibrary, HIP, gfx1151, --jobs=12) plus its round1.py driver; the Aesir and Lifthrasir forges are also resident on this host. CPU loadavg understates the package burn here because the package domain includes the iGPU the Tensile build drives: the operative witness is the idle package power itself, which swung 16.21..45.50 W across the 5 interleaved idle samples (median 35.95 W) on a host whose CPU was near-idle. Numbers below are recorded WITH this load state, per campaign law; the per-workload claim grades in READING say exactly which conclusions this window can and cannot carry. A quiet-window re-run is the named follow-up in the team CAMPAIGN_STATE.md.
+
+=== JOULES/OP TABLE (summarize_z007.py on the raw blocks below, verbatim) ===
+IDLE sample 1: 136.400 J over 3.026 s = 45.081 W
+IDLE sample 2: 90.880 J over 3.028 s = 30.011 W
+IDLE sample 3: 108.530 J over 3.019 s = 35.953 W
+IDLE sample 4: 137.420 J over 3.020 s = 45.503 W
+IDLE sample 5: 49.040 J over 3.025 s = 16.214 W
+IDLE baseline: median 35.953 W (min 16.214, max 45.503, n=5)
+
+glibc      small_churn      proc=1 gross=    4.000 J core=    2.580 J wall=  0.088 s net=    0.849 J net_J/op=       42.47 nJ gross_J/op=      200.00 nJ chk=OK
+mimiralloc small_churn      proc=1 gross=   37.290 J core=   23.110 J wall=  0.705 s net=   11.939 J net_J/op=      596.97 nJ gross_J/op=     1864.50 nJ chk=OK
+glibc      small_churn      proc=2 gross=    3.590 J core=    2.210 J wall=  0.086 s net=    0.512 J net_J/op=       25.58 nJ gross_J/op=      179.50 nJ chk=OK
+mimiralloc small_churn      proc=2 gross=   32.000 J core=   18.280 J wall=  0.705 s net=    6.644 J net_J/op=      332.20 nJ gross_J/op=     1600.00 nJ chk=OK
+glibc      small_churn      proc=3 gross=    3.340 J core=    2.030 J wall=  0.086 s net=    0.266 J net_J/op=       13.28 nJ gross_J/op=      167.00 nJ chk=OK
+mimiralloc small_churn      proc=3 gross=   30.010 J core=   16.730 J wall=  0.703 s net=    4.734 J net_J/op=      236.69 nJ gross_J/op=     1500.50 nJ chk=OK
+glibc      small_churn      proc=4 gross=    3.370 J core=    2.070 J wall=  0.085 s net=    0.330 J net_J/op=       16.52 nJ gross_J/op=      168.50 nJ chk=OK
+mimiralloc small_churn      proc=4 gross=   33.030 J core=   20.120 J wall=  0.714 s net=    7.348 J net_J/op=      367.41 nJ gross_J/op=     1651.50 nJ chk=OK
+glibc      small_churn      proc=5 gross=    3.140 J core=    1.970 J wall=  0.091 s net=   -0.117 J net_J/op=       -5.85 nJ gross_J/op=      157.00 nJ chk=OK
+mimiralloc small_churn      proc=5 gross=   27.360 J core=   15.560 J wall=  0.711 s net=    1.809 J net_J/op=       90.43 nJ gross_J/op=     1368.00 nJ chk=OK
+glibc      small_churn      proc=6 gross=    3.300 J core=    2.090 J wall=  0.088 s net=    0.154 J net_J/op=        7.71 nJ gross_J/op=      165.00 nJ chk=OK
+mimiralloc small_churn      proc=6 gross=   28.990 J core=   16.910 J wall=  0.709 s net=    3.515 J net_J/op=      175.73 nJ gross_J/op=     1449.50 nJ chk=OK
+glibc      small_churn      proc=7 gross=    3.050 J core=    1.650 J wall=  0.087 s net=   -0.091 J net_J/op=       -4.53 nJ gross_J/op=      152.50 nJ chk=OK
+mimiralloc small_churn      proc=7 gross=   29.000 J core=   18.270 J wall=  0.712 s net=    3.403 J net_J/op=      170.14 nJ gross_J/op=     1450.00 nJ chk=OK
+glibc      mixed_batch      proc=1 gross=    0.910 J core=    0.430 J wall=  0.045 s net=   -0.709 J net_J/op=      -92.38 nJ gross_J/op=      118.49 nJ chk=OK
+mimiralloc mixed_batch      proc=1 gross=   49.900 J core=   21.720 J wall=  1.766 s net=  -13.604 J net_J/op=    -1771.41 nJ gross_J/op=     6497.40 nJ chk=OK
+glibc      mixed_batch      proc=2 gross=    0.900 J core=    0.440 J wall=  0.044 s net=   -0.679 J net_J/op=      -88.44 nJ gross_J/op=      117.19 nJ chk=OK
+mimiralloc mixed_batch      proc=2 gross=   59.570 J core=   33.250 J wall=  1.784 s net=   -4.576 J net_J/op=     -595.83 nJ gross_J/op=     7756.51 nJ chk=OK
+glibc      mixed_batch      proc=3 gross=    1.300 J core=    0.860 J wall=  0.041 s net=   -0.183 J net_J/op=      -23.84 nJ gross_J/op=      169.27 nJ chk=OK
+mimiralloc mixed_batch      proc=3 gross=   74.670 J core=   41.500 J wall=  1.849 s net=    8.187 J net_J/op=     1066.05 nJ gross_J/op=     9722.66 nJ chk=OK
+glibc      mixed_batch      proc=4 gross=    1.610 J core=    1.040 J wall=  0.046 s net=   -0.037 J net_J/op=       -4.77 nJ gross_J/op=      209.64 nJ chk=OK
+mimiralloc mixed_batch      proc=4 gross=   97.280 J core=   61.630 J wall=  1.838 s net=   31.191 J net_J/op=     4061.29 nJ gross_J/op=    12666.67 nJ chk=OK
+glibc      mixed_batch      proc=5 gross=    1.620 J core=    1.100 J wall=  0.041 s net=    0.145 J net_J/op=       18.92 nJ gross_J/op=      210.94 nJ chk=OK
+mimiralloc mixed_batch      proc=5 gross=   90.590 J core=   54.500 J wall=  1.834 s net=   24.655 J net_J/op=     3210.29 nJ gross_J/op=    11795.57 nJ chk=OK
+glibc      mixed_batch      proc=6 gross=    1.440 J core=    0.920 J wall=  0.042 s net=   -0.055 J net_J/op=       -7.20 nJ gross_J/op=      187.50 nJ chk=OK
+mimiralloc mixed_batch      proc=6 gross=   81.950 J core=   45.850 J wall=  1.837 s net=   15.913 J net_J/op=     2072.05 nJ gross_J/op=    10670.57 nJ chk=OK
+glibc      mixed_batch      proc=7 gross=    1.420 J core=    0.940 J wall=  0.042 s net=   -0.094 J net_J/op=      -12.25 nJ gross_J/op=      184.90 nJ chk=OK
+mimiralloc mixed_batch      proc=7 gross=   81.390 J core=   45.680 J wall=  1.834 s net=   15.454 J net_J/op=     2012.27 nJ gross_J/op=    10597.66 nJ chk=OK
+glibc      large_batch      proc=1 gross=   33.780 J core=   19.140 J wall=  0.755 s net=    6.639 J net_J/op=     6915.17 nJ gross_J/op=    35187.50 nJ chk=OK
+mimiralloc large_batch      proc=1 gross=  127.210 J core=   73.110 J wall=  2.928 s net=   21.926 J net_J/op=    22839.12 nJ gross_J/op=   132510.42 nJ chk=OK
+glibc      large_batch      proc=2 gross=   29.740 J core=   16.870 J wall=  0.791 s net=    1.296 J net_J/op=     1350.30 nJ gross_J/op=    30979.17 nJ chk=OK
+mimiralloc large_batch      proc=2 gross=  127.230 J core=   79.850 J wall=  3.044 s net=   17.789 J net_J/op=    18530.08 nJ gross_J/op=   132531.25 nJ chk=OK
+glibc      large_batch      proc=3 gross=   45.020 J core=   13.680 J wall=  0.653 s net=   21.537 J net_J/op=    22434.21 nJ gross_J/op=    46895.83 nJ chk=OK
+mimiralloc large_batch      proc=3 gross=  114.920 J core=   65.670 J wall=  2.676 s net=   18.709 J net_J/op=    19488.53 nJ gross_J/op=   119708.33 nJ chk=OK
+glibc      large_batch      proc=4 gross=   32.990 J core=   20.180 J wall=  0.712 s net=    7.395 J net_J/op=     7703.29 nJ gross_J/op=    34364.58 nJ chk=OK
+mimiralloc large_batch      proc=4 gross=  153.760 J core=  102.440 J wall=  2.878 s net=   50.298 J net_J/op=    52394.16 nJ gross_J/op=   160166.67 nJ chk=OK
+glibc      large_batch      proc=5 gross=   32.470 J core=   21.700 J wall=  0.586 s net=   11.387 J net_J/op=    11861.56 nJ gross_J/op=    33822.92 nJ chk=OK
+mimiralloc large_batch      proc=5 gross=  182.070 J core=  127.360 J wall=  2.987 s net=   74.677 J net_J/op=    77788.18 nJ gross_J/op=   189656.25 nJ chk=OK
+glibc      large_batch      proc=6 gross=   46.150 J core=   31.550 J wall=  0.806 s net=   17.187 J net_J/op=    17903.07 nJ gross_J/op=    48072.92 nJ chk=OK
+mimiralloc large_batch      proc=6 gross=  162.410 J core=  108.580 J wall=  2.919 s net=   57.447 J net_J/op=    59840.63 nJ gross_J/op=   169177.08 nJ chk=OK
+glibc      large_batch      proc=7 gross=   33.610 J core=   22.860 J wall=  0.594 s net=   12.245 J net_J/op=    12755.09 nJ gross_J/op=    35010.42 nJ chk=OK
+mimiralloc large_batch      proc=7 gross=  183.320 J core=  128.120 J wall=  2.991 s net=   75.797 J net_J/op=    78955.43 nJ gross_J/op=   190958.33 nJ chk=OK
+glibc      mixed_lifecycle  proc=1 gross=    1.960 J core=    1.390 J wall=  0.045 s net=    0.334 J net_J/op=       72.51 nJ gross_J/op=      425.35 nJ chk=OK
+mimiralloc mixed_lifecycle  proc=1 gross=  221.470 J core=  140.720 J wall=  4.458 s net=   61.181 J net_J/op=    13277.16 nJ gross_J/op=    48062.07 nJ chk=OK
+glibc      mixed_lifecycle  proc=2 gross=    1.710 J core=    1.050 J wall=  0.052 s net=   -0.157 J net_J/op=      -34.14 nJ gross_J/op=      371.09 nJ chk=OK
+mimiralloc mixed_lifecycle  proc=2 gross=  165.430 J core=   86.900 J wall=  4.148 s net=   16.295 J net_J/op=     3536.29 nJ gross_J/op=    35900.61 nJ chk=OK
+glibc      mixed_lifecycle  proc=3 gross=    1.640 J core=    1.010 J wall=  0.054 s net=   -0.305 J net_J/op=      -66.25 nJ gross_J/op=      355.90 nJ chk=OK
+mimiralloc mixed_lifecycle  proc=3 gross=  180.610 J core=  100.290 J wall=  4.212 s net=   29.159 J net_J/op=     6327.87 nJ gross_J/op=    39194.88 nJ chk=OK
+glibc      mixed_lifecycle  proc=4 gross=    1.770 J core=    1.150 J wall=  0.047 s net=    0.067 J net_J/op=       14.52 nJ gross_J/op=      384.11 nJ chk=OK
+mimiralloc mixed_lifecycle  proc=4 gross=  189.880 J core=  106.700 J wall=  4.203 s net=   38.777 J net_J/op=     8415.23 nJ gross_J/op=    41206.60 nJ chk=OK
+glibc      mixed_lifecycle  proc=5 gross=    1.790 J core=    1.140 J wall=  0.048 s net=    0.078 J net_J/op=       16.92 nJ gross_J/op=      388.45 nJ chk=OK
+mimiralloc mixed_lifecycle  proc=5 gross=  201.500 J core=  117.770 J wall=  4.246 s net=   48.860 J net_J/op=    10603.36 nJ gross_J/op=    43728.30 nJ chk=OK
+glibc      mixed_lifecycle  proc=6 gross=    1.890 J core=    1.230 J wall=  0.051 s net=    0.049 J net_J/op=       10.71 nJ gross_J/op=      410.16 nJ chk=OK
+mimiralloc mixed_lifecycle  proc=6 gross=  184.420 J core=  103.710 J wall=  4.298 s net=   29.906 J net_J/op=     6490.07 nJ gross_J/op=    40021.70 nJ chk=OK
+glibc      mixed_lifecycle  proc=7 gross=    1.640 J core=    0.980 J wall=  0.052 s net=   -0.213 J net_J/op=      -46.13 nJ gross_J/op=      355.90 nJ chk=OK
+mimiralloc mixed_lifecycle  proc=7 gross=  181.730 J core=  107.910 J wall=  4.306 s net=   26.908 J net_J/op=     5839.49 nJ gross_J/op=    39437.93 nJ chk=OK
+
+leg        workload          n  med_net_nJ/op        min        max  med_gross_nJ/op
+glibc      large_batch       7       11861.56    1350.30   22434.21         35010.42
+glibc      mixed_batch       7         -12.25     -92.38      18.92           184.90
+glibc      mixed_lifecycle   7          10.71     -66.25      72.51           384.11
+glibc      small_churn       7          13.28      -5.85      42.47           167.00
+mimiralloc large_batch       7       52394.16   18530.08   78955.43        160166.67
+mimiralloc mixed_batch       7        2012.27   -1771.41    4061.29         10597.66
+mimiralloc mixed_lifecycle   7        6490.07    3536.29   13277.16         40021.70
+mimiralloc small_churn       7         236.69      90.43     596.97          1500.50
+
+=== VERDICTS (median net J/op, mimiralloc vs glibc; WIN < 0.95x, TIE 0.95-1.05x, LOSS > 1.05x) ===
+small_churn      glibc median        13.28 nJ/op | mimiralloc median       236.69 nJ/op | factor   17.82x | LOSS
+mixed_batch: glibc median net J/op <= 0 (-12.25 nJ) - BELOW IDLE-SUBTRACTION RESOLUTION, no ratio claimed
+large_batch      glibc median     11861.56 nJ/op | mimiralloc median     52394.16 nJ/op | factor    4.42x | LOSS
+mixed_lifecycle  glibc median        10.71 nJ/op | mimiralloc median      6490.07 nJ/op | factor  606.10x | LOSS
+
+checksum mismatches / bad blocks: 0 (must be 0)
+
+=== READING (claim graded per workload - what this contended window proves, and what it does not) ===
+large_batch      LOSS, factor 4.42x on median net J/op (glibc 11861.56 nJ/op, mimiralloc 52394.16 nJ/op) - the strongest row in the table: both legs have long windows (glibc 0.59..0.81 s, mimiralloc 2.68..3.04 s), every per-process net is positive, and the gross medians corroborate (160166.67 vs 35010.42 nJ/op, ratio 4.57x). The per-process spread is wide (glibc net 1350.30..22434.21) because the package baseline drifted during the window, so 4.42x is a median estimate, not a precise constant - but the LOSS and its rough size are proven.
+small_churn      LOSS - per-process net ranges are disjoint (mimiralloc 90.43..596.97 nJ/op vs glibc -5.85..42.47 nJ/op) and gross ranges are disjoint too (mimiralloc 1368.00..1864.50 vs glibc 152.50..200.00 nJ/op), so the direction is proven. The printed median factor 17.82x is INDICATIVE only: the glibc median (13.28 nJ/op) sits near the idle-subtraction floor (2 of 7 glibc nets are negative), so the true factor could be materially smaller or larger; what is proven is a large loss, consistent with the Z-005 counter leg (9.9x cycles/op, 10.4x instructions/op).
+mixed_lifecycle  LOSS in direction; net factor NOT claimed. The summariser's printed 606.10x divides by a glibc median (10.71 nJ/op) that is inside its own per-process noise (-66.25..72.51 nJ/op, 3 of 7 negative) at 45..54 ms glibc windows - that factor is arithmetic, not measurement, and is not claimed here. The direction is proven by the gross counters: medians 40021.70 (mimiralloc) vs 384.11 (glibc) nJ/op with disjoint gross ranges (35900.61..48062.07 vs 355.90..425.35), and by mimiralloc's all-positive nets (3536.29..13277.16 nJ/op). This is also the workload where Z-005 found the deepest counter wound (124x cycles/op).
+mixed_batch      NO NET RATIO - below idle-subtraction resolution (the summariser says so itself): the glibc median net is -12.25 nJ/op at 41..46 ms windows, and 2 of 7 mimiralloc nets are also negative because package power during those early blocks ran below the window's median idle level while the 03:08 co-tenant burst decayed. LOSS in direction by the gross counters: medians 10597.66 (mimiralloc) vs 184.90 (glibc) nJ/op, gross ranges disjoint (6497.40..12666.67 vs 117.19..210.94). A net factor for this workload requires a quieter window and is recorded as follow-up work, not invented here.
+Overall: the energy leg confirms the time and counter legs - MimirAlloc burns far more package energy per op than glibc on every baseline workload on this machine (proven LOSS in direction on all four; proven net factor on large_batch, indicative on small_churn; net factor below resolution on the two sub-55 ms glibc workloads under this load). A proven loss, measured as deep as the shared machine honestly allows, is a bankable result (roadmap Law 2).
+
+=== BUGS FOUND AND FIXED IN THIS SLICE ===
+1. Runner idle-sample bleed (found in the first smoke raw, hidden_files/z007_energy_smoke.raw, before this run): idle_sample appended perf output with 2>> into a shared $OUT.perf without truncating, so every idle block after the first carried the previous block's perf lines as well as its own. Fixed in tests/perf/run_energy_z007.sh before the full run: idle_sample truncates $OUT.perf before capturing and uses 2>. Proof the fix holds: the second smoke (z007_energy_smoke2.raw) and this full raw both parse to exactly one pkg + one core line per block (61 blocks, 61 pkg lines, 61 core lines).
+2. No other defects found. Probe accounting audited: bench_k002 run() assigns (never accumulates) the ops out-param, so the probe's reused ops variable yields exactly reps x per-pass ops; smoke and full-run ops/checksum totals match reps x the Z-003 per-pass values exactly on both legs.
+
+correctness gate: full make test in this worktree, log hidden_files/z007_make_test.log (team-local, not banked): 4988 checks run (18 smoke + 4970 CHECKS across the other targets), 0 failed, 77 by-design SKIP lines, make exit 0 - identical counts to the Z-001 baseline.
+
+=== RAW BLOCKS (=== leg workload proc reps wall_ns ===; probe CSV line; perf stat -a -x lines count|unit|event|time_enabled|pct_running||; idle blocks carry idle_wall_ns) ===
+=== idle sleep sample=1 reps=0 ===
+136.40|Joules|power/energy-pkg/|3004513815|100.00||
+73.20|Joules|power_core/energy-core/|48051030257|100.00||
+idle_wall_ns=3025697442
+=== glibc small_churn proc=1 reps=200 wall_ns=87631297 ===
+glibc,small_churn,20000000,67562441,296022460.2,3.38,2551331200
+4.00|Joules|power/energy-pkg/|70375064|100.00||
+2.58|Joules|power_core/energy-core/|1110524438|100.00||
+=== mimiralloc small_churn proc=1 reps=200 wall_ns=705107040 ===
+mimiralloc,small_churn,20000000,688662598,29041797.9,34.43,2551331200
+37.29|Joules|power/energy-pkg/|690166460|100.00||
+23.11|Joules|power_core/energy-core/|11043354889|100.00||
+=== glibc small_churn proc=2 reps=200 wall_ns=85621348 ===
+glibc,small_churn,20000000,67678682,295514029.1,3.38,2551331200
+3.59|Joules|power/energy-pkg/|70783157|100.00||
+2.21|Joules|power_core/energy-core/|1106499632|100.00||
+=== mimiralloc small_churn proc=2 reps=200 wall_ns=705259105 ===
+mimiralloc,small_churn,20000000,686496304,29133441.6,34.32,2551331200
+32.00|Joules|power/energy-pkg/|689157314|100.00||
+18.28|Joules|power_core/energy-core/|11012628530|100.00||
+=== glibc small_churn proc=3 reps=200 wall_ns=85511331 ===
+glibc,small_churn,20000000,67508252,296260078.0,3.38,2551331200
+3.34|Joules|power/energy-pkg/|68729859|100.00||
+2.03|Joules|power_core/energy-core/|1101066510|100.00||
+=== mimiralloc small_churn proc=3 reps=200 wall_ns=703036827 ===
+mimiralloc,small_churn,20000000,685062433,29194419.4,34.25,2551331200
+30.01|Joules|power/energy-pkg/|686994611|100.00||
+16.73|Joules|power_core/energy-core/|10987694991|100.00||
+=== glibc small_churn proc=4 reps=200 wall_ns=84544744 ===
+glibc,small_churn,20000000,67591698,295894327.1,3.38,2551331200
+3.37|Joules|power/energy-pkg/|68619332|100.00||
+2.07|Joules|power_core/energy-core/|1097666553|100.00||
+=== mimiralloc small_churn proc=4 reps=200 wall_ns=714320657 ===
+mimiralloc,small_churn,20000000,691979505,28902590.1,34.60,2551331200
+33.03|Joules|power/energy-pkg/|695341213|100.00||
+20.12|Joules|power_core/energy-core/|11104880796|100.00||
+=== glibc small_churn proc=5 reps=200 wall_ns=90593189 ===
+glibc,small_churn,20000000,67509799,296253289.1,3.38,2551331200
+3.14|Joules|power/energy-pkg/|71334247|100.00||
+1.97|Joules|power_core/energy-core/|1113958401|100.00||
+=== mimiralloc small_churn proc=5 reps=200 wall_ns=710692489 ===
+mimiralloc,small_churn,20000000,688106241,29065279.2,34.41,2551331200
+27.36|Joules|power/energy-pkg/|692796176|100.00||
+15.56|Joules|power_core/energy-core/|11070175718|100.00||
+=== glibc small_churn proc=6 reps=200 wall_ns=87500232 ===
+glibc,small_churn,20000000,67502064,296287236.5,3.38,2551331200
+3.30|Joules|power/energy-pkg/|68803346|100.00||
+2.09|Joules|power_core/energy-core/|1102153262|100.00||
+=== mimiralloc small_churn proc=6 reps=200 wall_ns=708579266 ===
+mimiralloc,small_churn,20000000,685869861,29160050.8,34.29,2551331200
+28.99|Joules|power/energy-pkg/|688916063|100.00||
+16.91|Joules|power_core/energy-core/|11019919532|100.00||
+=== glibc small_churn proc=7 reps=200 wall_ns=87353859 ===
+glibc,small_churn,20000000,67369005,296872426.7,3.37,2551331200
+3.05|Joules|power/energy-pkg/|69757550|100.00||
+1.65|Joules|power_core/energy-core/|1110815782|100.00||
+=== mimiralloc small_churn proc=7 reps=200 wall_ns=711966463 ===
+mimiralloc,small_churn,20000000,689465134,29007993.3,34.47,2551331200
+29.00|Joules|power/energy-pkg/|691902396|100.00||
+18.27|Joules|power_core/energy-core/|11069718170|100.00||
+=== idle sleep sample=2 reps=0 ===
+90.88|Joules|power/energy-pkg/|3004012277|100.00||
+45.81|Joules|power_core/energy-core/|48050111031|100.00||
+idle_wall_ns=3028262040
+=== glibc mixed_batch proc=1 reps=30 wall_ns=45043536 ===
+glibc,mixed_batch,7680000,25776752,297942890.6,3.36,1041826560
+0.91|Joules|power/energy-pkg/|27556372|100.00||
+0.43|Joules|power_core/energy-core/|442287122|100.00||
+=== mimiralloc mixed_batch proc=1 reps=30 wall_ns=1766326243 ===
+mimiralloc,mixed_batch,7680000,1742817974,4406656.4,226.93,1041826560
+49.90|Joules|power/energy-pkg/|1750334557|100.00||
+21.72|Joules|power_core/energy-core/|28007689909|100.00||
+=== glibc mixed_batch proc=2 reps=30 wall_ns=43925685 ===
+glibc,mixed_batch,7680000,25618617,299781990.6,3.34,1041826560
+0.90|Joules|power/energy-pkg/|27125597|100.00||
+0.44|Joules|power_core/energy-core/|435133478|100.00||
+=== mimiralloc mixed_batch proc=2 reps=30 wall_ns=1784169774 ===
+mimiralloc,mixed_batch,7680000,1760384747,4362682.7,229.22,1041826560
+59.57|Joules|power/energy-pkg/|1768299890|100.00||
+33.25|Joules|power_core/energy-core/|28295370692|100.00||
+=== glibc mixed_batch proc=3 reps=30 wall_ns=41249969 ===
+glibc,mixed_batch,7680000,25630057,299648182.6,3.34,1041826560
+1.30|Joules|power/energy-pkg/|27038754|100.00||
+0.86|Joules|power_core/energy-core/|432560140|100.00||
+=== mimiralloc mixed_batch proc=3 reps=30 wall_ns=1849163893 ===
+mimiralloc,mixed_batch,7680000,1824199322,4210066.3,237.53,1041826560
+74.67|Joules|power/energy-pkg/|1831539556|100.00||
+41.50|Joules|power_core/energy-core/|29323905938|100.00||
+=== glibc mixed_batch proc=4 reps=30 wall_ns=45800252 ===
+glibc,mixed_batch,7680000,25672776,299149573.9,3.34,1041826560
+1.61|Joules|power/energy-pkg/|29308106|100.00||
+1.04|Joules|power_core/energy-core/|444465733|100.00||
+=== mimiralloc mixed_batch proc=4 reps=30 wall_ns=1838221733 ===
+mimiralloc,mixed_batch,7680000,1814237215,4233184.0,236.23,1041826560
+97.28|Joules|power/energy-pkg/|1822434916|100.00||
+61.63|Joules|power_core/energy-core/|29149079716|100.00||
+=== glibc mixed_batch proc=5 reps=30 wall_ns=41018086 ===
+glibc,mixed_batch,7680000,25964122,295792786.7,3.38,1041826560
+1.62|Joules|power/energy-pkg/|27888463|100.00||
+1.10|Joules|power_core/energy-core/|434491779|100.00||
+=== mimiralloc mixed_batch proc=5 reps=30 wall_ns=1833929964 ===
+mimiralloc,mixed_batch,7680000,1811382933,4239854.5,235.86,1041826560
+90.59|Joules|power/energy-pkg/|1819528854|100.00||
+54.50|Joules|power_core/energy-core/|29106749268|100.00||
+=== glibc mixed_batch proc=6 reps=30 wall_ns=41589475 ===
+glibc,mixed_batch,7680000,25893831,296595741.3,3.37,1041826560
+1.44|Joules|power/energy-pkg/|27577271|100.00||
+0.92|Joules|power_core/energy-core/|433958943|100.00||
+=== mimiralloc mixed_batch proc=6 reps=30 wall_ns=1836757313 ===
+mimiralloc,mixed_batch,7680000,1813424173,4235082.0,236.12,1041826560
+81.95|Joules|power/energy-pkg/|1822084682|100.00||
+45.85|Joules|power_core/energy-core/|29138536979|100.00||
+=== glibc mixed_batch proc=7 reps=30 wall_ns=42113655 ===
+glibc,mixed_batch,7680000,25850049,297098082.9,3.37,1041826560
+1.42|Joules|power/energy-pkg/|27297839|100.00||
+0.94|Joules|power_core/energy-core/|431100346|100.00||
+=== mimiralloc mixed_batch proc=7 reps=30 wall_ns=1833952325 ===
+mimiralloc,mixed_batch,7680000,1808167438,4247394.3,235.44,1041826560
+81.39|Joules|power/energy-pkg/|1816452674|100.00||
+45.68|Joules|power_core/energy-core/|29064710526|100.00||
+=== idle sleep sample=3 reps=0 ===
+108.53|Joules|power/energy-pkg/|3002596892|100.00||
+48.31|Joules|power_core/energy-core/|48043330092|100.00||
+idle_wall_ns=3018676237
+=== glibc large_batch proc=1 reps=100 wall_ns=754917684 ===
+glibc,large_batch,960000,736449124,1303552.4,767.13,110600800
+33.78|Joules|power/energy-pkg/|738900851|100.00||
+19.14|Joules|power_core/energy-core/|11817765719|100.00||
+=== mimiralloc large_batch proc=1 reps=100 wall_ns=2928403688 ===
+mimiralloc,large_batch,960000,2904973357,330467.7,3026.01,110600800
+127.21|Joules|power/energy-pkg/|2912093621|100.00||
+73.11|Joules|power_core/energy-core/|46567289013|100.00||
+=== glibc large_batch proc=2 reps=100 wall_ns=791139417 ===
+glibc,large_batch,960000,769603375,1247395.8,801.67,110600800
+29.74|Joules|power/energy-pkg/|772386336|100.00||
+16.87|Joules|power_core/energy-core/|12360199191|100.00||
+=== mimiralloc large_batch proc=2 reps=100 wall_ns=3044018316 ===
+mimiralloc,large_batch,960000,3018531189,318035.5,3144.30,110600800
+127.23|Joules|power/energy-pkg/|3025273131|100.00||
+79.85|Joules|power_core/energy-core/|48387299708|100.00||
+=== glibc large_batch proc=3 reps=100 wall_ns=653165560 ===
+glibc,large_batch,960000,629813106,1524261.7,656.06,110600800
+45.02|Joules|power/energy-pkg/|631891966|100.00||
+13.68|Joules|power_core/energy-core/|10121728565|100.00||
+=== mimiralloc large_batch proc=3 reps=100 wall_ns=2676033333 ===
+mimiralloc,large_batch,960000,2650976839,362130.7,2761.43,110600800
+114.92|Joules|power/energy-pkg/|2658054978|100.00||
+65.67|Joules|power_core/energy-core/|42508706732|100.00||
+=== glibc large_batch proc=4 reps=100 wall_ns=711900399 ===
+glibc,large_batch,960000,691427856,1388431.2,720.24,110600800
+32.99|Joules|power/energy-pkg/|693360371|100.00||
+20.18|Joules|power_core/energy-core/|11104928000|100.00||
+=== mimiralloc large_batch proc=4 reps=100 wall_ns=2877702748 ===
+mimiralloc,large_batch,960000,2857568045,335950.0,2976.63,110600800
+153.76|Joules|power/energy-pkg/|2863710326|100.00||
+102.44|Joules|power_core/energy-core/|45792686083|100.00||
+=== glibc large_batch proc=5 reps=100 wall_ns=586404395 ===
+glibc,large_batch,960000,568317370,1689197.0,592.00,110600800
+32.47|Joules|power/energy-pkg/|570344784|100.00||
+21.70|Joules|power_core/energy-core/|9123290850|100.00||
+=== mimiralloc large_batch proc=5 reps=100 wall_ns=2987061042 ===
+mimiralloc,large_batch,960000,2964386512,323844.4,3087.90,110600800
+182.07|Joules|power/energy-pkg/|2968521093|100.00||
+127.36|Joules|power_core/energy-core/|47496662862|100.00||
+=== glibc large_batch proc=6 reps=100 wall_ns=805584430 ===
+glibc,large_batch,960000,782188782,1227325.2,814.78,110600800
+46.15|Joules|power/energy-pkg/|786385185|100.00||
+31.55|Joules|power_core/energy-core/|12566002856|100.00||
+=== mimiralloc large_batch proc=6 reps=100 wall_ns=2919462821 ===
+mimiralloc,large_batch,960000,2890674326,332102.4,3011.12,110600800
+162.41|Joules|power/energy-pkg/|2897103259|100.00||
+108.58|Joules|power_core/energy-core/|46360906008|100.00||
+=== glibc large_batch proc=7 reps=100 wall_ns=594253700 ===
+glibc,large_batch,960000,576820037,1664297.2,600.85,110600800
+33.61|Joules|power/energy-pkg/|578483027|100.00||
+22.86|Joules|power_core/energy-core/|9255849871|100.00||
+=== mimiralloc large_batch proc=7 reps=100 wall_ns=2990661498 ===
+mimiralloc,large_batch,960000,2969417492,323295.7,3093.14,110600800
+183.32|Joules|power/energy-pkg/|2974189048|100.00||
+128.12|Joules|power_core/energy-core/|47582488770|100.00||
+=== idle sleep sample=4 reps=0 ===
+137.42|Joules|power/energy-pkg/|3003058505|100.00||
+84.09|Joules|power_core/energy-core/|48060109178|100.00||
+idle_wall_ns=3020046981
+=== glibc mixed_lifecycle proc=1 reps=15 wall_ns=45222050 ===
+glibc,mixed_lifecycle,4608000,31454902,146495449.3,6.83,605399040
+1.96|Joules|power/energy-pkg/|33457954|100.00||
+1.39|Joules|power_core/energy-core/|537576147|100.00||
+=== mimiralloc mixed_lifecycle proc=1 reps=15 wall_ns=4458308231 ===
+mimiralloc,mixed_lifecycle,4608000,4410700050,1044732.1,957.18,605399040
+221.47|Joules|power/energy-pkg/|4441423196|100.00||
+140.72|Joules|power_core/energy-core/|71065606812|100.00||
+=== glibc mixed_lifecycle proc=2 reps=15 wall_ns=51938004 ===
+glibc,mixed_lifecycle,4608000,31156737,147897387.3,6.76,605399040
+1.71|Joules|power/energy-pkg/|34840849|100.00||
+1.05|Joules|power_core/energy-core/|543636167|100.00||
+=== mimiralloc mixed_lifecycle proc=2 reps=15 wall_ns=4148066351 ===
+mimiralloc,mixed_lifecycle,4608000,4098817226,1124226.8,889.50,605399040
+165.43|Joules|power/energy-pkg/|4129549651|100.00||
+86.90|Joules|power_core/energy-core/|66069492374|100.00||
+=== glibc mixed_lifecycle proc=3 reps=15 wall_ns=54106050 ===
+glibc,mixed_lifecycle,4608000,31112184,148109178.1,6.75,605399040
+1.64|Joules|power/energy-pkg/|35093892|100.00||
+1.01|Joules|power_core/energy-core/|542846401|100.00||
+=== mimiralloc mixed_lifecycle proc=3 reps=15 wall_ns=4212494631 ===
+mimiralloc,mixed_lifecycle,4608000,4167082586,1105809.6,904.31,605399040
+180.61|Joules|power/energy-pkg/|4199383564|100.00||
+100.29|Joules|power_core/energy-core/|67170488913|100.00||
+=== glibc mixed_lifecycle proc=4 reps=15 wall_ns=47370569 ===
+glibc,mixed_lifecycle,4608000,31493417,146316292.1,6.83,605399040
+1.77|Joules|power/energy-pkg/|33669490|100.00||
+1.15|Joules|power_core/energy-core/|527439552|100.00||
+=== mimiralloc mixed_lifecycle proc=4 reps=15 wall_ns=4202799955 ===
+mimiralloc,mixed_lifecycle,4608000,4155317005,1108940.7,901.76,605399040
+189.88|Joules|power/energy-pkg/|4185320135|100.00||
+106.70|Joules|power_core/energy-core/|66967076074|100.00||
+=== glibc mixed_lifecycle proc=5 reps=15 wall_ns=47618463 ===
+glibc,mixed_lifecycle,4608000,31077740,148273330.0,6.74,605399040
+1.79|Joules|power/energy-pkg/|33934875|100.00||
+1.14|Joules|power_core/energy-core/|520999510|100.00||
+=== mimiralloc mixed_lifecycle proc=5 reps=15 wall_ns=4245553577 ===
+mimiralloc,mixed_lifecycle,4608000,4198509179,1097532.4,911.13,605399040
+201.50|Joules|power/energy-pkg/|4230330123|100.00||
+117.77|Joules|power_core/energy-core/|67674667180|100.00||
+=== glibc mixed_lifecycle proc=6 reps=15 wall_ns=51196437 ===
+glibc,mixed_lifecycle,4608000,31597172,145835836.2,6.86,605399040
+1.89|Joules|power/energy-pkg/|34138867|100.00||
+1.23|Joules|power_core/energy-core/|536121359|100.00||
+=== mimiralloc mixed_lifecycle proc=6 reps=15 wall_ns=4297678310 ===
+mimiralloc,mixed_lifecycle,4608000,4245312345,1085432.5,921.29,605399040
+184.42|Joules|power/energy-pkg/|4276548401|100.00||
+103.71|Joules|power_core/energy-core/|68425320810|100.00||
+=== glibc mixed_lifecycle proc=7 reps=15 wall_ns=51527115 ===
+glibc,mixed_lifecycle,4608000,31703639,145346091.0,6.88,605399040
+1.64|Joules|power/energy-pkg/|35863391|100.00||
+0.98|Joules|power_core/energy-core/|546215449|100.00||
+=== mimiralloc mixed_lifecycle proc=7 reps=15 wall_ns=4306241750 ===
+mimiralloc,mixed_lifecycle,4608000,4258423874,1082090.5,924.14,605399040
+181.73|Joules|power/energy-pkg/|4290490042|100.00||
+107.91|Joules|power_core/energy-core/|68638013804|100.00||
+=== idle sleep sample=5 reps=0 ===
+49.04|Joules|power/energy-pkg/|3003132734|100.00||
+14.79|Joules|power_core/energy-core/|48064446385|100.00||
+idle_wall_ns=3024637589
