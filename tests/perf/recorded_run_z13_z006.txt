@@ -1,0 +1,458 @@
+MimirAlloc Z13 recorded run - Z-006 RSS/PSS leg
+slice: Z-006 - RSS/PSS leg (discharges the O-09 RSS remainder here)
+date: 2026-11-12T02:59-03:01-05:00 (RSS run window, America/New_York; run header date_local 2026-11-12T02:59:31-0500)
+base: 5ad882b (branch yrsa/mimiralloc-team-06, seat founding commit; allocator tree unmodified)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+arch: x86_64 (uname -m)
+pagesize: 4096 (getconf PAGESIZE)
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, nproc 32
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+compiler: gcc (Ubuntu 15.3.0-4ubuntu1) 15.3.0, repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2
+scaling_governor: performance (cpu0)
+load state: SHARED MACHINE - loadavg at run start 2.96 / 1.89 / 1.59, at run end 2.51 / 1.89 / 1.60 (from the run header below); the Tensile lab benchmark and the Lifthrasir forge shared the host on this 32-thread machine during the run window. RSS/PSS are resident-memory measurements, not timings: contention does not change what a process holds resident, legs alternate process by process and medians across 5 processes per leg are the headline, so any drift lands on both legs. Recorded honestly as a shared-machine run, not a quiet-machine baseline.
+correctness gate: full make test in this worktree, log hidden_files/z006_make_test.log (team-local, not banked): 4988 checks / 0 failed, 77 by-design skips - identical counts to the Z-001 baseline (verified from the log: 4970 summed CHECKS lines + SMOKE 18/18)
+
+=== RUN HEADER (tests/perf/run_rss_z006.py output, verbatim) ===
+run_rss_z006_version: 1
+date_local: 2026-11-12T02:59:31-0500
+leg_a: /home/volmarr/mimiralloc-team-06/build/probe_z006_glibc
+leg_b: /home/volmarr/mimiralloc-team-06/build/probe_z006_mimir
+cpus: 2
+procs_per_leg: 5
+loadavg_start: 2.96 1.89 1.59
+loadavg_end: 2.51 1.89 1.60
+NOTE on the header: it carries no host_truth block - the runner looked for scripts/z13/host_truth.sh under the team worktree, where it does not exist (it lives only at the seat), and silently skipped it. The host truth block below was captured verbatim from the seat script at assembly time (2026-11-12 ~03:05 EST) to complete this record. The runner has since been fixed in this same slice (seat-path lookup, plus a loud NOT FOUND header line instead of silence); the fix touches only header capture - no measurement code changed, and the run above predates it.
+
+=== HOST TRUTH (seat scripts/z13/host_truth.sh, verbatim, captured at assembly) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T08:17:19Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5099605
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 75%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 3.47 3.84 2.80
+=== END HOST TRUTH ===
+
+=== METHODOLOGY ===
+Harness: tests/perf/bench_k002.c UNMODIFIED (sha256 30dd0d9a8da12b03aa511fd35a4a098cf593b79c0e9ad352026ecb11eacc7d37 - identical to the Z-003 recorded hash). The RSS leg is built AROUND it: tests/perf/probe_z006.c includes bench_k002.c with its main() renamed away and adds no workload code of its own - the workload functions, size tables, op definition (one allocation plus its matching free) and checksums are exactly the banked Z-003 ones.
+Why a probe: bench_k002 runs each workload flat-out and frees as it goes, so an external sampler cannot hit defined memory states. The probe runs ONE workload per process (argv-selected) and stops at DEFINED PHASES, printing a PHASE marker and blocking on stdin while the runner reads /proc/<pid>/smaps_rollup:
+  START          process up, before any workload call
+  WARM           after the 1/10-scale warm-up pass (exactly the bench_k002 warm-up)
+  STEADY         after half of the R timed passes (R per workload: small_churn 20, mixed_batch 5, large_batch 20, mixed_lifecycle 10 - the Z-005 reps)
+  PEAK           the characteristic live set of the workload allocated and fully memset (every page touched, so RSS is real, not just reserved); live bytes printed first and identical across legs (proof both legs held the same set)
+  AFTER_FREE     odd slots of the live set freed
+  AFTER_FREE_ALL every held block freed (the retention point: what the allocator still holds resident with nothing live)
+PEAK live sets (the characteristic set of each workload): small_churn 8192 blocks cycling small_sizes (851968 B - the bench live set is a single block, so a defined accumulation is used and stated here, per the probe header); mixed_batch 256 blocks, one full bench batch (79872 B); large_batch 32 blocks, one full bench batch (7024640 B); mixed_lifecycle 512 blocks, one full bench round set (703936 B).
+Sampling: at each phase the runner (tests/perf/run_rss_z006.py) reads smaps_rollup 3 times, 20 ms apart, and records the median per field; the table below is the median across 5 measured processes per leg per workload. Processes pinned with taskset to CPU 2 (Z-004 protocol). Legs alternate process by process (glibc, mimiralloc) per workload, house pattern. Fields are the smaps_rollup totals in kB: Rss, Pss, Pss_Anon, Pss_File, Private_Clean, Private_Dirty, Shared_Clean, Shared_Dirty, Swap. Swap is 0 in every row - no row is swap-contaminated.
+Grading: verdicts at PEAK and AFTER_FREE_ALL on median Pss and Pss_Anon, mimiralloc vs glibc, 5% noise band = TIE (Z-004 protocol s.7); drift check on PEAK Pss, first vs second half of processes, 8% band (s.8) - no DRIFT-REJECT. Summariser: tests/perf/summarize_z006.py.
+Checksum proof: every probe CSV line per-pass checksum equals the Z-003 recorded checksum (small_churn 12756656 | mixed_batch 34727552 | large_batch 1106008 | mixed_lifecycle 40359936) times its reps - both legs ran identical work. Runner log: 40/40 processes ok, live bytes matched per workload across legs; raw data (320 rows: 240 phase rows + 40 LIVEBYTES + 40 CSV) retained team-local at hidden_files/z006_run/z006.raw.csv and reproduced in full below.
+
+=== RSS/PSS TABLE + VERDICTS (tests/perf/summarize_z006.py on the raw data) ===
+=== MEDIAN TABLE (kB, medians across processes) ===
+leg            workload       phase                  live_B            Rss            Pss       Pss_Anon       Pss_File  Private_Clean  Private_Dirty   Shared_Clean   Shared_Dirty           Swap
+glibc          small_churn    START                                   2092            149            104             45              0            120           1972              0              0
+glibc          small_churn    WARM                                    2092            149            104             45              0            120           1972              0              0
+glibc          small_churn    STEADY                                  2160            150            104             46              0            120           2040              0              0
+glibc          small_churn    PEAK                   851968           3312           1239           1192             47              0           1208           2104              0              0
+glibc          small_churn    AFTER_FREE                              3312           1239           1192             47              0           1208           2104              0              0
+glibc          small_churn    AFTER_FREE_ALL                          2492            419            372             47              0            388           2104              0              0
+mimiralloc     small_churn    START                                   2100            158            104             53              0            128           1972              0              0
+mimiralloc     small_churn    WARM                                    2136            195            140             56              0            164           1972              0              0
+mimiralloc     small_churn    STEADY                                  2204            194            140             54              0            164           2040              0              0
+mimiralloc     small_churn    PEAK                   851968           3260           1186           1132             51              0           1156           2104              0              0
+mimiralloc     small_churn    AFTER_FREE                              2776            703            648             51              0            672           2104              0              0
+mimiralloc     small_churn    AFTER_FREE_ALL                          2428            355            300             55              0            324           2104              0              0
+glibc          mixed_batch    START                                   2092            152            104             48              0            120           1972              0              0
+glibc          mixed_batch    WARM                                    2180            238            192             48              0            208           1972              0              0
+glibc          mixed_batch    STEADY                                  2248            242            192             48              0            208           2040              0              0
+glibc          mixed_batch    PEAK                    79872           2316            245            196             49              0            212           2104              0              0
+glibc          mixed_batch    AFTER_FREE                              2316            246            196             47              0            212           2104              0              0
+glibc          mixed_batch    AFTER_FREE_ALL                          2316            245            196             49              0            212           2104              0              0
+mimiralloc     mixed_batch    START                                   2100            160            104             56              0            128           1972              0              0
+mimiralloc     mixed_batch    WARM                                    2220            280            224             56              0            248           1972              0              0
+mimiralloc     mixed_batch    STEADY                                  2288            280            224             56              0            248           2040              0              0
+mimiralloc     mixed_batch    PEAK                    79872           2372            302            244             57              0            268           2104              0              0
+mimiralloc     mixed_batch    AFTER_FREE                              2360            291            232             57              0            256           2104              0              0
+mimiralloc     mixed_batch    AFTER_FREE_ALL                          2356            285            228             55              0            252           2104              0              0
+glibc          large_batch    START                                   2096            150            108             48              0            124           1972              0              0
+glibc          large_batch    WARM                                    2136            190            148             48              0            164           1972              0              0
+glibc          large_batch    STEADY                                  2204            192            148             50              0            164           2040              0              0
+glibc          large_batch    PEAK                  7024640           9096           7021           6976             45              0           6992           2104              0              0
+glibc          large_batch    AFTER_FREE                              9096           7014           6976             39              0           6992           2104              0              0
+glibc          large_batch    AFTER_FREE_ALL                          2364            281            244             39              0            260           2104              0              0
+mimiralloc     large_batch    START                                   2100            154            104             50              0            128           1972              0              0
+mimiralloc     large_batch    WARM                                    2108            162            112             50              0            136           1972              0              0
+mimiralloc     large_batch    STEADY                                  2176            163            112             50              0            136           2040              0              0
+mimiralloc     large_batch    PEAK                  7024640           9244           7169           7116             53              0           7140           2104              0              0
+mimiralloc     large_batch    AFTER_FREE                              3692           1617           1564             53              0           1588           2104              0              0
+mimiralloc     large_batch    AFTER_FREE_ALL                          2244            169            116             53              0            140           2104              0              0
+glibc          mixed_lifecycle START                                   2092            150            104             46              0            120           1972              0              0
+glibc          mixed_lifecycle WARM                                    2480            540            492             48              0            508           1972              0              0
+glibc          mixed_lifecycle STEADY                                  2548            540            492             50              0            508           2040              0              0
+glibc          mixed_lifecycle PEAK                   703936           2952            883            832             51              0            848           2104              0              0
+glibc          mixed_lifecycle AFTER_FREE                              2952            881            832             49              0            848           2104              0              0
+glibc          mixed_lifecycle AFTER_FREE_ALL                          2952            885            832             53              0            848           2104              0              0
+mimiralloc     mixed_lifecycle START                                   2100            164            108             59              0            132           1972              0              0
+mimiralloc     mixed_lifecycle WARM                                    2236            300            244             59              0            268           1972              0              0
+mimiralloc     mixed_lifecycle STEADY                                  2304            302            244             60              0            268           2040              0              0
+mimiralloc     mixed_lifecycle PEAK                   703936           3304           1238           1180             61              0           1204           2104              0              0
+mimiralloc     mixed_lifecycle AFTER_FREE                              2424            357            300             59              0            324           2104              0              0
+mimiralloc     mixed_lifecycle AFTER_FREE_ALL                          2380            315            256             59              0            280           2104              0              0
+
+=== VERDICTS (median Pss and Pss_Anon, mimiralloc vs glibc; 5% band = TIE per Z-004 protocol s.7) ===
+small_churn PEAK: live=851968 B | Pss glibc 1239 kB, mimir 1186 kB -> TIE (-4.3%) | Pss_Anon glibc 1192 kB, mimir 1132 kB -> WIN (-5.0%)
+small_churn AFTER_FREE_ALL: live=851968 B | Pss glibc 419 kB, mimir 355 kB -> WIN (-15.3%) | Pss_Anon glibc 372 kB, mimir 300 kB -> WIN (-19.4%)
+mixed_batch PEAK: live=79872 B | Pss glibc 245 kB, mimir 302 kB -> LOSS (+23.3%) | Pss_Anon glibc 196 kB, mimir 244 kB -> LOSS (+24.5%)
+mixed_batch AFTER_FREE_ALL: live=79872 B | Pss glibc 245 kB, mimir 285 kB -> LOSS (+16.3%) | Pss_Anon glibc 196 kB, mimir 228 kB -> LOSS (+16.3%)
+large_batch PEAK: live=7024640 B | Pss glibc 7021 kB, mimir 7169 kB -> TIE (+2.1%) | Pss_Anon glibc 6976 kB, mimir 7116 kB -> TIE (+2.0%)
+large_batch AFTER_FREE_ALL: live=7024640 B | Pss glibc 281 kB, mimir 169 kB -> WIN (-39.9%) | Pss_Anon glibc 244 kB, mimir 116 kB -> WIN (-52.5%)
+mixed_lifecycle PEAK: live=703936 B | Pss glibc 883 kB, mimir 1238 kB -> LOSS (+40.2%) | Pss_Anon glibc 832 kB, mimir 1180 kB -> LOSS (+41.8%)
+mixed_lifecycle AFTER_FREE_ALL: live=703936 B | Pss glibc 885 kB, mimir 315 kB -> WIN (-64.4%) | Pss_Anon glibc 832 kB, mimir 256 kB -> WIN (-69.2%)
+
+checksums: all probe CSV lines match Z-003 per-pass checksums x reps; drift: no DRIFT-REJECT (8% band)
+
+=== READING OF THE VERDICTS (honest, this machine) ===
+PEAK resident cost is a split result: TIE on small_churn (Pss -4.3%) and large_batch (+2.1%), LOSS on mixed_batch (+23.3% Pss, +24.5% Pss_Anon) and a clear LOSS on mixed_lifecycle (+40.2% Pss, +41.8% Pss_Anon) - at peak, mimiralloc holds materially more resident memory than glibc on the mixed workloads.
+Retention after free-all reverses on three of four: WIN small_churn (-15.3% Pss), WIN large_batch (-39.9%), WIN mixed_lifecycle (-64.4% - glibc still holds 885 kB resident with nothing live where mimiralloc is back to 315 kB); the exception is mixed_batch, LOSS at both points (+16.3% after free-all) - the mixed-size path of mimiralloc both peaks higher and retains more. A proven loss is a bankable result (roadmap Law 2): the mixed_batch resident overhead is now a measured, named wound for the optimisation waves.
+
+=== RAW TABLE (leg,workload,proc,phase,Rss,Pss,Pss_Anon,Pss_File,Private_Clean,Private_Dirty,Shared_Clean,Shared_Dirty,Swap - kB; LIVEBYTES rows carry live bytes in the Rss column; CSV rows carry the probe bench CSV line) ===
+leg,workload,proc,phase,Rss,Pss,Pss_Anon,Pss_File,Private_Clean,Private_Dirty,Shared_Clean,Shared_Dirty,Swap
+glibc,small_churn,1,START,2092,153,104,49,0,120,1972,0,0
+glibc,small_churn,1,WARM,2092,152,104,48,0,120,1972,0,0
+glibc,small_churn,1,STEADY,2160,152,104,48,0,120,2040,0,0
+glibc,small_churn,1,LIVEBYTES,851968,,,,,,,,
+glibc,small_churn,1,PEAK,3312,1239,1192,47,0,1208,2104,0,0
+glibc,small_churn,1,AFTER_FREE,3312,1241,1192,49,0,1208,2104,0,0
+glibc,small_churn,1,AFTER_FREE_ALL,2492,421,372,49,0,388,2104,0,0
+glibc,small_churn,1,CSV,glibc,small_churn,2000000,6692771,298829886.8,3.35,255133120,,,,,,,,
+mimiralloc,small_churn,1,START,2104,168,108,60,0,132,1972,0,0
+mimiralloc,small_churn,1,WARM,2140,200,144,56,0,168,1972,0,0
+mimiralloc,small_churn,1,STEADY,2208,200,144,56,0,168,2040,0,0
+mimiralloc,small_churn,1,LIVEBYTES,851968,,,,,,,,
+mimiralloc,small_churn,1,PEAK,3264,1193,1136,57,0,1160,2104,0,0
+mimiralloc,small_churn,1,AFTER_FREE,2780,707,652,55,0,676,2104,0,0
+mimiralloc,small_churn,1,AFTER_FREE_ALL,2432,359,304,55,0,328,2104,0,0
+mimiralloc,small_churn,1,CSV,mimiralloc,small_churn,2000000,70501861,28368045.5,35.25,255133120,,,,,,,,
+glibc,small_churn,2,START,2092,149,104,45,0,120,1972,0,0
+glibc,small_churn,2,WARM,2092,152,104,48,0,120,1972,0,0
+glibc,small_churn,2,STEADY,2160,150,104,46,0,120,2040,0,0
+glibc,small_churn,2,LIVEBYTES,851968,,,,,,,,
+glibc,small_churn,2,PEAK,3312,1241,1192,49,0,1208,2104,0,0
+glibc,small_churn,2,AFTER_FREE,3312,1239,1192,47,0,1208,2104,0,0
+glibc,small_churn,2,AFTER_FREE_ALL,2492,419,372,47,0,388,2104,0,0
+glibc,small_churn,2,CSV,glibc,small_churn,2000000,6776447,295139916.2,3.39,255133120,,,,,,,,
+mimiralloc,small_churn,2,START,2096,153,100,53,0,124,1972,0,0
+mimiralloc,small_churn,2,WARM,2132,193,136,57,0,160,1972,0,0
+mimiralloc,small_churn,2,STEADY,2200,190,136,54,0,160,2040,0,0
+mimiralloc,small_churn,2,LIVEBYTES,851968,,,,,,,,
+mimiralloc,small_churn,2,PEAK,3256,1179,1128,51,0,1152,2104,0,0
+mimiralloc,small_churn,2,AFTER_FREE,2772,695,644,51,0,668,2104,0,0
+mimiralloc,small_churn,2,AFTER_FREE_ALL,2424,347,296,51,0,320,2104,0,0
+mimiralloc,small_churn,2,CSV,mimiralloc,small_churn,2000000,69381207,28826249.7,34.69,255133120,,,,,,,,
+glibc,small_churn,3,START,2084,142,100,42,0,116,1968,0,0
+glibc,small_churn,3,WARM,2084,143,100,43,0,116,1968,0,0
+glibc,small_churn,3,STEADY,2152,143,100,43,0,116,2036,0,0
+glibc,small_churn,3,LIVEBYTES,851968,,,,,,,,
+glibc,small_churn,3,PEAK,3304,1231,1188,43,0,1204,2100,0,0
+glibc,small_churn,3,AFTER_FREE,3304,1231,1188,43,0,1204,2100,0,0
+glibc,small_churn,3,AFTER_FREE_ALL,2484,411,368,43,0,384,2100,0,0
+glibc,small_churn,3,CSV,glibc,small_churn,2000000,7602492,263071634.9,3.80,255133120,,,,,,,,
+mimiralloc,small_churn,3,START,2092,151,100,51,0,124,1968,0,0
+mimiralloc,small_churn,3,WARM,2128,187,136,51,0,160,1968,0,0
+mimiralloc,small_churn,3,STEADY,2196,187,136,51,0,160,2036,0,0
+mimiralloc,small_churn,3,LIVEBYTES,851968,,,,,,,,
+mimiralloc,small_churn,3,PEAK,3252,1179,1128,51,0,1152,2100,0,0
+mimiralloc,small_churn,3,AFTER_FREE,2768,694,644,50,0,668,2100,0,0
+mimiralloc,small_churn,3,AFTER_FREE_ALL,2420,348,296,52,0,320,2100,0,0
+mimiralloc,small_churn,3,CSV,mimiralloc,small_churn,2000000,69975177,28581564.0,34.99,255133120,,,,,,,,
+glibc,small_churn,4,START,2092,149,104,45,0,120,1972,0,0
+glibc,small_churn,4,WARM,2092,146,104,42,0,120,1972,0,0
+glibc,small_churn,4,STEADY,2160,147,104,43,0,120,2040,0,0
+glibc,small_churn,4,LIVEBYTES,851968,,,,,,,,
+glibc,small_churn,4,PEAK,3312,1236,1192,44,0,1208,2104,0,0
+glibc,small_churn,4,AFTER_FREE,3312,1236,1192,44,0,1208,2104,0,0
+glibc,small_churn,4,AFTER_FREE_ALL,2492,418,372,46,0,388,2104,0,0
+glibc,small_churn,4,CSV,glibc,small_churn,2000000,7659528,261112695.2,3.83,255133120,,,,,,,,
+mimiralloc,small_churn,4,START,2104,159,108,51,0,132,1972,0,0
+mimiralloc,small_churn,4,WARM,2140,195,144,51,0,168,1972,0,0
+mimiralloc,small_churn,4,STEADY,2208,196,144,52,0,168,2040,0,0
+mimiralloc,small_churn,4,LIVEBYTES,851968,,,,,,,,
+mimiralloc,small_churn,4,PEAK,3264,1187,1136,51,0,1160,2104,0,0
+mimiralloc,small_churn,4,AFTER_FREE,2780,703,652,51,0,676,2104,0,0
+mimiralloc,small_churn,4,AFTER_FREE_ALL,2432,359,304,55,0,328,2104,0,0
+mimiralloc,small_churn,4,CSV,mimiralloc,small_churn,2000000,70333699,28435871.1,35.17,255133120,,,,,,,,
+glibc,small_churn,5,START,2092,148,104,44,0,120,1972,0,0
+glibc,small_churn,5,WARM,2092,149,104,45,0,120,1972,0,0
+glibc,small_churn,5,STEADY,2160,151,104,47,0,120,2040,0,0
+glibc,small_churn,5,LIVEBYTES,851968,,,,,,,,
+glibc,small_churn,5,PEAK,3312,1241,1192,49,0,1208,2104,0,0
+glibc,small_churn,5,AFTER_FREE,3312,1239,1192,47,0,1208,2104,0,0
+glibc,small_churn,5,AFTER_FREE_ALL,2492,421,372,49,0,388,2104,0,0
+glibc,small_churn,5,CSV,glibc,small_churn,2000000,6741242,296681234.7,3.37,255133120,,,,,,,,
+mimiralloc,small_churn,5,START,2100,158,104,54,0,128,1972,0,0
+mimiralloc,small_churn,5,WARM,2136,196,140,56,0,164,1972,0,0
+mimiralloc,small_churn,5,STEADY,2204,194,140,54,0,164,2040,0,0
+mimiralloc,small_churn,5,LIVEBYTES,851968,,,,,,,,
+mimiralloc,small_churn,5,PEAK,3260,1186,1132,54,0,1156,2104,0,0
+mimiralloc,small_churn,5,AFTER_FREE,2776,705,648,57,0,672,2104,0,0
+mimiralloc,small_churn,5,AFTER_FREE_ALL,2428,355,300,55,0,324,2104,0,0
+mimiralloc,small_churn,5,CSV,mimiralloc,small_churn,2000000,69426572,28807414.0,34.71,255133120,,,,,,,,
+glibc,mixed_batch,1,START,2092,154,104,50,0,120,1972,0,0
+glibc,mixed_batch,1,WARM,2180,242,192,50,0,208,1972,0,0
+glibc,mixed_batch,1,STEADY,2248,244,192,52,0,208,2040,0,0
+glibc,mixed_batch,1,LIVEBYTES,79872,,,,,,,,
+glibc,mixed_batch,1,PEAK,2316,245,196,49,0,212,2104,0,0
+glibc,mixed_batch,1,AFTER_FREE,2316,243,196,47,0,212,2104,0,0
+glibc,mixed_batch,1,AFTER_FREE_ALL,2316,245,196,49,0,212,2104,0,0
+glibc,mixed_batch,1,CSV,glibc,mixed_batch,1280000,5105381,250715862.3,3.99,173637760,,,,,,,,
+mimiralloc,mixed_batch,1,START,2100,160,104,56,0,128,1972,0,0
+mimiralloc,mixed_batch,1,WARM,2220,278,224,54,0,248,1972,0,0
+mimiralloc,mixed_batch,1,STEADY,2288,280,224,56,0,248,2040,0,0
+mimiralloc,mixed_batch,1,LIVEBYTES,79872,,,,,,,,
+mimiralloc,mixed_batch,1,PEAK,2372,305,244,61,0,268,2104,0,0
+mimiralloc,mixed_batch,1,AFTER_FREE,2360,291,232,59,0,256,2104,0,0
+mimiralloc,mixed_batch,1,AFTER_FREE_ALL,2356,285,228,57,0,252,2104,0,0
+mimiralloc,mixed_batch,1,CSV,mimiralloc,mixed_batch,1280000,295956146,4324965.1,231.22,173637760,,,,,,,,
+glibc,mixed_batch,2,START,2088,148,100,48,0,116,1972,0,0
+glibc,mixed_batch,2,WARM,2176,236,188,48,0,204,1972,0,0
+glibc,mixed_batch,2,STEADY,2244,233,188,45,0,204,2040,0,0
+glibc,mixed_batch,2,LIVEBYTES,79872,,,,,,,,
+glibc,mixed_batch,2,PEAK,2312,241,192,49,0,208,2104,0,0
+glibc,mixed_batch,2,AFTER_FREE,2312,238,192,46,0,208,2104,0,0
+glibc,mixed_batch,2,AFTER_FREE_ALL,2312,238,192,46,0,208,2104,0,0
+glibc,mixed_batch,2,CSV,glibc,mixed_batch,1280000,4494398,284798987.5,3.51,173637760,,,,,,,,
+mimiralloc,mixed_batch,2,START,2104,163,108,55,0,132,1972,0,0
+mimiralloc,mixed_batch,2,WARM,2224,288,228,60,0,252,1972,0,0
+mimiralloc,mixed_batch,2,STEADY,2292,284,228,56,0,252,2040,0,0
+mimiralloc,mixed_batch,2,LIVEBYTES,79872,,,,,,,,
+mimiralloc,mixed_batch,2,PEAK,2376,302,248,54,0,272,2104,0,0
+mimiralloc,mixed_batch,2,AFTER_FREE,2364,293,236,57,0,260,2104,0,0
+mimiralloc,mixed_batch,2,AFTER_FREE_ALL,2360,287,232,55,0,256,2104,0,0
+mimiralloc,mixed_batch,2,CSV,mimiralloc,mixed_batch,1280000,291511270,4390910.9,227.74,173637760,,,,,,,,
+glibc,mixed_batch,3,START,2092,152,104,48,0,120,1972,0,0
+glibc,mixed_batch,3,WARM,2180,238,192,46,0,208,1972,0,0
+glibc,mixed_batch,3,STEADY,2248,242,192,50,0,208,2040,0,0
+glibc,mixed_batch,3,LIVEBYTES,79872,,,,,,,,
+glibc,mixed_batch,3,PEAK,2316,247,196,51,0,212,2104,0,0
+glibc,mixed_batch,3,AFTER_FREE,2316,246,196,50,0,212,2104,0,0
+glibc,mixed_batch,3,AFTER_FREE_ALL,2316,245,196,49,0,212,2104,0,0
+glibc,mixed_batch,3,CSV,glibc,mixed_batch,1280000,5728817,223431818.5,4.48,173637760,,,,,,,,
+mimiralloc,mixed_batch,3,START,2100,160,104,56,0,128,1972,0,0
+mimiralloc,mixed_batch,3,WARM,2220,278,224,54,0,248,1972,0,0
+mimiralloc,mixed_batch,3,STEADY,2288,275,224,51,0,248,2040,0,0
+mimiralloc,mixed_batch,3,LIVEBYTES,79872,,,,,,,,
+mimiralloc,mixed_batch,3,PEAK,2372,297,244,53,0,268,2104,0,0
+mimiralloc,mixed_batch,3,AFTER_FREE,2360,291,232,59,0,256,2104,0,0
+mimiralloc,mixed_batch,3,AFTER_FREE_ALL,2356,285,228,57,0,252,2104,0,0
+mimiralloc,mixed_batch,3,CSV,mimiralloc,mixed_batch,1280000,296337840,4319394.4,231.51,173637760,,,,,,,,
+glibc,mixed_batch,4,START,2096,158,108,50,0,124,1972,0,0
+glibc,mixed_batch,4,WARM,2184,244,196,48,0,212,1972,0,0
+glibc,mixed_batch,4,STEADY,2252,244,196,48,0,212,2040,0,0
+glibc,mixed_batch,4,LIVEBYTES,79872,,,,,,,,
+glibc,mixed_batch,4,PEAK,2320,247,200,47,0,216,2104,0,0
+glibc,mixed_batch,4,AFTER_FREE,2320,247,200,47,0,216,2104,0,0
+glibc,mixed_batch,4,AFTER_FREE_ALL,2320,245,200,45,0,216,2104,0,0
+glibc,mixed_batch,4,CSV,glibc,mixed_batch,1280000,5547237,230745504.5,4.33,173637760,,,,,,,,
+mimiralloc,mixed_batch,4,START,2100,157,104,53,0,128,1972,0,0
+mimiralloc,mixed_batch,4,WARM,2220,280,224,56,0,248,1972,0,0
+mimiralloc,mixed_batch,4,STEADY,2288,282,224,58,0,248,2040,0,0
+mimiralloc,mixed_batch,4,LIVEBYTES,79872,,,,,,,,
+mimiralloc,mixed_batch,4,PEAK,2372,301,244,57,0,268,2104,0,0
+mimiralloc,mixed_batch,4,AFTER_FREE,2360,289,232,57,0,256,2104,0,0
+mimiralloc,mixed_batch,4,AFTER_FREE_ALL,2356,283,228,55,0,252,2104,0,0
+mimiralloc,mixed_batch,4,CSV,mimiralloc,mixed_batch,1280000,293285869,4364342.6,229.13,173637760,,,,,,,,
+glibc,mixed_batch,5,START,2088,150,104,46,0,120,1968,0,0
+glibc,mixed_batch,5,WARM,2176,237,192,45,0,208,1968,0,0
+glibc,mixed_batch,5,STEADY,2244,240,192,48,0,208,2036,0,0
+glibc,mixed_batch,5,LIVEBYTES,79872,,,,,,,,
+glibc,mixed_batch,5,PEAK,2312,242,196,46,0,212,2100,0,0
+glibc,mixed_batch,5,AFTER_FREE,2312,247,196,51,0,212,2100,0,0
+glibc,mixed_batch,5,AFTER_FREE_ALL,2312,247,196,51,0,212,2100,0,0
+glibc,mixed_batch,5,CSV,glibc,mixed_batch,1280000,4571853,279974006.2,3.57,173637760,,,,,,,,
+mimiralloc,mixed_batch,5,START,2100,162,104,58,0,128,1972,0,0
+mimiralloc,mixed_batch,5,WARM,2220,281,224,57,0,248,1972,0,0
+mimiralloc,mixed_batch,5,STEADY,2288,280,224,56,0,248,2040,0,0
+mimiralloc,mixed_batch,5,LIVEBYTES,79872,,,,,,,,
+mimiralloc,mixed_batch,5,PEAK,2372,303,244,59,0,268,2104,0,0
+mimiralloc,mixed_batch,5,AFTER_FREE,2360,289,232,57,0,256,2104,0,0
+mimiralloc,mixed_batch,5,AFTER_FREE_ALL,2356,283,228,55,0,252,2104,0,0
+mimiralloc,mixed_batch,5,CSV,mimiralloc,mixed_batch,1280000,294597301,4344914.2,230.15,173637760,,,,,,,,
+glibc,large_batch,1,START,2096,156,108,48,0,124,1972,0,0
+glibc,large_batch,1,WARM,2136,196,148,48,0,164,1972,0,0
+glibc,large_batch,1,STEADY,2204,198,148,50,0,164,2040,0,0
+glibc,large_batch,1,LIVEBYTES,7024640,,,,,,,,
+glibc,large_batch,1,PEAK,9096,7021,6976,45,0,6992,2104,0,0
+glibc,large_batch,1,AFTER_FREE,9096,7021,6976,45,0,6992,2104,0,0
+glibc,large_batch,1,AFTER_FREE_ALL,2364,290,244,46,0,260,2104,0,0
+glibc,large_batch,1,CSV,glibc,large_batch,192000,145770345,1317140.3,759.22,22120160,,,,,,,,
+mimiralloc,large_batch,1,START,2100,160,104,56,0,128,1972,0,0
+mimiralloc,large_batch,1,WARM,2108,168,112,56,0,136,1972,0,0
+mimiralloc,large_batch,1,STEADY,2176,170,112,58,0,136,2040,0,0
+mimiralloc,large_batch,1,LIVEBYTES,7024640,,,,,,,,
+mimiralloc,large_batch,1,PEAK,9244,7171,7116,55,0,7140,2104,0,0
+mimiralloc,large_batch,1,AFTER_FREE,3692,1619,1564,55,0,1588,2104,0,0
+mimiralloc,large_batch,1,AFTER_FREE_ALL,2244,173,116,57,0,140,2104,0,0
+mimiralloc,large_batch,1,CSV,mimiralloc,large_batch,192000,568018738,338017.0,2958.43,22120160,,,,,,,,
+glibc,large_batch,2,START,2096,156,108,48,0,124,1972,0,0
+glibc,large_batch,2,WARM,2136,198,148,50,0,164,1972,0,0
+glibc,large_batch,2,STEADY,2204,198,148,50,0,164,2040,0,0
+glibc,large_batch,2,LIVEBYTES,7024640,,,,,,,,
+glibc,large_batch,2,PEAK,9096,7023,6976,47,0,6992,2104,0,0
+glibc,large_batch,2,AFTER_FREE,9096,7027,6976,51,0,6992,2104,0,0
+glibc,large_batch,2,AFTER_FREE_ALL,2364,293,244,49,0,260,2104,0,0
+glibc,large_batch,2,CSV,glibc,large_batch,192000,145243194,1321920.8,756.47,22120160,,,,,,,,
+mimiralloc,large_batch,2,START,2104,164,108,56,0,132,1972,0,0
+mimiralloc,large_batch,2,WARM,2112,170,116,54,0,140,1972,0,0
+mimiralloc,large_batch,2,STEADY,2180,174,116,58,0,140,2040,0,0
+mimiralloc,large_batch,2,LIVEBYTES,7024640,,,,,,,,
+mimiralloc,large_batch,2,PEAK,9248,7175,7120,55,0,7144,2104,0,0
+mimiralloc,large_batch,2,AFTER_FREE,3696,1625,1568,57,0,1592,2104,0,0
+mimiralloc,large_batch,2,AFTER_FREE_ALL,2248,179,120,59,0,144,2104,0,0
+mimiralloc,large_batch,2,CSV,mimiralloc,large_batch,192000,571954542,335691.0,2978.93,22120160,,,,,,,,
+glibc,large_batch,3,START,2088,150,100,50,0,116,1972,0,0
+glibc,large_batch,3,WARM,2128,190,140,50,0,156,1972,0,0
+glibc,large_batch,3,STEADY,2196,192,140,52,0,156,2040,0,0
+glibc,large_batch,3,LIVEBYTES,7024640,,,,,,,,
+glibc,large_batch,3,PEAK,9088,7021,6968,53,0,6984,2104,0,0
+glibc,large_batch,3,AFTER_FREE,9088,7007,6968,39,0,6984,2104,0,0
+glibc,large_batch,3,AFTER_FREE_ALL,2356,275,236,39,0,252,2104,0,0
+glibc,large_batch,3,CSV,glibc,large_batch,192000,143780429,1335369.5,748.86,22120160,,,,,,,,
+mimiralloc,large_batch,3,START,2104,154,108,46,0,132,1972,0,0
+mimiralloc,large_batch,3,WARM,2112,162,116,46,0,140,1972,0,0
+mimiralloc,large_batch,3,STEADY,2180,163,116,47,0,140,2040,0,0
+mimiralloc,large_batch,3,LIVEBYTES,7024640,,,,,,,,
+mimiralloc,large_batch,3,PEAK,9248,7167,7120,47,0,7144,2104,0,0
+mimiralloc,large_batch,3,AFTER_FREE,3696,1615,1568,47,0,1592,2104,0,0
+mimiralloc,large_batch,3,AFTER_FREE_ALL,2248,167,120,47,0,144,2104,0,0
+mimiralloc,large_batch,3,CSV,mimiralloc,large_batch,192000,580258478,330887.0,3022.18,22120160,,,,,,,,
+glibc,large_batch,4,START,2092,142,104,38,0,120,1972,0,0
+glibc,large_batch,4,WARM,2132,182,144,38,0,160,1972,0,0
+glibc,large_batch,4,STEADY,2200,182,144,38,0,160,2040,0,0
+glibc,large_batch,4,LIVEBYTES,7024640,,,,,,,,
+glibc,large_batch,4,PEAK,9092,7011,6972,39,0,6988,2104,0,0
+glibc,large_batch,4,AFTER_FREE,9092,7011,6972,39,0,6988,2104,0,0
+glibc,large_batch,4,AFTER_FREE_ALL,2360,279,240,39,0,256,2104,0,0
+glibc,large_batch,4,CSV,glibc,large_batch,192000,115513530,1662143.0,601.63,22120160,,,,,,,,
+mimiralloc,large_batch,4,START,2100,150,104,46,0,128,1972,0,0
+mimiralloc,large_batch,4,WARM,2108,158,112,46,0,136,1972,0,0
+mimiralloc,large_batch,4,STEADY,2176,159,112,47,0,136,2040,0,0
+mimiralloc,large_batch,4,LIVEBYTES,7024640,,,,,,,,
+mimiralloc,large_batch,4,PEAK,9244,7163,7116,47,0,7140,2104,0,0
+mimiralloc,large_batch,4,AFTER_FREE,3692,1611,1564,47,0,1588,2104,0,0
+mimiralloc,large_batch,4,AFTER_FREE_ALL,2244,162,116,46,0,140,2104,0,0
+mimiralloc,large_batch,4,CSV,mimiralloc,large_batch,192000,577567645,332428.6,3008.16,22120160,,,,,,,,
+glibc,large_batch,5,START,2096,146,108,38,0,124,1972,0,0
+glibc,large_batch,5,WARM,2136,186,148,38,0,164,1972,0,0
+glibc,large_batch,5,STEADY,2204,185,148,37,0,164,2040,0,0
+glibc,large_batch,5,LIVEBYTES,7024640,,,,,,,,
+glibc,large_batch,5,PEAK,9096,7014,6976,38,0,6992,2104,0,0
+glibc,large_batch,5,AFTER_FREE,9096,7014,6976,38,0,6992,2104,0,0
+glibc,large_batch,5,AFTER_FREE_ALL,2364,281,244,37,0,260,2104,0,0
+glibc,large_batch,5,CSV,glibc,large_batch,192000,143177621,1340991.7,745.72,22120160,,,,,,,,
+mimiralloc,large_batch,5,START,2100,154,104,50,0,128,1972,0,0
+mimiralloc,large_batch,5,WARM,2108,162,112,50,0,136,1972,0,0
+mimiralloc,large_batch,5,STEADY,2176,162,112,50,0,136,2040,0,0
+mimiralloc,large_batch,5,LIVEBYTES,7024640,,,,,,,,
+mimiralloc,large_batch,5,PEAK,9244,7169,7116,53,0,7140,2104,0,0
+mimiralloc,large_batch,5,AFTER_FREE,3692,1617,1564,53,0,1588,2104,0,0
+mimiralloc,large_batch,5,AFTER_FREE_ALL,2244,169,116,53,0,140,2104,0,0
+mimiralloc,large_batch,5,CSV,mimiralloc,large_batch,192000,619124418,310115.4,3224.61,22120160,,,,,,,,
+glibc,mixed_lifecycle,1,START,2088,144,100,44,0,116,1972,0,0
+glibc,mixed_lifecycle,1,WARM,2476,532,488,44,0,504,1972,0,0
+glibc,mixed_lifecycle,1,STEADY,2544,538,488,50,0,504,2040,0,0
+glibc,mixed_lifecycle,1,LIVEBYTES,703936,,,,,,,,
+glibc,mixed_lifecycle,1,PEAK,2948,875,828,47,0,844,2104,0,0
+glibc,mixed_lifecycle,1,AFTER_FREE,2948,875,828,47,0,844,2104,0,0
+glibc,mixed_lifecycle,1,AFTER_FREE_ALL,2948,875,828,47,0,844,2104,0,0
+glibc,mixed_lifecycle,1,CSV,glibc,mixed_lifecycle,3072000,26242252,117063124.0,8.54,403599360,,,,,,,,
+mimiralloc,mixed_lifecycle,1,START,2104,162,108,54,0,132,1972,0,0
+mimiralloc,mixed_lifecycle,1,WARM,2240,298,244,54,0,268,1972,0,0
+mimiralloc,mixed_lifecycle,1,STEADY,2308,315,244,71,0,268,2040,0,0
+mimiralloc,mixed_lifecycle,1,LIVEBYTES,703936,,,,,,,,
+mimiralloc,mixed_lifecycle,1,PEAK,3308,1251,1180,71,0,1204,2104,0,0
+mimiralloc,mixed_lifecycle,1,AFTER_FREE,2428,371,300,71,0,324,2104,0,0
+mimiralloc,mixed_lifecycle,1,AFTER_FREE_ALL,2384,327,256,71,0,280,2104,0,0
+mimiralloc,mixed_lifecycle,1,CSV,mimiralloc,mixed_lifecycle,3072000,2744449291,1119350.3,893.38,403599360,,,,,,,,
+glibc,mixed_lifecycle,2,START,2092,158,104,54,0,120,1972,0,0
+glibc,mixed_lifecycle,2,WARM,2480,554,492,62,0,508,1972,0,0
+glibc,mixed_lifecycle,2,STEADY,2548,555,492,63,0,508,2040,0,0
+glibc,mixed_lifecycle,2,LIVEBYTES,703936,,,,,,,,
+glibc,mixed_lifecycle,2,PEAK,2952,895,832,63,0,848,2104,0,0
+glibc,mixed_lifecycle,2,AFTER_FREE,2952,895,832,63,0,848,2104,0,0
+glibc,mixed_lifecycle,2,AFTER_FREE_ALL,2952,895,832,63,0,848,2104,0,0
+glibc,mixed_lifecycle,2,CSV,glibc,mixed_lifecycle,3072000,21539826,142619536.5,7.01,403599360,,,,,,,,
+mimiralloc,mixed_lifecycle,2,START,2104,178,108,70,0,132,1972,0,0
+mimiralloc,mixed_lifecycle,2,WARM,2240,314,244,70,0,268,1972,0,0
+mimiralloc,mixed_lifecycle,2,STEADY,2308,315,244,71,0,268,2040,0,0
+mimiralloc,mixed_lifecycle,2,LIVEBYTES,703936,,,,,,,,
+mimiralloc,mixed_lifecycle,2,PEAK,3308,1239,1180,59,0,1204,2104,0,0
+mimiralloc,mixed_lifecycle,2,AFTER_FREE,2428,359,300,59,0,324,2104,0,0
+mimiralloc,mixed_lifecycle,2,AFTER_FREE_ALL,2384,315,256,59,0,280,2104,0,0
+mimiralloc,mixed_lifecycle,2,CSV,mimiralloc,mixed_lifecycle,3072000,2670320645,1150423.6,869.25,403599360,,,,,,,,
+glibc,mixed_lifecycle,3,START,2092,149,104,45,0,120,1972,0,0
+glibc,mixed_lifecycle,3,WARM,2480,540,492,48,0,508,1972,0,0
+glibc,mixed_lifecycle,3,STEADY,2548,539,492,47,0,508,2040,0,0
+glibc,mixed_lifecycle,3,LIVEBYTES,703936,,,,,,,,
+glibc,mixed_lifecycle,3,PEAK,2952,881,832,49,0,848,2104,0,0
+glibc,mixed_lifecycle,3,AFTER_FREE,2952,881,832,49,0,848,2104,0,0
+glibc,mixed_lifecycle,3,AFTER_FREE_ALL,2952,883,832,51,0,848,2104,0,0
+glibc,mixed_lifecycle,3,CSV,glibc,mixed_lifecycle,3072000,20892275,147039994.4,6.80,403599360,,,,,,,,
+mimiralloc,mixed_lifecycle,3,START,2100,162,104,58,0,128,1972,0,0
+mimiralloc,mixed_lifecycle,3,WARM,2236,297,240,57,0,264,1972,0,0
+mimiralloc,mixed_lifecycle,3,STEADY,2304,300,240,60,0,264,2040,0,0
+mimiralloc,mixed_lifecycle,3,LIVEBYTES,703936,,,,,,,,
+mimiralloc,mixed_lifecycle,3,PEAK,3304,1237,1176,61,0,1200,2104,0,0
+mimiralloc,mixed_lifecycle,3,AFTER_FREE,2424,355,296,59,0,320,2104,0,0
+mimiralloc,mixed_lifecycle,3,AFTER_FREE_ALL,2380,311,252,59,0,276,2104,0,0
+mimiralloc,mixed_lifecycle,3,CSV,mimiralloc,mixed_lifecycle,3072000,2747667874,1118039.1,894.42,403599360,,,,,,,,
+glibc,mixed_lifecycle,4,START,2084,150,104,46,0,120,1964,0,0
+glibc,mixed_lifecycle,4,WARM,2472,540,492,48,0,508,1964,0,0
+glibc,mixed_lifecycle,4,STEADY,2540,540,492,48,0,508,2032,0,0
+glibc,mixed_lifecycle,4,LIVEBYTES,703936,,,,,,,,
+glibc,mixed_lifecycle,4,PEAK,2944,883,832,51,0,848,2096,0,0
+glibc,mixed_lifecycle,4,AFTER_FREE,2944,881,832,49,0,848,2096,0,0
+glibc,mixed_lifecycle,4,AFTER_FREE_ALL,2944,887,832,55,0,848,2096,0,0
+glibc,mixed_lifecycle,4,CSV,glibc,mixed_lifecycle,3072000,21362524,143803232.2,6.95,403599360,,,,,,,,
+mimiralloc,mixed_lifecycle,4,START,2100,164,104,60,0,128,1972,0,0
+mimiralloc,mixed_lifecycle,4,WARM,2236,300,240,60,0,264,1972,0,0
+mimiralloc,mixed_lifecycle,4,STEADY,2304,296,240,56,0,264,2040,0,0
+mimiralloc,mixed_lifecycle,4,LIVEBYTES,703936,,,,,,,,
+mimiralloc,mixed_lifecycle,4,PEAK,3304,1237,1176,61,0,1200,2104,0,0
+mimiralloc,mixed_lifecycle,4,AFTER_FREE,2424,353,296,57,0,320,2104,0,0
+mimiralloc,mixed_lifecycle,4,AFTER_FREE_ALL,2380,311,252,59,0,276,2104,0,0
+mimiralloc,mixed_lifecycle,4,CSV,mimiralloc,mixed_lifecycle,3072000,2733165182,1123971.6,889.70,403599360,,,,,,,,
+glibc,mixed_lifecycle,5,START,2092,152,104,48,0,120,1972,0,0
+glibc,mixed_lifecycle,5,WARM,2480,546,492,54,0,508,1972,0,0
+glibc,mixed_lifecycle,5,STEADY,2548,547,492,55,0,508,2040,0,0
+glibc,mixed_lifecycle,5,LIVEBYTES,703936,,,,,,,,
+glibc,mixed_lifecycle,5,PEAK,2952,885,832,53,0,848,2104,0,0
+glibc,mixed_lifecycle,5,AFTER_FREE,2952,885,832,53,0,848,2104,0,0
+glibc,mixed_lifecycle,5,AFTER_FREE_ALL,2952,885,832,53,0,848,2104,0,0
+glibc,mixed_lifecycle,5,CSV,glibc,mixed_lifecycle,3072000,21477870,143030943.0,6.99,403599360,,,,,,,,
+mimiralloc,mixed_lifecycle,5,START,2100,167,108,59,0,132,1968,0,0
+mimiralloc,mixed_lifecycle,5,WARM,2236,303,244,59,0,268,1968,0,0
+mimiralloc,mixed_lifecycle,5,STEADY,2304,302,244,58,0,268,2036,0,0
+mimiralloc,mixed_lifecycle,5,LIVEBYTES,703936,,,,,,,,
+mimiralloc,mixed_lifecycle,5,PEAK,3304,1238,1180,58,0,1204,2100,0,0
+mimiralloc,mixed_lifecycle,5,AFTER_FREE,2424,357,300,57,0,324,2100,0,0
+mimiralloc,mixed_lifecycle,5,AFTER_FREE_ALL,2380,315,256,59,0,280,2100,0,0
+mimiralloc,mixed_lifecycle,5,CSV,mimiralloc,mixed_lifecycle,3072000,2740930490,1120787.3,892.23,403599360,,,,,,,,
