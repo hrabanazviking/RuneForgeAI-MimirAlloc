@@ -179,6 +179,173 @@
 #endif
 
 #include "../platform/mimir_platform.h"
+
+/* ---- Z-019 lock hold/wait histograms --------------------
+ * Everything in this section exists ONLY under
+ * MIMIR_LOCK_HIST. A production build never defines it:
+ * no code, no data, no symbol, no cost (proof: the
+ * recorded run's nm/size/byte-identity checks on the
+ * production object, tests/perf/recorded_run_z13_z019.txt).
+ * Method: within this translation unit only, the two L6
+ * lock entry points are shadowed by macros naming the
+ * static wrappers below; the wrappers call the real L6
+ * functions through the parenthesised-name form, which
+ * the preprocessor does not expand, and they are defined
+ * BEFORE the macros so their own bodies are unaffected.
+ * Every lock acquisition in this file is timed:
+ *   wait = stamp just before the real lock call to the
+ *          stamp just after it returns;
+ *   hold = stamp just after acquisition (taken AFTER the
+ *          wait sample is recorded, so the wait update is
+ *          not charged to this hold) to the stamp just
+ *          before the real unlock call.
+ * The wait sample is recorded immediately after
+ * acquisition and the hold sample immediately before
+ * release - both while this thread holds the one global
+ * lock, so the shared histogram arrays are updated only
+ * under the lock and need no atomics. A failed
+ * acquisition records no wait/hold sample, only the
+ * lock_failures counter (atomic: no lock is held then).
+ * A sample whose delta is negative or at/above 2^48
+ * cycles (TSC artefact) is dropped and counted in
+ * anomalies instead of polluting a bucket.
+ * Attribution: a thread-local current-op tag set at the
+ * top of mimir_core_alloc / _calloc / _realloc / _free
+ * and CLEARED back to OTHER by the unlock wrapper, so a
+ * later internal locked surface on the same thread can
+ * never inherit a stale entry-point tag. realloc(NULL)
+ * delegates to the alloc entry before either takes the
+ * lock; the inner entry overwrites the tag and owns the
+ * sample - the same call accounting the E-005 counters
+ * use. The histogram code allocates nothing, prints
+ * nothing and takes no lock of its own.
+ * Timing source: rdtsc on x86-64 / i386 (this line's
+ * hosts), fenced with LFENCE; other hosts fall back to
+ * CLOCK_MONOTONIC_RAW nanoseconds so the facility still
+ * compiles and runs - the recorded run states the source
+ * and the probe's calibrated cycles-per-ns per process. */
+#ifdef MIMIR_LOCK_HIST
+#include <time.h>
+#if defined(__x86_64__) || defined(__i386__)
+#include <x86intrin.h>
+static uint64_t z19_stamp(void)
+{
+    _mm_lfence();
+    return (uint64_t)__rdtsc();
+}
+#else
+static uint64_t z19_stamp(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return (uint64_t)ts.tv_sec * UINT64_C(1000000000) +
+           (uint64_t)ts.tv_nsec;
+}
+#endif
+
+static struct mimir_lock_hist z19_hist;
+static _Thread_local int z19_current_op = MIMIR_LH_OP_OTHER;
+static _Thread_local uint64_t z19_acquire_stamp;
+static _Thread_local int z19_holding;
+
+static unsigned z19_bucket(uint64_t v)
+{
+    unsigned e;
+    uint64_t sub;
+    if (v < 64) {
+        return (unsigned)v;
+    }
+    e = 63u - (unsigned)__builtin_clzll(v);
+    if (e >= 42u) {
+        return MIMIR_LOCK_HIST_BUCKETS - 1;
+    }
+    sub = (v - (UINT64_C(1) << e)) >> (e - 2u);
+    return 64u + (e - 6u) * 4u + (unsigned)sub;
+}
+
+static void z19_record(struct mimir_lock_hist_series *s,
+                       uint64_t v)
+{
+    if (v >= (UINT64_C(1) << 48)) {
+        s->overflow_samples += 1;
+        __atomic_fetch_add(&z19_hist.anomalies, 1ULL,
+                           __ATOMIC_RELAXED);
+        return;
+    }
+    s->count += 1;
+    s->sum_cycles += v;
+    if (s->count == 1 || v < s->min_cycles) {
+        s->min_cycles = v;
+    }
+    if (v > s->max_cycles) {
+        s->max_cycles = v;
+    }
+    if (v >= (UINT64_C(1) << 42)) {
+        s->overflow_samples += 1;
+    }
+    s->buckets[z19_bucket(v)] += 1;
+}
+
+static void z19_set_op(int op)
+{
+    z19_current_op = op;
+}
+
+static int z19_lock(void)
+{
+    uint64_t t0 = z19_stamp();
+    int rc = (mimir_platform_global_lock)();
+    uint64_t t1 = z19_stamp();
+    if (rc != MIMIR_PLATFORM_OK) {
+        __atomic_fetch_add(&z19_hist.lock_failures, 1ULL,
+                           __ATOMIC_RELAXED);
+        return rc;
+    }
+    if (t1 >= t0) {
+        z19_record(&z19_hist.wait[z19_current_op], t1 - t0);
+    } else {
+        __atomic_fetch_add(&z19_hist.anomalies, 1ULL,
+                           __ATOMIC_RELAXED);
+    }
+    z19_acquire_stamp = z19_stamp();
+    z19_holding = 1;
+    return rc;
+}
+
+static int z19_unlock(void)
+{
+    uint64_t t0 = z19_stamp();
+    if (z19_holding) {
+        if (t0 >= z19_acquire_stamp) {
+            z19_record(&z19_hist.hold[z19_current_op],
+                       t0 - z19_acquire_stamp);
+        } else {
+            __atomic_fetch_add(&z19_hist.anomalies, 1ULL,
+                               __ATOMIC_RELAXED);
+        }
+    }
+    z19_holding = 0;
+    z19_current_op = MIMIR_LH_OP_OTHER;
+    return (mimir_platform_global_unlock)();
+}
+
+#define mimir_platform_global_lock z19_lock
+#define mimir_platform_global_unlock z19_unlock
+
+int mimir_core_lock_hist_snapshot(struct mimir_lock_hist *out)
+{
+    if (out == NULL) {
+        return -1;
+    }
+    *out = z19_hist;
+    return 0;
+}
+
+void mimir_core_lock_hist_reset(void)
+{
+    memset(&z19_hist, 0, sizeof z19_hist);
+}
+#endif /* MIMIR_LOCK_HIST */
 #ifdef MIMIR_DEBUG
 /* J-005 only: abort() for the fail-clearly report path and
  * write(2) for its fixed-buffer fd 2 report (INC-J005-05). */
@@ -2579,6 +2746,9 @@ static void retire_any_locked(void *ptr,
  * wording, unchanged. */
 void *mimir_core_alloc(size_t size)
 {
+#ifdef MIMIR_LOCK_HIST
+    z19_set_op(MIMIR_LH_OP_MALLOC);
+#endif
     void *result;
 
     if (size == 0) {
@@ -2641,6 +2811,9 @@ void *mimir_core_alloc(size_t size)
  */
 void *mimir_core_calloc(size_t nmemb, size_t size)
 {
+#ifdef MIMIR_LOCK_HIST
+    z19_set_op(MIMIR_LH_OP_CALLOC);
+#endif
     size_t product;
     void *result;
 
@@ -2752,6 +2925,9 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
  */
 void *mimir_core_realloc(void *ptr, size_t new_size)
 {
+#ifdef MIMIR_LOCK_HIST
+    z19_set_op(MIMIR_LH_OP_REALLOC);
+#endif
     struct mimir_descriptor *desc;
     struct mimir_descriptor *new_desc = NULL;
     void *new_ptr;
@@ -2891,6 +3067,9 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
 
 void mimir_core_free(void *ptr)
 {
+#ifdef MIMIR_LOCK_HIST
+    z19_set_op(MIMIR_LH_OP_FREE);
+#endif
     struct mimir_descriptor *desc;
 
     /* Defined no-op, before any locking or descriptor access

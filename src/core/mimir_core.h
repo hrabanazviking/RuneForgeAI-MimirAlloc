@@ -300,4 +300,56 @@ uint64_t mimir_core_diag_emitted(void);
 uint64_t mimir_core_diag_suppressed(void);
 uint64_t mimir_core_diag_max_depth(void);
 
+#ifdef MIMIR_LOCK_HIST
+/* Z-019 lock hold/wait histograms (MIMIRALLOC_Z13_ROADMAP.md
+ * Wave 3, slice Z-019): rdtsc instrumentation of the one
+ * global lock, per public entry point. This surface exists
+ * ONLY in a build that defines MIMIR_LOCK_HIST (the dedicated
+ * instrumented build of tests/perf/run_lockhist_z019.sh);
+ * the production Makefile never defines it, so a production
+ * object contains none of this surface and pays exactly zero
+ * cost (proven in tests/perf/recorded_run_z13_z019.txt).
+ * Internal only, INC-E001-07 shape (b) exactly like the
+ * surfaces above: declared here; bound local in any shared
+ * build by the same version-script discipline.
+ * Buckets (quarter-octave): index < 64 is the exact cycle
+ * count; index >= 64 encodes e = 6 + (idx-64)/4 and
+ * sub = (idx-64) % 4, covering the interval
+ * [2^e + sub*2^(e-2), 2^e + (sub+1)*2^(e-2)) cycles -
+ * zero width error below 64 cycles, at most 25% above.
+ * Samples at or above 2^42 cycles clamp into the last
+ * bucket and are counted in overflow_samples.
+ * mimir_core_lock_hist_snapshot copies the histograms at a
+ * QUIESCENT point (no thread inside the allocator); it
+ * deliberately takes no lock, so reading never pollutes
+ * the measurement. Returns 0 on success, -1 on NULL out.
+ * mimir_core_lock_hist_reset zeroes all series; call only
+ * at quiescent points for the same reason. */
+#define MIMIR_LOCK_HIST_OPS 5
+#define MIMIR_LOCK_HIST_BUCKETS 208
+enum mimir_lock_hist_op {
+    MIMIR_LH_OP_MALLOC  = 0,
+    MIMIR_LH_OP_CALLOC  = 1,
+    MIMIR_LH_OP_REALLOC = 2,
+    MIMIR_LH_OP_FREE    = 3,
+    MIMIR_LH_OP_OTHER   = 4
+};
+struct mimir_lock_hist_series {
+    uint64_t count;
+    uint64_t sum_cycles;
+    uint64_t min_cycles;
+    uint64_t max_cycles;
+    uint64_t overflow_samples;
+    uint64_t buckets[MIMIR_LOCK_HIST_BUCKETS];
+};
+struct mimir_lock_hist {
+    struct mimir_lock_hist_series hold[MIMIR_LOCK_HIST_OPS];
+    struct mimir_lock_hist_series wait[MIMIR_LOCK_HIST_OPS];
+    uint64_t lock_failures;
+    uint64_t anomalies;
+};
+int mimir_core_lock_hist_snapshot(struct mimir_lock_hist *out);
+void mimir_core_lock_hist_reset(void);
+#endif /* MIMIR_LOCK_HIST */
+
 #endif /* MIMIR_CORE_H */
