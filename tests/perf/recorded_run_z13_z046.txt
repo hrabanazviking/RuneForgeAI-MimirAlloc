@@ -1,0 +1,1197 @@
+MimirAlloc Z13 recorded run - Z-046 the threshold study
+slice: Z-046 - The threshold study (Wave 6 opener: measure glibc's dynamic mmap-threshold behaviour on this host and cost MimirAlloc's fixed 1024-byte cutoff per size decade, 1 KiB..32 MiB: where the mapping path starts paying, and where it starts bleeding; gate: per-decade cost table; the campaign's cutoff options priced)
+date: 2026-11-12 (measurement attempts 06:10-06:12 EST / 11:10-11:12 UTC; run of record = attempt 3, 06:11 EST; gate runs before and after the measurement window)
+base: 2e8b4e4 (branch yrsa/mimiralloc-team-07: merge of seat main d0185ab, banked Z-001..Z-037 + Z-033 closure + Z-029 TLS fix, into the team's Z-037 commit 54e348f; the one merge conflict, src/core/mimir_core.c at the Z-029 span-release guard, was resolved by taking the seat version whole - the seat had already merged this exact pair when banking the Z-029 fix - and the merged core is byte-identical to the seat core at d0185ab)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44 (Ubuntu GLIBC 2.44-1ubuntu2)
+artifacts: tests/perf/probe_z046.c, tests/perf/run_z046.sh, tests/perf/summarize_z046.py, this recorded run. No production source changed by this slice. sha256: probe f73a510f..., runner 4e2fc8fc..., summariser b9e9cb26..., built binary 403afcb9... (runner log hidden_files/z046_full3_runner.log, team-local).
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004 banked at the seat): COST legs - every measured value is a separate PROCESS pinned taskset -c 2 (CCD0 physical core); 3 warm-up processes per leg discarded; 7 measured processes per leg; legs interleaved round-robin within each repetition round; headline = MEDIAN of per-process ns/op; split-half drift bound 8% (s.8), DRIFT-REJECT rows are indicative only wherever used. Sizes are the power-of-two ladder 1024..33554432 (16 sizes). Legs per size (single block live, bench endpoint touch copied byte-for-byte from bench_k002.c so checksums are comparable with every earlier slice): op/mimir (the banked core: span path at/below the 1024 cutoff, mapping-per-allocation above it - MIMIR_SMALL_CUTOFF, src/core/mimir_core.c, dispatcher alloc_any_locked: size <= 1024 to the class spans, else alloc_locked = one mmap of round_up(4096+size) with a 96-byte descriptor in the reserve page, one munmap of the exact pair on free); op/glibc (host glibc, default posture - after warm-up its dynamic threshold has risen over the ladder, so this leg prices steady-state REUSE; the one exception is 32 MiB, see the cap finding); op/glmap (glibc with mallopt M_MMAP_THRESHOLD=128: every ladder request mmaps fresh and munmaps on free - glibc's own mapping-per-allocation price, and the control that setting a threshold via mallopt disables dynamic adjustment); op/glarena (glibc with mallopt mmap threshold AND trim threshold both 64 MiB: nothing mmaps, freed memory is RETAINED - the pure reuse price, used as the proxy for a reuse-served size in the cutoff pricing, labelled proxy wherever used); op/gltrim (glibc with ONLY the mmap threshold raised to 64 MiB, default 128 KiB trim threshold kept: reuse WITHOUT retention); raw/notouch and raw/touch (the bare mmap/munmap pair in exactly MimirAlloc's geometry, as probe_z023: pair = raw/notouch, faults+populated-teardown = raw/touch - raw/notouch, bookkeeping-residual = op/mimir - raw/touch, a residual, never a directly timed quantity). opfull legs (mimir, glibc) at 1 MiB / 8 MiB / 32 MiB write and read back EVERY user page per iteration - the dense-touch price the sparse bench hides. THRESHOLD legs - one verdict per FRESH process, read from mallinfo2 counters taken WHILE the block is held (hblks = live mmapped chunks, hblkhd = bytes in mmapped chunks, arena/uordblks for the arena side): threshone (virgin verdict per request size, one size per process so a freed mmap chunk's threshold rise can never pollute a later reading); threshdyn (alloc+free a first size, then allocate a probe size and record its verdict); threshstay (threshdyn with 2000 small alloc/free cycles between rise and probe); threshmallopt (mallopt(M_MMAP_THRESHOLD, set) before the pair). Threshold line formats: T1,size,hblks,hblkhd,arena,uordblks,verdict / TD|TS,free_size,first_hblks,first_hblkhd,probe_hblks,probe_hblkhd,verdict / TM,set,free_size,first_hblks,first_hblkhd,probe_hblks,probe_hblkhd,verdict.
+load state: SHARED HOST, LIGHTLY CONTENDED - not a quiet-machine baseline of record. /proc/loadavg at run-of-record start 0.45 / 1.05 / 1.13, at end ~0.5; no process over 1% CPU in the top list at run start. Earlier in the session the host carried Aesir forge Mojo test runs (100-277% CPU) and a sibling team's Z-043 probe; those had drained before the attempts. Three full attempts were taken (06:10, 06:11, 06:11 EST; raw and summaries kept in team hidden_files z046_full{,2,3}*): attempt 3 is the run of record (fewest drift rejections, 7 of 122 groups). Cross-attempt control in place of an identical-leg pair (protocol s.7 spirit): the op/mimir medians of attempts 1 and 2 agree with attempt 3 within 5.6% at 14 of 16 sizes and within 11% at the remaining two (524288, 2097152 - attempt 3 reads LOW at 512 KiB and HIGH at 2 MiB; both rows carry that note); the gltrim leg is the one unstable leg across attempts (its 1 MiB median ranged 2112..3244 ns across attempts - it is quoted as indicative wherever used). Absolute ns/op below carry the shared-host label; the threshold verdicts are structural (counter-based, load-independent) and the ratios/savings are the stable quantities.
+correctness gate: scripts/z13/run_gate.sh in this worktree, logs hidden_files/z046_baseline_gate.log (pre-run, on the merged tree) and hidden_files/z046_gate_final.log (final tree): both GATE GREEN, 4988 checks (18 smoke + 4970 CHECKS), 0 failed, 77 by-design SKIP lines, make exit 0 - identical counts to the Z-001 baseline. This slice adds no tests; the probe is not part of make test.
+
+=== VERDICT - THE THRESHOLD STUDY (roadmap gate) ===
+Gate status: MET. The per-decade cost table is filed below (and in the summariser output verbatim), and the campaign's cutoff options are priced under two reference mixes with a stated proxy and a sensitivity row.
+
+PART 1 - GLIBC'S DYNAMIC MMAP THRESHOLD, MEASURED ON THIS HOST (glibc 2.44)
+Virgin onset, exact to the byte: in a fresh process, requests up to 131048 bytes are arena-served (at 131048 the arena chunk is 131056 bytes: uordblks during = 131056) and requests from 131049 bytes mmap (hblks 0->1, hblkhd 135168). The threshold is on CHUNK size: chunk = round_up_16(request + 8), and a chunk of exactly 131072 = the 128 KiB default threshold mmaps. The often-quoted "128 KiB" is a chunk-size statement; in request terms the cliff on this host is 131048|131049. The mmap chunk's mapped length is chunk page-rounded plus one page (131072 request -> hblkhd 135168; 1048576 -> 1052672; 33554432 -> 33558528) - glibc's mmap geometry carries the same one-reserve-page shape as MimirAlloc's large path.
+The dynamic rise: freeing an mmapped chunk raises the threshold to that chunk's size. Proven pair by pair (TD rows): after freeing 262144, probes 131072 and 262144 are ARENA and 524288 still MMAPs; after freeing 1048576, probes 524288 and 1048576 are ARENA and 2097152 MMAPs; after freeing 8388608, probes 4194304 and 8388608 are ARENA and 16777216 MMAPs. The rise does not decay: after the 1048576 rise, 2000 intervening 4096-byte alloc/free cycles leave the 524288 probe ARENA (TS row).
+The cap is a CLIFF, not a clamp - the study's sharpest threshold finding: the rise happens only when the freed chunk is <= 33554432 bytes (32 MiB, = 4*1024*1024*sizeof(long) on 64-bit). Freeing a request of 33554400 (chunk 33554416, inside the cap) raises the threshold to 33554416: probe 16777216 ARENA, probe 33554400 MMAP (its chunk equals the raised threshold's next step), probe 33554432 MMAP. Freeing a request of 33554432 - whose chunk is 33554448, SIXTEEN BYTES over the cap - raises nothing at all: probe 16777216 still MMAPs. Freeing 67108864 likewise raises nothing (probe 16777216 MMAP). A process cannot earn dynamic shelter for the top decade by freeing inside it; shelter at the top must come from below the cap.
+mallopt control: an explicit mallopt(M_MMAP_THRESHOLD, 131072) disables the dynamic adjustment exactly as documented - after freeing 8388608 the 4194304 probe still MMAPs (TM row 1); and an explicit mallopt(M_MMAP_THRESHOLD, 67108864) is honoured literally - the very first 1048576 allocation is already ARENA (TM row 2). The glmap cost leg (threshold pinned at 128) rests on the same disablement.
+Consequence for every glibc comparison on this line (Z-023 already met it, now byte-exact): a long-running glibc process serves EVERY request from 131049 up to a 33554416 chunk from reused arena memory at ~8 ns/op once it has freed one such chunk - except requests whose chunk exceeds 33554432, which mmap forever. That exception is visible in the cost table itself: op/glibc is 7.90-9.28 ns/op at every ladder size except 33554432, where it jumps to 3282.89 - glibc paying the mapping path there too.
+
+PART 2 - WHAT MIMIRALLOC'S FIXED 1024-BYTE CUTOFF COSTS, PER DECADE
+The cliff at the cutoff, measured at the byte: op/mimir at 1024 (span path, TLS cache live - the seat core carries the banked Z-029 fix) is 23.98 ns/op; at 1025 (mapping path) a 3-process boundary exhibit read 1961.84 / 1938.55 / 1902.17 ns/op (median ~1939); at 2048 the ladder median is 1911.00. ONE BYTE past the cutoff multiplies the price about 80x. No other boundary in either allocator is this steep: glibc's own cliff at 131048|131049 is invisible in steady state because the dynamic rise erases it after one free.
+Per-decade means (mean of per-size medians, endpoint touch, ns/op; full per-size table in the summariser output):
+  decade        mimir     glibc    glmap   glarena   gltrim
+  1-8 KiB      1538.40      7.00  1711.11      6.25      6.95   (the mimir mean includes the 1024 span row at 23.98; mapping rows alone are 1911-2282)
+  16-64 KiB    2509.58      8.71  2154.01      7.76      8.82
+  128-512 KiB  2832.96      8.13  2422.78      8.06   1403.15   (gltrim mean mixes its sub-threshold rows with its trim-cliff rows - see below)
+  1-4 MiB      3695.28      8.26  3011.47      8.18   3011.19
+  8-32 MiB     3981.47   1100.26  3142.09      9.33   3344.76   (the glibc mean is its 32 MiB cap row, 3282.89, averaged with three ~9 ns rows)
+The mapping price is nearly size-flat: 1911 ns at 2048 rising only to 4011 ns at 33554432 (2.1x over a 16384x size range). Its split is stable in shape (Z-023 decomposition, this run): the bare pair is ~980-1080 ns at every size; the fault+populated-teardown term grows from ~503 ns at 2048 to ~2362 ns at 33554432 and passes the pair from 16 KiB upward; the bookkeeping residual is 401-840 ns at every size. MimirAlloc also pays MORE than glibc's own mapping path at every size (glmap is 1508-3220 across the ladder, always below mimir): the premium is the reserve-page fault (mimir faults 3.000-3.025 times per op - reserve page + endpoint pages - against glmap's ~1.0 at small sizes, where glibc's header shares the first user page) plus the global lock, descriptor publication and the free-side registry walk (Z-024: the walk is the free path). MimirAlloc's per-op waste bytes (mapping_length - request: reserve page + page round-up) fall from 6144 B (300%) at 2048 to 4096 B (0.01%) at 33554432 - waste is a small-size scandal and a large-size rounding error.
+WHERE THE MAPPING PATH STARTS PAYING: on bytes-served terms the fixed ~1.4 us of pair+bookkeeping is amortised as size grows - cost per requested byte falls from 0.93 ns/B at 2048 to 0.00012 ns/B at 33554432 - and the mapping buys exact-size memory, immediate return to the OS and zero retention at every size. It never wins on time against a retaining allocator at any measured size; its value case is memory honesty (Z-006's retention leg is where that case is graded), not speed.
+WHERE IT STARTS BLEEDING - three named places:
+  (1) The decade just above the cutoff (1025..~8192): the full mapping price for blocks a span nearly serves, at 300-50% waste - the worst value zone in the study, and the zone a raised cutoff or a small-mapping cache reaches first.
+  (2) The middle decades against steady glibc (128 KiB..16 MiB): ratios 315-486x, because glibc's dynamic rise shelters exactly this range while every MimirAlloc op re-pays pair+faults. This is KL-C's home ground, widened from Z-023's batch finding (4.16x in the 32-live batch shape) to the single-block shape measured here.
+  (3) Dense touch at 1 MiB and 8 MiB (opfull): mimir re-faults every user page on every allocation - 106329.56 ns/op at 1048576 (257.0 faults/op, 38.07x vs glibc-steady) and 854712.75 at 8388608 (2049.1 faults/op, 34.52x). The bleed scales with pages touched, without bound in this range. At 33554432 the dense ratio COLLAPSES to 1.01x (4022825.00 vs 3992785.50, both ~8193 faults/op): above glibc's cap cliff both allocators map-and-fault every time, and MimirAlloc is at parity - the only place in the study where it is.
+THE TRIM LESSON (a finding about reuse itself, priced for Z-047): reuse only pays if freed memory is RETAINED. gltrim - arena-forced but with glibc's default 128 KiB trim threshold - costs ~8.8 ns/op up to 131072 and then jumps to 2061-3621 ns/op at 262144 and above (indicative leg, see load note): every large free shrinks the arena top back to the OS, and the next allocation re-pays the kernel. Raising the trim threshold alongside (glarena) restores ~8-10 ns/op at every size. glibc's steady leg escapes the cliff because the dynamic rise moves its trim threshold with its mmap threshold. For the mapping-cache design this is the controlling fact: the pool's retention bound (bytes and count, Z-047) IS the price - a pool that returns mappings too eagerly is the mapping path with extra bookkeeping.
+
+PART 3 - THE CAMPAIGN'S CUTOFF OPTIONS, PRICED
+Model: a request at or below the candidate cutoff is priced at the glarena median (retention-reuse proxy, ~8 ns/op); above it, at the measured op/mimir median. Two mixes: uniform over the 16-size ladder, and the K-002 large_batch mix (2048, 8192, 16384, 65536, 262144, 1048576, equal weight). Status quo (cutoff 1024): uniform 2824.35 ns/op, large_batch 2506.61 ns/op.
+  cutoff      uniform   saving   large_batch   saving
+     8192     2442.68    13.5%        1810.35    27.8%
+    32768     2143.00    24.1%        1421.49    43.3%
+   131072     1773.34    37.2%         969.73    61.3%
+   524288     1443.92    48.9%         539.31    78.5%
+  1048576     1244.62    55.9%           7.83    99.7%
+  4194304      752.59    73.4%           7.83    99.7%
+ 33554432        7.81    99.7%           7.83    99.7%
+Sensitivity: the proxy is glibc's arena, not a built MimirAlloc reuse path. Charging a hypothetical served size the measured bookkeeping residual on top (+500 ns/op - deliberately above the 401-440 ns residual at most sizes) still leaves: cutoff 131072 uniform 2023.34 (-29.1%), large_batch 1303.06 (-48.0%); cutoff 1048576 uniform 1588.37 (-44.4%), large_batch 507.83 (-79.7%); cutoff 33554432 uniform 507.81 (-82.2%). The direction and rough scale of every row survive the proxy's correction; the last digit does not, and is not claimed.
+What a raised cutoff would actually require (priced options are options, not implementations): the span machinery serves one page per span, so no constant change reaches past 4096 - sizes above a page need either multi-page spans (new geometry, new fragmentation questions for Z-055's line) or the Z-047/Z-048 mapping cache, which keeps the 1024 cutoff and instead attacks the pair term (~1.0 us of the ~1.9-4.0 us) plus the reserve-page fault on cache hits, while leaving first-touch user faults where Z-014 put them. The two roads are priced against each other by this table: a perfect mapping cache caps its saving near the pair+reserve share (about 55-75% of the single-block price at small sizes, less at large), while a served-path cutoff at 131072 is worth 37.2% uniform / 61.3% large_batch in the ideal-proxy model and ~29% / ~48% with bookkeeping charged. Z-047's design should be written against both ceilings.
+
+Bugs found/fixed in this slice's own work (no production bug was discovered; no production file is changed): (a) probe compile faults - the bench_k002.c include collided with <malloc.h> feature macros and its now_ns helper; the probe now copies bench's endpoint touch() byte-for-byte instead of including the bench, and names its clock z46_now_ns (caught at first compile, before any run). (b) the opfull leg's first draft double-counted its warm-up into the timed checksum - rewritten to the clean warm/timed split before any run. (c) the glmap leg's first threshold (4096) silently arena-served the 1024/2048 sizes it was meant to force-map (a request's chunk must reach the threshold) - caught by the pre-run smoke checks (8.73 ns/op where a mapping price was expected), threshold corrected to 128 and re-proven (1507.58 ns/op at 1024) before the recorded attempts. (d) the glarena leg's first form raised only the mmap threshold and priced glibc's trim behaviour instead of reuse (the gltrim finding above) - the leg now raises both thresholds, and the original form is kept as the gltrim leg so the finding is inside the table, not an anecdote.
+Team structure: 1 lead + 6 spawned Mythic Engineering sub-agents in audit roles (glibc threshold sources, core cutoff audit, measurement-protocol audit, Z-023 pattern audit, host/load witness, risk review) - ALL SIX received and folded in before commit. Material folds: fresh-process-per-verdict threshold detection with mallinfo2-while-held (risk + threshold audits; timing-only detection was rejected on their evidence), the byte-exact onset scan around 131072 (risk audit's boundary-points note), the trim-threshold control leg (found in the lead's own pre-run experiments, priced as its own leg per the risk audit's retention warning), and the protocol audit's drift/checksum/load labelling applied throughout. The core audit's line-level map of the large path (alloc_locked / retire_locked / realloc move-only growth) is the source of the geometry statements above.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured 2026-11-12 06:12 EST in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T11:12:28Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5097334
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 77%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.42 0.90 1.07
+
+=== SUMMARISER OUTPUT (summarize_z046.py on attempt 3 raw + thresh, verbatim) ===
+Z-046 threshold study summary (ns/op; headline = median of processes)
+drift bound 8% (Z-004 s.8); DRIFT-REJECT = indicative only
+
+=== per-process medians by group ===
+     op glarena  size=    1024  med=        2.16  spread 2.16..2.17  drift 0.0%  n=7  checksums=[2552560]
+     op glibc    size=    1024  med=        2.16  spread 2.16..2.42  drift 0.0%  n=7  checksums=[2552560]
+     op glmap    size=    1024  med=     1514.42  spread 1505.21..1538.65  drift 1.6%  n=7  checksums=[2552560]
+     op gltrim   size=    1024  med=        2.16  spread 2.16..2.17  drift 0.0%  n=7  checksums=[2552560]
+     op mimir    size=    1024  med=       23.98  spread 23.77..28.07  drift 0.0%  n=7  checksums=[2552560]
+     op glarena  size=    2048  med=        7.59  spread 7.45..8.01  drift 2.8%  n=7  checksums=[2552560]
+     op glibc    size=    2048  med=        8.22  spread 7.85..8.63  drift 0.6%  n=7  checksums=[2552560]
+     op glmap    size=    2048  med=     1508.25  spread 1485.72..1516.69  drift 0.4%  n=7  checksums=[2552560]
+     op gltrim   size=    2048  med=        8.04  spread 7.87..8.23  drift 0.6%  n=7  checksums=[2552560]
+     op mimir    size=    2048  med=     1911.00  spread 1898.91..1919.51  drift 0.4%  n=7  checksums=[2552560]
+     op glarena  size=    4096  med=        7.65  spread 7.63..7.87  drift 1.0%  n=7  checksums=[2552560]
+     op glibc    size=    4096  med=        8.80  spread 8.62..8.82  drift 1.1%  n=7  checksums=[2552560]
+     op glmap    size=    4096  med=     1907.84  spread 1895.72..1965.63  drift 1.6%  n=7  checksums=[2552560]
+     op gltrim   size=    4096  med=        8.80  spread 8.70..8.85  drift 0.3%  n=7  checksums=[2552560]
+     op mimir    size=    4096  med=     1936.81  spread 1910.21..1981.96  drift 0.4%  n=7  checksums=[2552560]
+     op glarena  size=    8192  med=        7.62  spread 7.61..7.96  drift 2.9%  n=7  checksums=[2552560]
+     op glibc    size=    8192  med=        8.80  spread 8.60..8.98  drift 0.9%  n=7  checksums=[2552560]
+     op glmap    size=    8192  med=     1913.92  spread 1904.03..2883.72  drift 0.6%  n=7  checksums=[2552560]
+     op gltrim   size=    8192  med=        8.80  spread 8.79..8.80  drift 0.1%  n=7  checksums=[2552560]
+     op mimir    size=    8192  med=     2281.80  spread 2265.05..2310.96  drift 1.3%  n=7  checksums=[2552560]
+     op glarena  size=   16384  med=        7.78  spread 7.62..8.27  drift 0.4%  n=7  checksums=[1276664]
+     op glibc    size=   16384  med=        8.80  spread 8.49..8.81  drift 0.2%  n=7  checksums=[1276664]
+     op glmap    size=   16384  med=     1975.61  spread 1967.19..2005.37  drift 0.1%  n=7  checksums=[1276664]
+     op gltrim   size=   16384  med=        8.80  spread 8.42..8.89  drift 0.3%  n=7  checksums=[1276664]
+     op mimir    size=   16384  med=     2340.89  spread 2332.70..2358.69  drift 0.1%  n=7  checksums=[1276664]
+     op glarena  size=   32768  med=        7.63  spread 7.63..8.02  drift 3.9%  n=7  checksums=[1276664]
+     op glibc    size=   32768  med=        8.80  spread 8.79..9.20  drift 2.3%  n=7  checksums=[1276664]
+     op glmap    size=   32768  med=     2090.82  spread 2074.19..2119.03  drift 1.0%  n=7  checksums=[1276664]
+     op gltrim   size=   32768  med=        8.82  spread 8.43..9.17  drift 0.2%  n=7  checksums=[1276664]
+     op mimir    size=   32768  med=     2469.42  spread 2456.98..2729.18  drift 0.4%  n=7  checksums=[1276664]
+     op glarena  size=   65536  med=        7.87  spread 7.77..8.25  drift 0.1%  n=7  checksums=[1276664]
+     op glibc    size=   65536  med=        8.52  spread 8.49..9.01  drift 0.3%  n=7  checksums=[1276664]
+     op glmap    size=   65536  med=     2395.60  spread 2333.41..2542.83  drift 3.2%  n=7  checksums=[1276664]
+     op gltrim   size=   65536  med=        8.85  spread 8.50..9.21  drift 4.6%  n=7  checksums=[1276664]
+     op mimir    size=   65536  med=     2718.44  spread 2689.92..3454.03  drift 3.5%  n=7  checksums=[1276664]
+     op glarena  size=  131072  med=        8.00  spread 7.87..8.42  drift 0.6%  n=7  checksums=[630236]
+     op glibc    size=  131072  med=        7.90  spread 7.87..8.44  drift 0.0%  n=7  checksums=[630236]
+     op glmap    size=  131072  med=     2843.72  spread 2708.74..2882.08  drift 0.1%  n=7  checksums=[630236]
+     op gltrim   size=  131072  med=        8.82  spread 8.52..9.02  drift 3.2%  n=7  checksums=[630236]
+     op mimir    size=  131072  med=     3211.98  spread 3175.95..3235.24  drift 0.5%  n=7  checksums=[630236]
+     op glarena  size=  262144  med=        7.94  spread 7.87..8.23  drift 0.3%  n=7  checksums=[630236]
+     op glibc    size=  262144  med=        8.23  spread 7.88..8.43  drift 3.9%  n=7  checksums=[630236]
+     op glmap    size=  262144  med=     2201.62  spread 2149.68..2747.10  drift 22.1%  n=7  checksums=[630236]  DRIFT-REJECT
+     op gltrim   size=  262144  med=     2139.28  spread 2025.97..2260.46  drift 8.2%  n=7  checksums=[630236]  DRIFT-REJECT
+     op mimir    size=  262144  med=     2590.45  spread 2562.02..3459.04  drift 1.3%  n=7  checksums=[630236]
+     op glarena  size=  524288  med=        8.24  spread 7.87..8.31  drift 2.1%  n=7  checksums=[379844]
+     op glibc    size=  524288  med=        8.26  spread 7.88..8.41  drift 3.0%  n=7  checksums=[379844]
+     op glmap    size=  524288  med=     2223.00  spread 2182.72..2684.96  drift 1.2%  n=7  checksums=[379844]
+     op gltrim   size=  524288  med=     2061.36  spread 2035.10..2313.81  drift 0.1%  n=7  checksums=[379844]
+     op mimir    size=  524288  med=     2696.44  spread 2636.28..3289.23  drift 0.9%  n=7  checksums=[379844]
+     op glarena  size= 1048576  med=        8.20  spread 7.96..8.32  drift 1.2%  n=7  checksums=[259992]
+     op glibc    size= 1048576  med=        8.29  spread 7.83..10.29  drift 4.6%  n=7  checksums=[259992]
+     op glmap    size= 1048576  med=     2461.64  spread 2288.49..3024.72  drift 6.8%  n=7  checksums=[259992]
+     op gltrim   size= 1048576  med=     2122.55  spread 2097.86..3634.79  drift 1.6%  n=7  checksums=[259992]
+     op mimir    size= 1048576  med=     3197.08  spread 2670.29..3278.17  drift 9.8%  n=7  checksums=[259992]  DRIFT-REJECT
+     op glarena  size= 2097152  med=        8.17  spread 8.01..8.60  drift 0.6%  n=7  checksums=[127212]
+     op glibc    size= 2097152  med=        8.31  spread 8.05..8.43  drift 0.9%  n=7  checksums=[127212]
+     op glmap    size= 2097152  med=     3428.79  spread 2964.96..3830.61  drift 3.7%  n=7  checksums=[127212]
+     op gltrim   size= 2097152  med=     3621.39  spread 3065.66..3701.25  drift 9.2%  n=7  checksums=[127212]  DRIFT-REJECT
+     op mimir    size= 2097152  med=     3914.60  spread 3413.97..4048.85  drift 7.8%  n=7  checksums=[127212]
+     op glarena  size= 4194304  med=        8.18  spread 8.12..8.52  drift 1.3%  n=7  checksums=[71732]
+     op glibc    size= 4194304  med=        8.18  spread 8.12..8.50  drift 1.0%  n=7  checksums=[71732]
+     op glmap    size= 4194304  med=     3143.98  spread 3041.15..4136.23  drift 3.7%  n=7  checksums=[71732]
+     op gltrim   size= 4194304  med=     3289.63  spread 2970.27..4205.91  drift 1.3%  n=7  checksums=[71732]
+     op mimir    size= 4194304  med=     3974.16  spread 3888.67..5194.69  drift 4.6%  n=7  checksums=[71732]
+     op glarena  size= 8388608  med=        8.55  spread 8.32..8.85  drift 2.9%  n=7  checksums=[34242]
+     op glibc    size= 8388608  med=        8.75  spread 8.42..9.05  drift 1.1%  n=7  checksums=[34242]
+     op glmap    size= 8388608  med=     3114.25  spread 3083.60..4747.37  drift 1.1%  n=7  checksums=[34242]
+     op gltrim   size= 8388608  med=     3270.95  spread 3203.65..5072.98  drift 7.1%  n=7  checksums=[34242]
+     op mimir    size= 8388608  med=     3975.63  spread 3829.72..4052.48  drift 3.6%  n=7  checksums=[34242]
+     op glarena  size=16777216  med=        9.28  spread 8.88..9.82  drift 1.1%  n=7  checksums=[11339]
+     op glibc    size=16777216  med=        9.15  spread 8.75..9.55  drift 1.8%  n=7  checksums=[11339]
+     op glmap    size=16777216  med=     3092.25  spread 3037.88..3111.15  drift 0.9%  n=7  checksums=[11339]
+     op gltrim   size=16777216  med=     3331.03  spread 3261.69..3459.67  drift 1.2%  n=7  checksums=[11339]
+     op mimir    size=16777216  med=     3957.40  spread 3897.62..4225.77  drift 0.9%  n=7  checksums=[11339]
+     op glarena  size=33554432  med=       10.15  spread 9.78..10.28  drift 1.7%  n=7  checksums=[3160]
+     op glibc    size=33554432  med=     3282.89  spread 3173.55..8017.49  drift 0.1%  n=7  checksums=[3160]
+     op glmap    size=33554432  med=     3219.78  spread 3129.35..3280.51  drift 1.8%  n=7  checksums=[3160]
+     op gltrim   size=33554432  med=     3432.29  spread 3387.20..4086.78  drift 1.7%  n=7  checksums=[3160]
+     op mimir    size=33554432  med=     4011.38  spread 3918.20..4139.74  drift 0.3%  n=7  checksums=[3160]
+ opfull glibc    size= 1048576  med=     2792.92  spread 2671.09..3034.57  drift 7.5%  n=7  checksums=[3264000]
+ opfull mimir    size= 1048576  med=   106329.56  spread 105816.21..106603.78  drift 0.3%  n=7  checksums=[3264000]
+ opfull glibc    size= 8388608  med=    24760.80  spread 24651.10..25019.30  drift 0.5%  n=7  checksums=[5222400]
+ opfull mimir    size= 8388608  med=   854712.75  spread 853767.50..858139.15  drift 0.1%  n=7  checksums=[5222400]
+ opfull glibc    size=33554432  med=  3992785.50  spread 3968680.50..4038671.33  drift 1.0%  n=7  checksums=[6266880]
+ opfull mimir    size=33554432  med=  4022825.00  spread 3968371.50..4062771.33  drift 1.1%  n=7  checksums=[6266880]
+    raw notouch  size=    1024  med=      978.35  spread 975.95..991.41  drift 1.0%  n=7  checksums=[0]
+    raw touch    size=    1024  med=     1483.44  spread 1478.41..1509.97  drift 0.5%  n=7  checksums=[2552560]
+    raw notouch  size=    2048  med=      981.27  spread 973.42..1002.33  drift 0.4%  n=7  checksums=[0]
+    raw touch    size=    2048  med=     1484.45  spread 1480.52..1529.02  drift 2.2%  n=7  checksums=[2552560]
+    raw notouch  size=    4096  med=      991.57  spread 982.28..1017.98  drift 0.1%  n=7  checksums=[0]
+    raw touch    size=    4096  med=     1507.72  spread 1487.94..1573.59  drift 0.4%  n=7  checksums=[2552560]
+    raw notouch  size=    8192  med=      994.84  spread 976.16..1066.03  drift 0.7%  n=7  checksums=[0]
+    raw touch    size=    8192  med=     1877.49  spread 1855.83..1912.87  drift 0.1%  n=7  checksums=[2552560]
+    raw notouch  size=   16384  med=      983.38  spread 974.44..995.61  drift 0.1%  n=7  checksums=[0]
+    raw touch    size=   16384  med=     1923.74  spread 1916.71..1961.91  drift 0.4%  n=7  checksums=[1276664]
+    raw notouch  size=   32768  med=      994.10  spread 977.87..1032.22  drift 0.3%  n=7  checksums=[0]
+    raw touch    size=   32768  med=     2063.97  spread 2044.41..2806.94  drift 3.1%  n=7  checksums=[1276664]
+    raw notouch  size=   65536  med=      997.39  spread 985.29..1094.93  drift 0.5%  n=7  checksums=[0]
+    raw touch    size=   65536  med=     2317.48  spread 2293.79..2446.32  drift 1.5%  n=7  checksums=[1276664]
+    raw notouch  size=  131072  med=      994.36  spread 968.39..1121.30  drift 1.6%  n=7  checksums=[0]
+    raw touch    size=  131072  med=     2776.86  spread 2754.81..3161.33  drift 0.8%  n=7  checksums=[630236]
+    raw notouch  size=  262144  med=     1018.65  spread 851.28..1106.84  drift 2.7%  n=7  checksums=[0]
+    raw touch    size=  262144  med=     2148.15  spread 2132.01..2732.90  drift 7.9%  n=7  checksums=[630236]
+    raw notouch  size=  524288  med=     1026.71  spread 1014.74..1042.03  drift 0.8%  n=7  checksums=[0]
+    raw touch    size=  524288  med=     2181.68  spread 2129.85..2755.80  drift 0.7%  n=7  checksums=[379844]
+    raw notouch  size= 1048576  med=     1080.03  spread 819.65..1395.18  drift 18.6%  n=7  checksums=[0]  DRIFT-REJECT
+    raw touch    size= 1048576  med=     2699.56  spread 2213.64..3575.99  drift 5.4%  n=7  checksums=[259992]
+    raw notouch  size= 2097152  med=      868.18  spread 842.47..881.49  drift 3.1%  n=7  checksums=[0]
+    raw touch    size= 2097152  med=     3163.89  spread 2765.44..3418.56  drift 16.9%  n=7  checksums=[127212]  DRIFT-REJECT
+    raw notouch  size= 4194304  med=      896.71  spread 820.82..916.58  drift 2.1%  n=7  checksums=[0]
+    raw touch    size= 4194304  med=     3212.49  spread 3065.61..3255.78  drift 0.6%  n=7  checksums=[71732]
+    raw notouch  size= 8388608  med=      941.23  spread 828.55..961.23  drift 8.3%  n=7  checksums=[0]  DRIFT-REJECT
+    raw touch    size= 8388608  med=     3202.49  spread 3086.80..3309.52  drift 0.7%  n=7  checksums=[34242]
+    raw notouch  size=16777216  med=      960.46  spread 949.24..1068.66  drift 7.3%  n=7  checksums=[0]
+    raw touch    size=16777216  med=     3294.83  spread 3144.81..5523.32  drift 1.0%  n=7  checksums=[11339]
+    raw notouch  size=33554432  med=      975.45  spread 956.79..1075.14  drift 2.0%  n=7  checksums=[0]
+    raw touch    size=33554432  med=     3337.86  spread 3248.70..7433.65  drift 0.9%  n=7  checksums=[3160]
+
+=== checksum discipline ===
+size 1024: endpoint-touch family [2552560] -> OK
+size 2048: endpoint-touch family [2552560] -> OK
+size 4096: endpoint-touch family [2552560] -> OK
+size 8192: endpoint-touch family [2552560] -> OK
+size 16384: endpoint-touch family [1276664] -> OK
+size 32768: endpoint-touch family [1276664] -> OK
+size 65536: endpoint-touch family [1276664] -> OK
+size 131072: endpoint-touch family [630236] -> OK
+size 262144: endpoint-touch family [630236] -> OK
+size 524288: endpoint-touch family [379844] -> OK
+size 1048576: endpoint-touch family [259992] -> OK
+size 2097152: endpoint-touch family [127212] -> OK
+size 4194304: endpoint-touch family [71732] -> OK
+size 8388608: endpoint-touch family [34242] -> OK
+size 16777216: endpoint-touch family [11339] -> OK
+size 33554432: endpoint-touch family [3160] -> OK
+size 1048576: opfull family [3264000] -> OK
+size 8388608: opfull family [5222400] -> OK
+size 33554432: opfull family [6266880] -> OK
+checksum verdict: ALL OK
+
+=== PER-SIZE COST TABLE (endpoint touch, single block live) ===
+pair = raw/notouch; faults = raw/touch - raw/notouch;
+book = mimir - raw/touch (residual; at 1024 mimir is on
+the span path, so the split is shown for contrast only);
+waste = MimirAlloc mapping_length - request (reserve page
++ page round-up), from alloc_locked geometry.
+     size      mimir     glibc      glmap    glarena     gltrim      pair    faults      book   mim/gl  mim/are  flt/op   wasteB   waste%
+     1024      23.98      2.16    1514.42       2.16       2.16    978.35    505.09  -1459.46    11.10    11.10   0.000     7168   700.00
+     2048    1911.00      8.22    1508.25       7.59       8.04    981.27    503.18    426.55   232.48   251.78   2.000     6144   300.00
+     4096    1936.81      8.80    1907.84       7.65       8.80    991.57    516.15    429.09   220.09   253.18   2.000     4096   100.00
+     8192    2281.80      8.80    1913.92       7.62       8.80    994.84    882.65    404.31   259.30   299.45   3.000     4096    50.00
+    16384    2340.89      8.80    1975.61       7.78       8.80    983.38    940.36    417.15   266.01   300.89   3.000     4096    25.00
+    32768    2469.42      8.80    2090.82       7.63       8.82    994.10   1069.87    405.45   280.62   323.65   3.000     4096    12.50
+    65536    2718.44      8.52    2395.60       7.87       8.85    997.39   1320.09    400.96   319.07   345.42   3.000     4096     6.25
+   131072    3211.98      7.90    2843.72       8.00       8.82    994.36   1782.50    435.12   406.58   401.50   3.000     4096     3.12
+   262144    2590.45      8.23    2201.62       7.94    2139.28   1018.65   1129.50    442.30   314.76   326.25   3.000     4096     1.56
+   524288    2696.44      8.26    2223.00       8.24    2061.36   1026.71   1154.97    514.76   326.45   327.24   3.001     4096     0.78
+  1048576    3197.08      8.29    2461.64       8.20    2122.55   1080.03   1619.53    497.52   385.66   389.89   3.001     4096     0.39
+  2097152    3914.60      8.31    3428.79       8.17    3621.39    868.18   2295.71    750.71   471.07   479.14   3.002     4096     0.20
+  4194304    3974.16      8.18    3143.98       8.18    3289.63    896.71   2315.78    761.67   485.84   485.84   3.003     4096     0.10
+  8388608    3975.63      8.75    3114.25       8.55    3270.95    941.23   2261.26    773.14   454.36   464.99   3.007     4096     0.05
+ 16777216    3957.40      9.15    3092.25       9.28    3331.03    960.46   2334.37    662.57   432.50   426.44   3.013     4096     0.02
+ 33554432    4011.38   3282.89    3219.78      10.15    3432.29    975.45   2362.41    673.52     1.22   395.21   3.025     4096     0.01
+
+=== PER-DECADE SUMMARY (mean of per-size medians, ns/op) ===
+     1-8 KiB: mimir    1538.40  glibc      7.00  glmap    1711.11  glarena       6.25  gltrim       6.95  reuse saving vs mimir    1532.14 (99.6%)
+   16-64 KiB: mimir    2509.58  glibc      8.71  glmap    2154.01  glarena       7.76  gltrim       8.82  reuse saving vs mimir    2501.82 (99.7%)
+ 128-512 KiB: mimir    2832.96  glibc      8.13  glmap    2422.78  glarena       8.06  gltrim    1403.15  reuse saving vs mimir    2824.90 (99.7%)
+     1-4 MiB: mimir    3695.28  glibc      8.26  glmap    3011.47  glarena       8.18  gltrim    3011.19  reuse saving vs mimir    3687.10 (99.8%)
+    8-32 MiB: mimir    3981.47  glibc   1100.26  glmap    3142.09  glarena       9.33  gltrim    3344.76  reuse saving vs mimir    3972.14 (99.8%)
+
+=== DENSE TOUCH (opfull: every user page written+read) ===
+size   1048576: mimir    106329.56  glibc-steady      2792.92  ratio    38.07x  faults/op mimir 257.0 glibc 0.020
+size   8388608: mimir    854712.75  glibc-steady     24760.80  ratio    34.52x  faults/op mimir 2049.1 glibc 0.100
+size  33554432: mimir   4022825.00  glibc-steady   3992785.50  ratio     1.01x  faults/op mimir 8193.3 glibc 8192.333
+
+=== CUTOFF OPTIONS PRICED ===
+model: size <= cutoff pays the glarena (reuse proxy)
+median; size > cutoff pays the measured mimir median.
+The proxy is glibc's arena, not a built MimirAlloc
+reuse path: a real one pays MimirAlloc bookkeeping
+on top. Direction and scale are the claim, not the
+last digit.
+   cutoff  uniform-mix  saving%  large_batch-mix  saving%
+     1024      2824.35      0.0          2506.61      0.0
+     8192      2442.68     13.5          1810.35     27.8
+    32768      2143.00     24.1          1421.49     43.3
+   131072      1773.34     37.2           969.73     61.3
+   524288      1443.92     48.9           539.31     78.5
+  1048576      1244.62     55.9             7.83     99.7
+  4194304       752.59     73.4             7.83     99.7
+ 33554432         7.81     99.7             7.83     99.7
+
+=== GLIBC THRESHOLD TABLES (fresh process per verdict) ===
+T1,1024,0,0,135168,1040,ARENA
+T1,4096,0,0,139264,4112,ARENA
+T1,16384,0,0,151552,16400,ARENA
+T1,65536,0,0,200704,65552,ARENA
+T1,98304,0,0,233472,98320,ARENA
+T1,114688,0,0,249856,114704,ARENA
+T1,126976,0,0,262144,126992,ARENA
+T1,129024,0,0,262144,129040,ARENA
+T1,130048,0,0,262144,130064,ARENA
+T1,130560,0,0,262144,130576,ARENA
+T1,130944,0,0,262144,130960,ARENA
+T1,131040,0,0,266240,131056,ARENA
+T1,131048,0,0,266240,131056,ARENA
+T1,131049,1,135168,0,0,MMAP
+T1,131056,1,135168,0,0,MMAP
+T1,131063,1,135168,0,0,MMAP
+T1,131064,1,135168,0,0,MMAP
+T1,131072,1,135168,0,0,MMAP
+T1,131136,1,135168,0,0,MMAP
+T1,132096,1,135168,0,0,MMAP
+T1,262144,1,266240,0,0,MMAP
+T1,1048576,1,1052672,0,0,MMAP
+T1,33554432,1,33558528,0,0,MMAP
+TD,262144,1,266240,0,0,ARENA
+TD,262144,1,266240,0,0,ARENA
+TD,262144,1,266240,1,528384,MMAP
+TD,1048576,1,1052672,0,0,ARENA
+TD,1048576,1,1052672,0,0,ARENA
+TD,1048576,1,1052672,1,2101248,MMAP
+TD,8388608,1,8392704,0,0,ARENA
+TD,8388608,1,8392704,0,0,ARENA
+TD,8388608,1,8392704,1,16781312,MMAP
+TD,33554400,1,33554432,0,0,ARENA
+TD,33554400,1,33554432,1,33554432,MMAP
+TD,33554400,1,33554432,1,33558528,MMAP
+TD,33554432,1,33558528,1,16781312,MMAP
+TD,67108864,1,67112960,1,16781312,MMAP
+TS,1048576,1,1052672,0,0,ARENA
+TM,131072,8388608,1,8392704,1,4198400,MMAP
+TM,67108864,1048576,0,0,0,0,ARENA
+
+=== BOUNDARY EXHIBIT (op/mimir at the cutoff, 3 processes each, run after attempt 3, verbatim) ===
+op,mimir,1025,1,20000,39236897,1961.84,40002,2552560
+op,mimir,1024,1,20000,480147,24.01,2,2552560
+op,mimir,1025,1,20000,38770996,1938.55,40002,2552560
+op,mimir,1024,1,20000,476341,23.82,2,2552560
+op,mimir,1025,1,20000,38043346,1902.17,40002,2552560
+op,mimir,1024,1,20000,479686,23.98,2,2552560
+
+=== RAW CSV (attempt 3, one line per process: phase,leg,size,live,iters,total_ns,ns_per_op,minflt_delta,checksum; threshold lines follow in T1/TD/TS/TM formats defined in the method section) ===
+op,mimir,1024,1,20000,475980,23.80,2,2552560
+op,glibc,1024,1,20000,43241,2.16,2,2552560
+op,glmap,1024,1,20000,30773025,1538.65,20004,2552560
+op,glarena,1024,1,20000,43251,2.16,2,2552560
+op,gltrim,1024,1,20000,43241,2.16,2,2552560
+raw,notouch,1024,1,20000,19828175,991.41,2,0
+raw,touch,1024,1,20000,30199323,1509.97,20002,2552560
+op,mimir,1024,1,20000,480208,24.01,2,2552560
+op,glibc,1024,1,20000,43151,2.16,2,2552560
+op,glmap,1024,1,20000,30691162,1534.56,20004,2552560
+op,glarena,1024,1,20000,43211,2.16,2,2552560
+op,gltrim,1024,1,20000,43221,2.16,2,2552560
+raw,notouch,1024,1,20000,19752724,987.64,2,0
+raw,touch,1024,1,20000,29811969,1490.60,20002,2552560
+op,mimir,1024,1,20000,479596,23.98,2,2552560
+op,glibc,1024,1,20000,48410,2.42,2,2552560
+op,glmap,1024,1,20000,30151884,1507.59,20004,2552560
+op,glarena,1024,1,20000,43200,2.16,2,2552560
+op,gltrim,1024,1,20000,43110,2.16,2,2552560
+raw,notouch,1024,1,20000,19546389,977.32,2,0
+raw,touch,1024,1,20000,29668791,1483.44,20002,2552560
+op,mimir,1024,1,20000,480328,24.02,2,2552560
+op,glibc,1024,1,20000,43190,2.16,2,2552560
+op,glmap,1024,1,20000,30146955,1507.35,20004,2552560
+op,glarena,1024,1,20000,43221,2.16,2,2552560
+op,gltrim,1024,1,20000,43251,2.16,2,2552560
+raw,notouch,1024,1,20000,19530579,976.53,2,0
+raw,touch,1024,1,20000,29568193,1478.41,20002,2552560
+op,mimir,1024,1,20000,478755,23.94,2,2552560
+op,glibc,1024,1,20000,43211,2.16,2,2552560
+op,glmap,1024,1,20000,30288419,1514.42,20004,2552560
+op,glarena,1024,1,20000,43161,2.16,2,2552560
+op,gltrim,1024,1,20000,43140,2.16,2,2552560
+raw,notouch,1024,1,20000,19567058,978.35,2,0
+raw,touch,1024,1,20000,29643694,1482.18,20002,2552560
+op,mimir,1024,1,20000,475329,23.77,2,2552560
+op,glibc,1024,1,20000,43201,2.16,2,2552560
+op,glmap,1024,1,20000,30104125,1505.21,20004,2552560
+op,glarena,1024,1,20000,43170,2.16,2,2552560
+op,gltrim,1024,1,20000,43111,2.16,2,2552560
+raw,notouch,1024,1,20000,19576234,978.81,2,0
+raw,touch,1024,1,20000,29760663,1488.03,20002,2552560
+op,mimir,1024,1,20000,561449,28.07,2,2552560
+op,glibc,1024,1,20000,43251,2.16,2,2552560
+op,glmap,1024,1,20000,30297827,1514.89,20004,2552560
+op,glarena,1024,1,20000,43451,2.17,2,2552560
+op,gltrim,1024,1,20000,43311,2.17,2,2552560
+raw,notouch,1024,1,20000,19519038,975.95,2,0
+raw,touch,1024,1,20000,29656237,1482.81,20002,2552560
+op,mimir,2048,1,20000,38289947,1914.50,40002,2552560
+op,glibc,2048,1,20000,164458,8.22,3,2552560
+op,glmap,2048,1,20000,30285264,1514.26,20004,2552560
+op,glarena,2048,1,20000,157815,7.89,3,2552560
+op,gltrim,2048,1,20000,164538,8.23,3,2552560
+raw,notouch,2048,1,20000,19661675,983.08,2,0
+raw,touch,2048,1,20000,29688958,1484.45,20002,2552560
+op,mimir,2048,1,20000,38220076,1911.00,40002,2552560
+op,glibc,2048,1,20000,160520,8.03,3,2552560
+op,glmap,2048,1,20000,30165018,1508.25,20004,2552560
+op,glarena,2048,1,20000,149449,7.47,3,2552560
+op,gltrim,2048,1,20000,157314,7.87,3,2552560
+raw,notouch,2048,1,20000,19634093,981.70,2,0
+raw,touch,2048,1,20000,29684079,1484.20,20002,2552560
+op,mimir,2048,1,20000,38390214,1919.51,40002,2552560
+op,glibc,2048,1,20000,168315,8.42,3,2552560
+op,glmap,2048,1,20000,30179245,1508.96,20004,2552560
+op,glarena,2048,1,20000,154509,7.73,3,2552560
+op,gltrim,2048,1,20000,160640,8.03,3,2552560
+raw,notouch,2048,1,20000,19513117,975.66,2,0
+raw,touch,2048,1,20000,29610422,1480.52,20002,2552560
+op,mimir,2048,1,20000,38051110,1902.56,40002,2552560
+op,glibc,2048,1,20000,158527,7.93,3,2552560
+op,glmap,2048,1,20000,29714346,1485.72,20004,2552560
+op,glarena,2048,1,20000,149018,7.45,3,2552560
+op,gltrim,2048,1,20000,162273,8.11,3,2552560
+raw,notouch,2048,1,20000,19490525,974.53,2,0
+raw,touch,2048,1,20000,30091061,1504.55,20002,2552560
+op,mimir,2048,1,20000,37978284,1898.91,40002,2552560
+op,glibc,2048,1,20000,157003,7.85,3,2552560
+op,glmap,2048,1,20000,29985493,1499.27,20004,2552560
+op,glarena,2048,1,20000,148939,7.45,3,2552560
+op,gltrim,2048,1,20000,162363,8.12,3,2552560
+raw,notouch,2048,1,20000,19468363,973.42,2,0
+raw,touch,2048,1,20000,30580034,1529.00,20002,2552560
+op,mimir,2048,1,20000,38372581,1918.63,40002,2552560
+op,glibc,2048,1,20000,168214,8.41,3,2552560
+op,glmap,2048,1,20000,30333854,1516.69,20004,2552560
+op,glarena,2048,1,20000,160129,8.01,3,2552560
+op,gltrim,2048,1,20000,160891,8.04,3,2552560
+raw,notouch,2048,1,20000,19625376,981.27,2,0
+raw,touch,2048,1,20000,29641099,1482.05,20002,2552560
+op,mimir,2048,1,20000,38185852,1909.29,40002,2552560
+op,glibc,2048,1,20000,172532,8.63,3,2552560
+op,glmap,2048,1,20000,30105026,1505.25,20004,2552560
+op,glarena,2048,1,20000,151713,7.59,3,2552560
+op,gltrim,2048,1,20000,158747,7.94,3,2552560
+raw,notouch,2048,1,20000,20046514,1002.33,2,0
+raw,touch,2048,1,20000,30580365,1529.02,20002,2552560
+op,mimir,4096,1,20000,38736130,1936.81,40002,2552560
+op,glibc,4096,1,20000,176009,8.80,2,2552560
+op,glmap,4096,1,20000,39312608,1965.63,40004,2552560
+op,glarena,4096,1,20000,154489,7.72,2,2552560
+op,gltrim,4096,1,20000,175548,8.78,2,2552560
+raw,notouch,4096,1,20000,20359680,1017.98,2,0
+raw,touch,4096,1,20000,31471892,1573.59,20002,2552560
+op,mimir,4096,1,20000,38843251,1942.16,40002,2552560
+op,glibc,4096,1,20000,176440,8.82,2,2552560
+op,glmap,4096,1,20000,38616728,1930.84,40004,2552560
+op,glarena,4096,1,20000,152666,7.63,2,2552560
+op,gltrim,4096,1,20000,177071,8.85,2,2552560
+raw,notouch,4096,1,20000,19840067,992.00,2,0
+raw,touch,4096,1,20000,30098083,1504.90,20002,2552560
+op,mimir,4096,1,20000,38204126,1910.21,40002,2552560
+op,glibc,4096,1,20000,176159,8.81,2,2552560
+op,glmap,4096,1,20000,38156738,1907.84,40004,2552560
+op,glarena,4096,1,20000,157304,7.87,2,2552560
+op,gltrim,4096,1,20000,176129,8.81,2,2552560
+raw,notouch,4096,1,20000,19645694,982.28,2,0
+raw,touch,4096,1,20000,30086231,1504.31,20002,2552560
+op,mimir,4096,1,20000,38883787,1944.19,40002,2552560
+op,glibc,4096,1,20000,172442,8.62,2,2552560
+op,glmap,4096,1,20000,38067872,1903.39,40004,2552560
+op,glarena,4096,1,20000,152705,7.64,2,2552560
+op,gltrim,4096,1,20000,175999,8.80,2,2552560
+raw,notouch,4096,1,20000,19705927,985.30,2,0
+raw,touch,4096,1,20000,30647611,1532.38,20002,2552560
+op,mimir,4096,1,20000,39639259,1981.96,40002,2552560
+op,glibc,4096,1,20000,176089,8.80,2,2552560
+op,glmap,4096,1,20000,38167899,1908.39,40004,2552560
+op,glarena,4096,1,20000,155671,7.78,2,2552560
+op,gltrim,4096,1,20000,173996,8.70,2,2552560
+raw,notouch,4096,1,20000,20008693,1000.43,2,0
+raw,touch,4096,1,20000,30269865,1513.49,20002,2552560
+op,mimir,4096,1,20000,38270530,1913.53,40002,2552560
+op,glibc,4096,1,20000,172413,8.62,2,2552560
+op,glmap,4096,1,20000,37951033,1897.55,40004,2552560
+op,glarena,4096,1,20000,152946,7.65,2,2552560
+op,gltrim,4096,1,20000,175468,8.77,2,2552560
+raw,notouch,4096,1,20000,19814961,990.75,2,0
+raw,touch,4096,1,20000,30154349,1507.72,20002,2552560
+op,mimir,4096,1,20000,38310375,1915.52,40002,2552560
+op,glibc,4096,1,20000,176210,8.81,2,2552560
+op,glmap,4096,1,20000,37914335,1895.72,40004,2552560
+op,glarena,4096,1,20000,152585,7.63,2,2552560
+op,gltrim,4096,1,20000,176229,8.81,2,2552560
+raw,notouch,4096,1,20000,19831382,991.57,2,0
+raw,touch,4096,1,20000,29758820,1487.94,20002,2552560
+op,mimir,8192,1,20000,45635959,2281.80,60002,2552560
+op,glibc,8192,1,20000,176019,8.80,2,2552560
+op,glmap,8192,1,20000,38532270,1926.61,40004,2552560
+op,glarena,8192,1,20000,152295,7.61,2,2552560
+op,gltrim,8192,1,20000,175869,8.79,2,2552560
+raw,notouch,8192,1,20000,19896824,994.84,2,0
+raw,touch,8192,1,20000,37952445,1897.62,40002,2552560
+op,mimir,8192,1,20000,45380752,2269.04,60002,2552560
+op,glibc,8192,1,20000,175869,8.79,2,2552560
+op,glmap,8192,1,20000,38461979,1923.10,40004,2552560
+op,glarena,8192,1,20000,156864,7.84,2,2552560
+op,gltrim,8192,1,20000,175889,8.79,2,2552560
+raw,notouch,8192,1,20000,20389856,1019.49,2,0
+raw,touch,8192,1,20000,37379044,1868.95,40002,2552560
+op,mimir,8192,1,20000,45540049,2277.00,60002,2552560
+op,glibc,8192,1,20000,175718,8.79,2,2552560
+op,glmap,8192,1,20000,38278416,1913.92,40004,2552560
+op,glarena,8192,1,20000,159238,7.96,2,2552560
+op,gltrim,8192,1,20000,175909,8.80,2,2552560
+raw,notouch,8192,1,20000,19574291,978.71,2,0
+raw,touch,8192,1,20000,37573938,1878.70,40002,2552560
+op,mimir,8192,1,20000,46219169,2310.96,60002,2552560
+op,glibc,8192,1,20000,178674,8.93,2,2552560
+op,glmap,8192,1,20000,57674352,2883.72,40004,2552560
+op,glarena,8192,1,20000,152214,7.61,2,2552560
+op,gltrim,8192,1,20000,176019,8.80,2,2552560
+raw,notouch,8192,1,20000,21320645,1066.03,2,0
+raw,touch,8192,1,20000,38257396,1912.87,40002,2552560
+op,mimir,8192,1,20000,46072255,2303.61,60002,2552560
+op,glibc,8192,1,20000,171971,8.60,2,2552560
+op,glmap,8192,1,20000,38080685,1904.03,40004,2552560
+op,glarena,8192,1,20000,152424,7.62,2,2552560
+op,gltrim,8192,1,20000,175959,8.80,2,2552560
+raw,notouch,8192,1,20000,19523215,976.16,2,0
+raw,touch,8192,1,20000,37549743,1877.49,40002,2552560
+op,mimir,8192,1,20000,46162593,2308.13,60002,2552560
+op,glibc,8192,1,20000,179626,8.98,2,2552560
+op,glmap,8192,1,20000,38190050,1909.50,40004,2552560
+op,glarena,8192,1,20000,152435,7.62,2,2552560
+op,gltrim,8192,1,20000,176019,8.80,2,2552560
+raw,notouch,8192,1,20000,19601762,980.09,2,0
+raw,touch,8192,1,20000,37116523,1855.83,40002,2552560
+op,mimir,8192,1,20000,45300903,2265.05,60002,2552560
+op,glibc,8192,1,20000,176229,8.81,2,2552560
+op,glmap,8192,1,20000,38254130,1912.71,40004,2552560
+op,glarena,8192,1,20000,152715,7.64,2,2552560
+op,gltrim,8192,1,20000,175939,8.80,2,2552560
+raw,notouch,8192,1,20000,19918074,995.90,2,0
+raw,touch,8192,1,20000,37495011,1874.75,40002,2552560
+op,mimir,16384,1,10000,23401675,2340.17,30002,1276664
+op,glibc,16384,1,10000,87984,8.80,2,1276664
+op,glmap,16384,1,10000,19700116,1970.01,20004,1276664
+op,glarena,16384,1,10000,82705,8.27,2,1276664
+op,gltrim,16384,1,10000,88165,8.82,2,1276664
+raw,notouch,16384,1,10000,9752901,975.29,2,0
+raw,touch,16384,1,10000,19220108,1922.01,20002,1276664
+op,mimir,16384,1,10000,23586912,2358.69,30002,1276664
+op,glibc,16384,1,10000,84938,8.49,2,1276664
+op,glmap,16384,1,10000,19761802,1976.18,20004,1276664
+op,glarena,16384,1,10000,76243,7.62,2,1276664
+op,gltrim,16384,1,10000,88035,8.80,2,1276664
+raw,notouch,16384,1,10000,9833823,983.38,2,0
+raw,touch,16384,1,10000,19396429,1939.64,20002,1276664
+op,mimir,16384,1,10000,23408950,2340.89,30002,1276664
+op,glibc,16384,1,10000,87815,8.78,2,1276664
+op,glmap,16384,1,10000,20053717,2005.37,20004,1276664
+op,glarena,16384,1,10000,77775,7.78,2,1276664
+op,gltrim,16384,1,10000,88856,8.89,2,1276664
+raw,notouch,16384,1,10000,9956071,995.61,2,0
+raw,touch,16384,1,10000,19237371,1923.74,20002,1276664
+op,mimir,16384,1,10000,23338768,2333.88,30002,1276664
+op,glibc,16384,1,10000,88014,8.80,2,1276664
+op,glmap,16384,1,10000,19730403,1973.04,20004,1276664
+op,glarena,16384,1,10000,76383,7.64,2,1276664
+op,gltrim,16384,1,10000,87944,8.79,2,1276664
+raw,notouch,16384,1,10000,9780814,978.08,2,0
+raw,touch,16384,1,10000,19167090,1916.71,20002,1276664
+op,mimir,16384,1,10000,23418918,2341.89,30002,1276664
+op,glibc,16384,1,10000,88055,8.81,2,1276664
+op,glmap,16384,1,10000,19671904,1967.19,20004,1276664
+op,glarena,16384,1,10000,76342,7.63,2,1276664
+op,gltrim,16384,1,10000,84158,8.42,2,1276664
+raw,notouch,16384,1,10000,9744405,974.44,2,0
+raw,touch,16384,1,10000,19234055,1923.41,20002,1276664
+op,mimir,16384,1,10000,23430820,2343.08,30002,1276664
+op,glibc,16384,1,10000,88014,8.80,2,1276664
+op,glmap,16384,1,10000,19756060,1975.61,20004,1276664
+op,glarena,16384,1,10000,78466,7.85,2,1276664
+op,gltrim,16384,1,10000,87975,8.80,2,1276664
+raw,notouch,16384,1,10000,9864159,986.42,2,0
+raw,touch,16384,1,10000,19619115,1961.91,20002,1276664
+op,mimir,16384,1,10000,23326985,2332.70,30002,1276664
+op,glibc,16384,1,10000,88044,8.80,2,1276664
+op,glmap,16384,1,10000,19779735,1977.97,20004,1276664
+op,glarena,16384,1,10000,79939,7.99,2,1276664
+op,gltrim,16384,1,10000,87985,8.80,2,1276664
+raw,notouch,16384,1,10000,9860884,986.09,2,0
+raw,touch,16384,1,10000,19381491,1938.15,20002,1276664
+op,mimir,32768,1,10000,26678301,2667.83,30002,1276664
+op,glibc,32768,1,10000,90018,9.00,2,1276664
+op,glmap,32768,1,10000,21190261,2119.03,20004,1276664
+op,glarena,32768,1,10000,77004,7.70,2,1276664
+op,gltrim,32768,1,10000,84328,8.43,2,1276664
+raw,notouch,32768,1,10000,9953306,995.33,2,0
+raw,touch,32768,1,10000,21382351,2138.24,20002,1276664
+op,mimir,32768,1,10000,24798076,2479.81,30002,1276664
+op,glibc,32768,1,10000,91461,9.15,2,1276664
+op,glmap,32768,1,10000,21057384,2105.74,20004,1276664
+op,glarena,32768,1,10000,79268,7.93,2,1276664
+op,gltrim,32768,1,10000,87955,8.80,2,1276664
+raw,notouch,32768,1,10000,9778660,977.87,2,0
+raw,touch,32768,1,10000,21234044,2123.40,20002,1276664
+op,mimir,32768,1,10000,24578566,2457.86,30002,1276664
+op,glibc,32768,1,10000,87934,8.79,2,1276664
+op,glmap,32768,1,10000,20908174,2090.82,20004,1276664
+op,glarena,32768,1,10000,80190,8.02,2,1276664
+op,gltrim,32768,1,10000,88135,8.81,2,1276664
+raw,notouch,32768,1,10000,10322236,1032.22,2,0
+raw,touch,32768,1,10000,20497908,2049.79,20002,1276664
+op,mimir,32768,1,10000,24693861,2469.39,30002,1276664
+op,glibc,32768,1,10000,87935,8.79,2,1276664
+op,glmap,32768,1,10000,20815591,2081.56,20004,1276664
+op,glarena,32768,1,10000,76312,7.63,2,1276664
+op,gltrim,32768,1,10000,88195,8.82,2,1276664
+raw,notouch,32768,1,10000,9941033,994.10,2,0
+raw,touch,32768,1,10000,28069441,2806.94,20002,1276664
+op,mimir,32768,1,10000,27291758,2729.18,30002,1276664
+op,glibc,32768,1,10000,88044,8.80,2,1276664
+op,glmap,32768,1,10000,21168130,2116.81,20004,1276664
+op,glarena,32768,1,10000,76263,7.63,2,1276664
+op,gltrim,32768,1,10000,88155,8.82,2,1276664
+raw,notouch,32768,1,10000,10037503,1003.75,2,0
+raw,touch,32768,1,10000,20541349,2054.13,20002,1276664
+op,mimir,32768,1,10000,24694212,2469.42,30002,1276664
+op,glibc,32768,1,10000,91982,9.20,2,1276664
+op,glmap,32768,1,10000,20741944,2074.19,20004,1276664
+op,glarena,32768,1,10000,76262,7.63,2,1276664
+op,gltrim,32768,1,10000,88215,8.82,2,1276664
+raw,notouch,32768,1,10000,9800491,980.05,2,0
+raw,touch,32768,1,10000,20639733,2063.97,20002,1276664
+op,mimir,32768,1,10000,24569799,2456.98,30002,1276664
+op,glibc,32768,1,10000,87964,8.80,2,1276664
+op,glmap,32768,1,10000,20875704,2087.57,20004,1276664
+op,glarena,32768,1,10000,76272,7.63,2,1276664
+op,gltrim,32768,1,10000,91722,9.17,2,1276664
+raw,notouch,32768,1,10000,9898804,989.88,2,0
+raw,touch,32768,1,10000,20444137,2044.41,20002,1276664
+op,mimir,65536,1,10000,27184387,2718.44,30002,1276664
+op,glibc,65536,1,10000,88215,8.82,2,1276664
+op,glmap,65536,1,10000,23583165,2358.32,20004,1276664
+op,glarena,65536,1,10000,78457,7.85,2,1276664
+op,gltrim,65536,1,10000,92123,9.21,2,1276664
+raw,notouch,65536,1,10000,9951883,995.19,2,0
+raw,touch,65536,1,10000,22981200,2298.12,20002,1276664
+op,mimir,65536,1,10000,26899224,2689.92,30002,1276664
+op,glibc,65536,1,10000,84898,8.49,2,1276664
+op,glmap,65536,1,10000,23334099,2333.41,20004,1276664
+op,glarena,65536,1,10000,78697,7.87,2,1276664
+op,gltrim,65536,1,10000,85310,8.53,2,1276664
+raw,notouch,65536,1,10000,9852888,985.29,2,0
+raw,touch,65536,1,10000,22979767,2297.98,20002,1276664
+op,mimir,65536,1,10000,27081675,2708.17,30002,1276664
+op,glibc,65536,1,10000,85029,8.50,2,1276664
+op,glmap,65536,1,10000,23432874,2343.29,20004,1276664
+op,glarena,65536,1,10000,82515,8.25,2,1276664
+op,gltrim,65536,1,10000,85069,8.51,2,1276664
+raw,notouch,65536,1,10000,9963295,996.33,2,0
+raw,touch,65536,1,10000,22937859,2293.79,20002,1276664
+op,mimir,65536,1,10000,27525575,2752.56,30002,1276664
+op,glibc,65536,1,10000,85019,8.50,2,1276664
+op,glmap,65536,1,10000,23955962,2395.60,20004,1276664
+op,glarena,65536,1,10000,77705,7.77,2,1276664
+op,gltrim,65536,1,10000,90369,9.04,2,1276664
+raw,notouch,65536,1,10000,9999904,999.99,2,0
+raw,touch,65536,1,10000,23247066,2324.71,20002,1276664
+op,mimir,65536,1,10000,27144732,2714.47,30002,1276664
+op,glibc,65536,1,10000,85280,8.53,2,1276664
+op,glmap,65536,1,10000,23983854,2398.39,20004,1276664
+op,glarena,65536,1,10000,78657,7.87,2,1276664
+op,gltrim,65536,1,10000,84989,8.50,2,1276664
+raw,notouch,65536,1,10000,9973915,997.39,2,0
+raw,touch,65536,1,10000,23428406,2342.84,20002,1276664
+op,mimir,65536,1,10000,34540318,3454.03,30002,1276664
+op,glibc,65536,1,10000,85249,8.52,2,1276664
+op,glmap,65536,1,10000,24436681,2443.67,20004,1276664
+op,glarena,65536,1,10000,78667,7.87,2,1276664
+op,gltrim,65536,1,10000,90299,9.03,2,1276664
+raw,notouch,65536,1,10000,9999593,999.96,2,0
+raw,touch,65536,1,10000,23174811,2317.48,20002,1276664
+op,mimir,65536,1,10000,28516166,2851.62,30002,1276664
+op,glibc,65536,1,10000,90069,9.01,2,1276664
+op,glmap,65536,1,10000,25428324,2542.83,20004,1276664
+op,glarena,65536,1,10000,78547,7.85,2,1276664
+op,gltrim,65536,1,10000,88455,8.85,2,1276664
+raw,notouch,65536,1,10000,10949288,1094.93,2,0
+raw,touch,65536,1,10000,24463220,2446.32,20002,1276664
+op,mimir,131072,1,5000,16176208,3235.24,15002,630236
+op,glibc,131072,1,5000,40186,8.04,2,630236
+op,glmap,131072,1,5000,14229920,2845.98,10004,630236
+op,glarena,131072,1,5000,42089,8.42,2,630236
+op,gltrim,131072,1,5000,44112,8.82,2,630236
+raw,notouch,131072,1,5000,5033128,1006.63,2,0
+raw,touch,131072,1,5000,13957301,2791.46,10002,630236
+op,mimir,131072,1,5000,16075421,3215.08,15002,630236
+op,glibc,131072,1,5000,39344,7.87,2,630236
+op,glmap,131072,1,5000,14218589,2843.72,10004,630236
+op,glarena,131072,1,5000,39995,8.00,2,630236
+op,gltrim,131072,1,5000,42599,8.52,2,630236
+raw,notouch,131072,1,5000,4962256,992.45,2,0
+raw,touch,131072,1,5000,13884294,2776.86,10002,630236
+op,mimir,131072,1,5000,16059912,3211.98,15002,630236
+op,glibc,131072,1,5000,39514,7.90,2,630236
+op,glmap,131072,1,5000,13543688,2708.74,10004,630236
+op,glarena,131072,1,5000,39604,7.92,2,630236
+op,gltrim,131072,1,5000,42699,8.54,2,630236
+raw,notouch,131072,1,5000,5606510,1121.30,2,0
+raw,touch,131072,1,5000,15806648,3161.33,10002,630236
+op,mimir,131072,1,5000,16024325,3204.86,15002,630236
+op,glibc,131072,1,5000,39524,7.90,2,630236
+op,glmap,131072,1,5000,14164758,2832.95,10004,630236
+op,glarena,131072,1,5000,39363,7.87,2,630236
+op,gltrim,131072,1,5000,44162,8.83,2,630236
+raw,notouch,131072,1,5000,5019183,1003.84,2,0
+raw,touch,131072,1,5000,13774048,2754.81,10002,630236
+op,mimir,131072,1,5000,16062406,3212.48,15002,630236
+op,glibc,131072,1,5000,42188,8.44,2,630236
+op,glmap,131072,1,5000,14120816,2824.16,10004,630236
+op,glarena,131072,1,5000,41197,8.24,2,630236
+op,gltrim,131072,1,5000,44113,8.82,2,630236
+raw,notouch,131072,1,5000,4971804,994.36,2,0
+raw,touch,131072,1,5000,13821848,2764.37,10002,630236
+op,mimir,131072,1,5000,15965585,3193.12,15002,630236
+op,glibc,131072,1,5000,39374,7.87,2,630236
+op,glmap,131072,1,5000,14233748,2846.75,10004,630236
+op,glarena,131072,1,5000,41167,8.23,2,630236
+op,gltrim,131072,1,5000,45114,9.02,2,630236
+raw,notouch,131072,1,5000,4931148,986.23,2,0
+raw,touch,131072,1,5000,13867954,2773.59,10002,630236
+op,mimir,131072,1,5000,15879765,3175.95,15002,630236
+op,glibc,131072,1,5000,39483,7.90,2,630236
+op,glmap,131072,1,5000,14410398,2882.08,10004,630236
+op,glarena,131072,1,5000,39364,7.87,2,630236
+op,gltrim,131072,1,5000,43181,8.64,2,630236
+raw,notouch,131072,1,5000,4841971,968.39,2,0
+raw,touch,131072,1,5000,15334806,3066.96,10002,630236
+op,mimir,262144,1,5000,12810086,2562.02,15002,630236
+op,glibc,262144,1,5000,42039,8.41,2,630236
+op,glmap,262144,1,5000,13299462,2659.89,10004,630236
+op,glarena,262144,1,5000,40316,8.06,2,630236
+op,gltrim,262144,1,5000,10696375,2139.28,5002,630236
+raw,notouch,262144,1,5000,4256377,851.28,2,0
+raw,touch,262144,1,5000,10740748,2148.15,10002,630236
+op,mimir,262144,1,5000,12827729,2565.55,15002,630236
+op,glibc,262144,1,5000,39974,7.99,2,630236
+op,glmap,262144,1,5000,13202520,2640.50,10004,630236
+op,glarena,262144,1,5000,39695,7.94,2,630236
+op,gltrim,262144,1,5000,11302297,2260.46,5002,630236
+raw,notouch,262144,1,5000,5010657,1002.13,2,0
+raw,touch,262144,1,5000,13252453,2650.49,10002,630236
+op,mimir,262144,1,5000,17295181,3459.04,15002,630236
+op,glibc,262144,1,5000,42159,8.43,2,630236
+op,glmap,262144,1,5000,13735516,2747.10,10004,630236
+op,glarena,262144,1,5000,39614,7.92,2,630236
+op,gltrim,262144,1,5000,11059063,2211.81,5002,630236
+raw,notouch,262144,1,5000,5289337,1057.87,2,0
+raw,touch,262144,1,5000,10725199,2145.04,10002,630236
+op,mimir,262144,1,5000,13039274,2607.85,15002,630236
+op,glibc,262144,1,5000,42078,8.42,2,630236
+op,glmap,262144,1,5000,10748383,2149.68,10004,630236
+op,glarena,262144,1,5000,39444,7.89,2,630236
+op,gltrim,262144,1,5000,10129836,2025.97,5002,630236
+raw,notouch,262144,1,5000,5534215,1106.84,2,0
+raw,touch,262144,1,5000,10660067,2132.01,10002,630236
+op,mimir,262144,1,5000,12952272,2590.45,15002,630236
+op,glibc,262144,1,5000,39424,7.88,2,630236
+op,glmap,262144,1,5000,10795080,2159.02,10004,630236
+op,glarena,262144,1,5000,39343,7.87,2,630236
+op,gltrim,262144,1,5000,10225394,2045.08,5002,630236
+raw,notouch,262144,1,5000,5203647,1040.73,2,0
+raw,touch,262144,1,5000,10688581,2137.72,10002,630236
+op,mimir,262144,1,5000,12924510,2584.90,15002,630236
+op,glibc,262144,1,5000,41147,8.23,2,630236
+op,glmap,262144,1,5000,10927908,2185.58,10004,630236
+op,glarena,262144,1,5000,41147,8.23,2,630236
+op,gltrim,262144,1,5000,10133923,2026.78,5002,630236
+raw,notouch,262144,1,5000,5093271,1018.65,2,0
+raw,touch,262144,1,5000,13664494,2732.90,10002,630236
+op,mimir,262144,1,5000,14186048,2837.21,15002,630236
+op,glibc,262144,1,5000,39734,7.95,2,630236
+op,glmap,262144,1,5000,11008098,2201.62,10004,630236
+op,glarena,262144,1,5000,40185,8.04,2,630236
+op,gltrim,262144,1,5000,11271480,2254.30,5002,630236
+raw,notouch,262144,1,5000,5021116,1004.22,2,0
+raw,touch,262144,1,5000,12499646,2499.93,10002,630236
+op,mimir,524288,1,3000,7908835,2636.28,9002,379844
+op,glibc,524288,1,3000,25217,8.41,2,379844
+op,glmap,524288,1,3000,6725352,2241.78,6004,379844
+op,glarena,524288,1,3000,24716,8.24,2,379844
+op,gltrim,524288,1,3000,6184070,2061.36,3002,379844
+raw,notouch,524288,1,3000,3076181,1025.39,2,0
+raw,touch,524288,1,3000,6545045,2181.68,6002,379844
+op,mimir,524288,1,3000,8040019,2680.01,9002,379844
+op,glibc,524288,1,3000,24777,8.26,2,379844
+op,glmap,524288,1,3000,6668997,2223.00,6004,379844
+op,glarena,524288,1,3000,23654,7.88,2,379844
+op,gltrim,524288,1,3000,6130660,2043.55,3002,379844
+raw,notouch,524288,1,3000,3080137,1026.71,2,0
+raw,touch,524288,1,3000,6477189,2159.06,6002,379844
+op,mimir,524288,1,3000,8280659,2760.22,9002,379844
+op,glibc,524288,1,3000,24806,8.27,2,379844
+op,glmap,524288,1,3000,8054877,2684.96,6004,379844
+op,glarena,524288,1,3000,24917,8.31,2,379844
+op,gltrim,524288,1,3000,6253971,2084.66,3002,379844
+raw,notouch,524288,1,3000,3044210,1014.74,2,0
+raw,touch,524288,1,3000,7886041,2628.68,6002,379844
+op,mimir,524288,1,3000,8071659,2690.55,9002,379844
+op,glibc,524288,1,3000,24796,8.27,2,379844
+op,glmap,524288,1,3000,6666261,2222.09,6004,379844
+op,glarena,524288,1,3000,23624,7.87,2,379844
+op,gltrim,524288,1,3000,6105293,2035.10,3002,379844
+raw,notouch,524288,1,3000,3065200,1021.73,2,0
+raw,touch,524288,1,3000,8267405,2755.80,6002,379844
+op,mimir,524288,1,3000,9867676,3289.23,9002,379844
+op,glibc,524288,1,3000,23855,7.95,2,379844
+op,glmap,524288,1,3000,7225177,2408.39,6004,379844
+op,glarena,524288,1,3000,24817,8.27,2,379844
+op,gltrim,524288,1,3000,6941426,2313.81,3002,379844
+raw,notouch,524288,1,3000,3109563,1036.52,2,0
+raw,touch,524288,1,3000,6548922,2182.97,6002,379844
+op,mimir,524288,1,3000,8139545,2713.18,9002,379844
+op,glibc,524288,1,3000,24256,8.09,2,379844
+op,glmap,524288,1,3000,6627199,2209.07,6004,379844
+op,glarena,524288,1,3000,24726,8.24,2,379844
+op,gltrim,524288,1,3000,6157180,2052.39,3002,379844
+raw,notouch,524288,1,3000,3126084,1042.03,2,0
+raw,touch,524288,1,3000,6443676,2147.89,6002,379844
+op,mimir,524288,1,3000,8089322,2696.44,9002,379844
+op,glibc,524288,1,3000,23634,7.88,2,379844
+op,glmap,524288,1,3000,6548151,2182.72,6004,379844
+op,glarena,524288,1,3000,23704,7.90,2,379844
+op,gltrim,524288,1,3000,6197746,2065.92,3002,379844
+raw,notouch,524288,1,3000,3090627,1030.21,2,0
+raw,touch,524288,1,3000,6389564,2129.85,6002,379844
+op,mimir,1048576,1,2000,6556336,3278.17,6002,259992
+op,glibc,1048576,1,2000,15940,7.97,2,259992
+op,glmap,1048576,1,2000,4923283,2461.64,4004,259992
+op,glarena,1048576,1,2000,16291,8.15,2,259992
+op,gltrim,1048576,1,2000,6096086,3048.04,2002,259992
+raw,notouch,1048576,1,2000,1759679,879.84,2,0
+raw,touch,1048576,1,2000,5312832,2656.42,4002,259992
+op,mimir,1048576,1,2000,6394152,3197.08,6002,259992
+op,glibc,1048576,1,2000,20589,10.29,2,259992
+op,glmap,1048576,1,2000,4580503,2290.25,4004,259992
+op,glarena,1048576,1,2000,15919,7.96,2,259992
+op,gltrim,1048576,1,2000,4206904,2103.45,2002,259992
+raw,notouch,1048576,1,2000,2790356,1395.18,2,0
+raw,touch,1048576,1,2000,5436112,2718.06,4002,259992
+op,mimir,1048576,1,2000,6478320,3239.16,6002,259992
+op,glibc,1048576,1,2000,17002,8.50,2,259992
+op,glmap,1048576,1,2000,6049448,3024.72,4004,259992
+op,glarena,1048576,1,2000,16631,8.32,2,259992
+op,gltrim,1048576,1,2000,4208607,2104.30,2002,259992
+raw,notouch,1048576,1,2000,1639294,819.65,2,0
+raw,touch,1048576,1,2000,5881154,2940.58,4002,259992
+op,mimir,1048576,1,2000,6137473,3068.74,6002,259992
+op,glibc,1048576,1,2000,15659,7.83,2,259992
+op,glmap,1048576,1,2000,4576976,2288.49,4004,259992
+op,glarena,1048576,1,2000,16621,8.31,2,259992
+op,gltrim,1048576,1,2000,4195723,2097.86,2002,259992
+raw,notouch,1048576,1,2000,1773635,886.82,2,0
+raw,touch,1048576,1,2000,4427276,2213.64,4002,259992
+op,mimir,1048576,1,2000,5340573,2670.29,6002,259992
+op,glibc,1048576,1,2000,16581,8.29,2,259992
+op,glmap,1048576,1,2000,4787830,2393.91,4004,259992
+op,glarena,1048576,1,2000,15939,7.97,2,259992
+op,gltrim,1048576,1,2000,4308243,2154.12,2002,259992
+raw,notouch,1048576,1,2000,2163063,1081.53,2,0
+raw,touch,1048576,1,2000,5399112,2699.56,4002,259992
+op,mimir,1048576,1,2000,6510440,3255.22,6002,259992
+op,glibc,1048576,1,2000,15900,7.95,2,259992
+op,glmap,1048576,1,2000,5827233,2913.62,4004,259992
+op,glarena,1048576,1,2000,16401,8.20,2,259992
+op,gltrim,1048576,1,2000,7269580,3634.79,2002,259992
+raw,notouch,1048576,1,2000,2280032,1140.02,2,0
+raw,touch,1048576,1,2000,7151970,3575.99,4002,259992
+op,mimir,1048576,1,2000,5559963,2779.98,6002,259992
+op,glibc,1048576,1,2000,16571,8.29,2,259992
+op,glmap,1048576,1,2000,5730773,2865.39,4004,259992
+op,glarena,1048576,1,2000,16581,8.29,2,259992
+op,gltrim,1048576,1,2000,4245095,2122.55,2002,259992
+raw,notouch,1048576,1,2000,2160058,1080.03,2,0
+raw,touch,1048576,1,2000,4892766,2446.38,4002,259992
+op,mimir,2097152,1,1000,3996230,3996.23,3002,127212
+op,glibc,2097152,1,1000,8055,8.05,2,127212
+op,glmap,2097152,1,1000,3428790,3428.79,2004,127212
+op,glarena,2097152,1,1000,8596,8.60,2,127212
+op,gltrim,2097152,1,1000,3618093,3618.09,1002,127212
+raw,notouch,2097152,1,1000,842465,842.47,2,0
+raw,touch,2097152,1,1000,3163885,3163.89,2002,127212
+op,mimir,2097152,1,1000,3413972,3413.97,3002,127212
+op,glibc,2097152,1,1000,8306,8.31,2,127212
+op,glmap,2097152,1,1000,2964963,2964.96,2004,127212
+op,glarena,2097152,1,1000,8166,8.17,2,127212
+op,gltrim,2097152,1,1000,3338441,3338.44,1002,127212
+raw,notouch,2097152,1,1000,864566,864.57,2,0
+raw,touch,2097152,1,1000,2765439,2765.44,2002,127212
+op,mimir,2097152,1,1000,4048849,4048.85,3002,127212
+op,glibc,2097152,1,1000,8406,8.41,2,127212
+op,glmap,2097152,1,1000,3695689,3695.69,2004,127212
+op,glarena,2097152,1,1000,8025,8.03,2,127212
+op,gltrim,2097152,1,1000,3065660,3065.66,1002,127212
+raw,notouch,2097152,1,1000,846993,846.99,2,0
+raw,touch,2097152,1,1000,2827576,2827.58,2002,127212
+op,mimir,2097152,1,1000,3914598,3914.60,3002,127212
+op,glibc,2097152,1,1000,8366,8.37,2,127212
+op,glmap,2097152,1,1000,3830611,3830.61,2004,127212
+op,glarena,2097152,1,1000,8295,8.29,2,127212
+op,gltrim,2097152,1,1000,3679688,3679.69,1002,127212
+raw,notouch,2097152,1,1000,868183,868.18,2,0
+raw,touch,2097152,1,1000,2864986,2864.99,2002,127212
+op,mimir,2097152,1,1000,4022610,4022.61,3002,127212
+op,glibc,2097152,1,1000,8095,8.10,2,127212
+op,glmap,2097152,1,1000,3494332,3494.33,2004,127212
+op,glarena,2097152,1,1000,8235,8.23,2,127212
+op,gltrim,2097152,1,1000,3666063,3666.06,1002,127212
+raw,notouch,2097152,1,1000,881488,881.49,2,0
+raw,touch,2097152,1,1000,3418561,3418.56,2002,127212
+op,mimir,2097152,1,1000,3457212,3457.21,3002,127212
+op,glibc,2097152,1,1000,8426,8.43,2,127212
+op,glmap,2097152,1,1000,3111356,3111.36,2004,127212
+op,glarena,2097152,1,1000,8005,8.01,2,127212
+op,gltrim,2097152,1,1000,3621389,3621.39,1002,127212
+raw,notouch,2097152,1,1000,877721,877.72,2,0
+raw,touch,2097152,1,1000,3392632,3392.63,2002,127212
+op,mimir,2097152,1,1000,3464166,3464.17,3002,127212
+op,glibc,2097152,1,1000,8066,8.07,2,127212
+op,glmap,2097152,1,1000,3033050,3033.05,2004,127212
+op,glarena,2097152,1,1000,8005,8.01,2,127212
+op,gltrim,2097152,1,1000,3701248,3701.25,1002,127212
+raw,notouch,2097152,1,1000,869225,869.23,2,0
+raw,touch,2097152,1,1000,3333522,3333.52,2002,127212
+op,mimir,4194304,1,600,2427067,4045.11,1802,71732
+op,glibc,4194304,1,600,4899,8.16,2,71732
+op,glmap,4194304,1,600,1896395,3160.66,1204,71732
+op,glarena,4194304,1,600,4950,8.25,2,71732
+op,gltrim,4194304,1,600,2186037,3643.39,602,71732
+raw,notouch,4194304,1,600,519411,865.68,2,0
+raw,touch,4194304,1,600,1918657,3197.76,1202,71732
+op,mimir,4194304,1,600,2333202,3888.67,1802,71732
+op,glibc,4194304,1,600,4869,8.12,2,71732
+op,glmap,4194304,1,600,1825903,3043.17,1204,71732
+op,glarena,4194304,1,600,4910,8.18,2,71732
+op,gltrim,4194304,1,600,1842314,3070.52,602,71732
+raw,notouch,4194304,1,600,538026,896.71,2,0
+raw,touch,4194304,1,600,1947541,3245.90,1202,71732
+op,mimir,4194304,1,600,2354742,3924.57,1802,71732
+op,glibc,4194304,1,600,4909,8.18,2,71732
+op,glmap,4194304,1,600,1824691,3041.15,1204,71732
+op,glarena,4194304,1,600,5110,8.52,2,71732
+op,gltrim,4194304,1,600,1973780,3289.63,602,71732
+raw,notouch,4194304,1,600,542694,904.49,2,0
+raw,touch,4194304,1,600,1925990,3209.98,1202,71732
+op,mimir,4194304,1,600,2544025,4240.04,1802,71732
+op,glibc,4194304,1,600,4909,8.18,2,71732
+op,glmap,4194304,1,600,1906254,3177.09,1204,71732
+op,glarena,4194304,1,600,4899,8.16,2,71732
+op,gltrim,4194304,1,600,2031848,3386.41,602,71732
+raw,notouch,4194304,1,600,504293,840.49,2,0
+raw,touch,4194304,1,600,1839368,3065.61,1202,71732
+op,mimir,4194304,1,600,3116816,5194.69,1802,71732
+op,glibc,4194304,1,600,5099,8.50,2,71732
+op,glmap,4194304,1,600,1885144,3141.91,1204,71732
+op,glarena,4194304,1,600,4879,8.13,2,71732
+op,gltrim,4194304,1,600,1966306,3277.18,602,71732
+raw,notouch,4194304,1,600,548766,914.61,2,0
+raw,touch,4194304,1,600,1927493,3212.49,1202,71732
+op,mimir,4194304,1,600,2360703,3934.51,1802,71732
+op,glibc,4194304,1,600,4869,8.12,2,71732
+op,glmap,4194304,1,600,1886386,3143.98,1204,71732
+op,glarena,4194304,1,600,5050,8.42,2,71732
+op,gltrim,4194304,1,600,1782162,2970.27,602,71732
+raw,notouch,4194304,1,600,492490,820.82,2,0
+raw,touch,4194304,1,600,1953471,3255.78,1202,71732
+op,mimir,4194304,1,600,2384498,3974.16,1802,71732
+op,glibc,4194304,1,600,4989,8.31,2,71732
+op,glmap,4194304,1,600,2481739,4136.23,1204,71732
+op,glarena,4194304,1,600,4870,8.12,2,71732
+op,gltrim,4194304,1,600,2523548,4205.91,602,71732
+raw,notouch,4194304,1,600,549948,916.58,2,0
+raw,touch,4194304,1,600,1945878,3243.13,1202,71732
+op,mimir,8388608,1,300,1160549,3868.50,902,34242
+op,glibc,8388608,1,300,2605,8.68,2,34242
+op,glmap,8388608,1,300,928496,3094.99,604,34242
+op,glarena,8388608,1,300,2655,8.85,2,34242
+op,gltrim,8388608,1,300,961096,3203.65,302,34242
+raw,notouch,8388608,1,300,282368,941.23,2,0
+raw,touch,8388608,1,300,992856,3309.52,602,34242
+op,mimir,8388608,1,300,1192689,3975.63,902,34242
+op,glibc,8388608,1,300,2625,8.75,2,34242
+op,glmap,8388608,1,300,1091630,3638.77,604,34242
+op,glarena,8388608,1,300,2495,8.32,2,34242
+op,gltrim,8388608,1,300,981284,3270.95,302,34242
+raw,notouch,8388608,1,300,263603,878.68,2,0
+raw,touch,8388608,1,300,958201,3194.00,602,34242
+op,mimir,8388608,1,300,1148917,3829.72,902,34242
+op,glibc,8388608,1,300,2645,8.82,2,34242
+op,glmap,8388608,1,300,944686,3148.95,604,34242
+op,glarena,8388608,1,300,2525,8.42,2,34242
+op,gltrim,8388608,1,300,988768,3295.89,302,34242
+raw,notouch,8388608,1,300,248564,828.55,2,0
+raw,touch,8388608,1,300,926041,3086.80,602,34242
+op,mimir,8388608,1,300,1204342,4014.47,902,34242
+op,glibc,8388608,1,300,2545,8.48,2,34242
+op,glmap,8388608,1,300,925080,3083.60,604,34242
+op,glarena,8388608,1,300,2535,8.45,2,34242
+op,gltrim,8388608,1,300,1128811,3762.70,302,34242
+raw,notouch,8388608,1,300,287868,959.56,2,0
+raw,touch,8388608,1,300,989109,3297.03,602,34242
+op,mimir,8388608,1,300,1215743,4052.48,902,34242
+op,glibc,8388608,1,300,2645,8.82,2,34242
+op,glmap,8388608,1,300,933776,3112.59,604,34242
+op,glarena,8388608,1,300,2645,8.82,2,34242
+op,gltrim,8388608,1,300,1521895,5072.98,302,34242
+raw,notouch,8388608,1,300,286215,954.05,2,0
+raw,touch,8388608,1,300,968741,3229.14,602,34242
+op,mimir,8388608,1,300,1178293,3927.64,902,34242
+op,glibc,8388608,1,300,2715,9.05,2,34242
+op,glmap,8388608,1,300,934276,3114.25,604,34242
+op,glarena,8388608,1,300,2635,8.78,2,34242
+op,gltrim,8388608,1,300,972217,3240.72,302,34242
+raw,notouch,8388608,1,300,288369,961.23,2,0
+raw,touch,8388608,1,300,960746,3202.49,602,34242
+op,mimir,8388608,1,300,1201446,4004.82,902,34242
+op,glibc,8388608,1,300,2525,8.42,2,34242
+op,glmap,8388608,1,300,1424212,4747.37,604,34242
+op,glarena,8388608,1,300,2565,8.55,2,34242
+op,gltrim,8388608,1,300,964252,3214.17,302,34242
+raw,notouch,8388608,1,300,274212,914.04,2,0
+raw,touch,8388608,1,300,955506,3185.02,602,34242
+op,mimir,16777216,1,150,609429,4062.86,452,11339
+op,glibc,16777216,1,150,1312,8.75,2,11339
+op,glmap,16777216,1,150,465770,3105.13,304,11339
+op,glarena,16777216,1,150,1332,8.88,2,11339
+op,gltrim,16777216,1,150,499654,3331.03,152,11339
+raw,notouch,16777216,1,150,153737,1024.91,2,0
+raw,touch,16777216,1,150,491689,3277.93,302,11339
+op,mimir,16777216,1,150,594482,3963.21,452,11339
+op,glibc,16777216,1,150,1372,9.15,2,11339
+op,glmap,16777216,1,150,455682,3037.88,304,11339
+op,glarena,16777216,1,150,1392,9.28,2,11339
+op,gltrim,16777216,1,150,489254,3261.69,152,11339
+raw,notouch,16777216,1,150,143328,955.52,2,0
+raw,touch,16777216,1,150,487772,3251.81,302,11339
+op,mimir,16777216,1,150,593610,3957.40,452,11339
+op,glibc,16777216,1,150,1363,9.09,2,11339
+op,glmap,16777216,1,150,460361,3069.07,304,11339
+op,glarena,16777216,1,150,1433,9.55,2,11339
+op,gltrim,16777216,1,150,504002,3360.01,152,11339
+raw,notouch,16777216,1,150,160299,1068.66,2,0
+raw,touch,16777216,1,150,496047,3306.98,302,11339
+op,mimir,16777216,1,150,633865,4225.77,452,11339
+op,glibc,16777216,1,150,1393,9.29,2,11339
+op,glmap,16777216,1,150,463838,3092.25,304,11339
+op,glarena,16777216,1,150,1473,9.82,2,11339
+op,gltrim,16777216,1,150,495867,3305.78,152,11339
+raw,notouch,16777216,1,150,142496,949.97,2,0
+raw,touch,16777216,1,150,494224,3294.83,302,11339
+op,mimir,16777216,1,150,586726,3911.51,452,11339
+op,glibc,16777216,1,150,1433,9.55,2,11339
+op,glmap,16777216,1,150,465420,3102.80,304,11339
+op,glarena,16777216,1,150,1372,9.15,2,11339
+op,gltrim,16777216,1,150,518950,3459.67,152,11339
+raw,notouch,16777216,1,150,142386,949.24,2,0
+raw,touch,16777216,1,150,471721,3144.81,302,11339
+op,mimir,16777216,1,150,584643,3897.62,452,11339
+op,glibc,16777216,1,150,1362,9.08,2,11339
+op,glmap,16777216,1,150,459760,3065.07,304,11339
+op,glarena,16777216,1,150,1443,9.62,2,11339
+op,gltrim,16777216,1,150,496057,3307.05,152,11339
+raw,notouch,16777216,1,150,146444,976.29,2,0
+raw,touch,16777216,1,150,828498,5523.32,302,11339
+op,mimir,16777216,1,150,591475,3943.17,452,11339
+op,glibc,16777216,1,150,1383,9.22,2,11339
+op,glmap,16777216,1,150,466672,3111.15,304,11339
+op,glarena,16777216,1,150,1333,8.89,2,11339
+op,gltrim,16777216,1,150,514843,3432.29,152,11339
+raw,notouch,16777216,1,150,144069,960.46,2,0
+raw,touch,16777216,1,150,499284,3328.56,302,11339
+op,mimir,33554432,1,80,313456,3918.20,242,3160
+op,glibc,33554432,1,80,276887,3461.09,162,3160
+op,glmap,33554432,1,80,250348,3129.35,164,3160
+op,glarena,33554432,1,80,821,10.26,2,3160
+op,gltrim,33554432,1,80,270976,3387.20,82,3160
+raw,notouch,33554432,1,80,76543,956.79,2,0
+raw,touch,33554432,1,80,297015,3712.69,162,3160
+op,mimir,33554432,1,80,325138,4064.22,242,3160
+op,glibc,33554432,1,80,262631,3282.89,162,3160
+op,glmap,33554432,1,80,255157,3189.46,164,3160
+op,glarena,33554432,1,80,782,9.78,2,3160
+op,gltrim,33554432,1,80,326942,4086.78,82,3160
+raw,notouch,33554432,1,80,78036,975.45,2,0
+raw,touch,33554432,1,80,265206,3315.07,162,3160
+op,mimir,33554432,1,80,320910,4011.38,242,3160
+op,glibc,33554432,1,80,253884,3173.55,162,3160
+op,glmap,33554432,1,80,259516,3243.95,164,3160
+op,glarena,33554432,1,80,822,10.28,2,3160
+op,gltrim,33554432,1,80,273571,3419.64,82,3160
+raw,notouch,33554432,1,80,77876,973.45,2,0
+raw,touch,33554432,1,80,267701,3346.26,162,3160
+op,mimir,33554432,1,80,331179,4139.74,242,3160
+op,glibc,33554432,1,80,261860,3273.25,162,3160
+op,glmap,33554432,1,80,261860,3273.25,164,3160
+op,glarena,33554432,1,80,822,10.28,2,3160
+op,gltrim,33554432,1,80,274583,3432.29,82,3160
+raw,notouch,33554432,1,80,86011,1075.14,2,0
+raw,touch,33554432,1,80,267029,3337.86,162,3160
+op,mimir,33554432,1,80,318355,3979.44,242,3160
+op,glibc,33554432,1,80,263032,3287.90,162,3160
+op,glmap,33554432,1,80,262441,3280.51,164,3160
+op,glarena,33554432,1,80,802,10.03,2,3160
+op,gltrim,33554432,1,80,271197,3389.96,82,3160
+raw,notouch,33554432,1,80,78247,978.09,2,0
+raw,touch,33554432,1,80,594692,7433.65,162,3160
+op,mimir,33554432,1,80,321270,4015.88,242,3160
+op,glibc,33554432,1,80,255047,3188.09,162,3160
+op,glmap,33554432,1,80,257582,3219.78,164,3160
+op,glarena,33554432,1,80,782,9.78,2,3160
+op,gltrim,33554432,1,80,289070,3613.38,82,3160
+raw,notouch,33554432,1,80,77856,973.20,2,0
+raw,touch,33554432,1,80,263623,3295.29,162,3160
+op,mimir,33554432,1,80,317914,3973.93,242,3160
+op,glibc,33554432,1,80,641399,8017.49,162,3160
+op,glmap,33554432,1,80,252742,3159.28,164,3160
+op,glarena,33554432,1,80,812,10.15,2,3160
+op,gltrim,33554432,1,80,281656,3520.70,82,3160
+raw,notouch,33554432,1,80,80610,1007.62,2,0
+raw,touch,33554432,1,80,259896,3248.70,162,3160
+opfull,mimir,1048576,1,100,10645340,106453.40,25702,3264000
+opfull,glibc,1048576,1,100,267109,2671.09,2,3264000
+opfull,mimir,1048576,1,100,10605645,106056.45,25702,3264000
+opfull,glibc,1048576,1,100,277188,2771.88,2,3264000
+opfull,mimir,1048576,1,100,10581621,105816.21,25702,3264000
+opfull,glibc,1048576,1,100,270966,2709.66,2,3264000
+opfull,mimir,1048576,1,100,10632956,106329.56,25702,3264000
+opfull,glibc,1048576,1,100,279292,2792.92,2,3264000
+opfull,mimir,1048576,1,100,10660378,106603.78,25702,3264000
+opfull,glibc,1048576,1,100,303457,3034.57,2,3264000
+opfull,mimir,1048576,1,100,10652242,106522.42,25702,3264000
+opfull,glibc,1048576,1,100,292637,2926.37,2,3264000
+opfull,mimir,1048576,1,100,10591279,105912.79,25702,3264000
+opfull,glibc,1048576,1,100,291445,2914.45,2,3264000
+opfull,mimir,8388608,1,20,17162783,858139.15,40982,5222400
+opfull,glibc,8388608,1,20,493022,24651.10,2,5222400
+opfull,mimir,8388608,1,20,17092311,854615.55,40982,5222400
+opfull,glibc,8388608,1,20,493943,24697.15,2,5222400
+opfull,mimir,8388608,1,20,17098072,854903.60,40982,5222400
+opfull,glibc,8388608,1,20,495216,24760.80,2,5222400
+opfull,mimir,8388608,1,20,17094255,854712.75,40982,5222400
+opfull,glibc,8388608,1,20,497329,24866.45,2,5222400
+opfull,mimir,8388608,1,20,17082953,854147.65,40982,5222400
+opfull,glibc,8388608,1,20,500386,25019.30,2,5222400
+opfull,mimir,8388608,1,20,17133719,856685.95,40982,5222400
+opfull,glibc,8388608,1,20,495396,24769.80,2,5222400
+opfull,mimir,8388608,1,20,17075350,853767.50,40982,5222400
+opfull,glibc,8388608,1,20,494214,24710.70,2,5222400
+opfull,mimir,33554432,1,6,24136950,4022825.00,49160,6266880
+opfull,glibc,33554432,1,6,23871253,3978542.17,49154,6266880
+opfull,mimir,33554432,1,6,24037594,4006265.67,49160,6266880
+opfull,glibc,33554432,1,6,24179680,4029946.67,49154,6266880
+opfull,mimir,33554432,1,6,23955682,3992613.67,49160,6266880
+opfull,glibc,33554432,1,6,24232028,4038671.33,49154,6266880
+opfull,mimir,33554432,1,6,24376628,4062771.33,49160,6266880
+opfull,glibc,33554432,1,6,23920976,3986829.33,49154,6266880
+opfull,mimir,33554432,1,6,24313901,4052316.83,49160,6266880
+opfull,glibc,33554432,1,6,23980267,3996711.17,49154,6266880
+opfull,mimir,33554432,1,6,24269177,4044862.83,49160,6266880
+opfull,glibc,33554432,1,6,23956713,3992785.50,49154,6266880
+opfull,mimir,33554432,1,6,23810229,3968371.50,49160,6266880
+opfull,glibc,33554432,1,6,23812083,3968680.50,49154,6266880
+T1,1024,0,0,135168,1040,ARENA
+T1,4096,0,0,139264,4112,ARENA
+T1,16384,0,0,151552,16400,ARENA
+T1,65536,0,0,200704,65552,ARENA
+T1,98304,0,0,233472,98320,ARENA
+T1,114688,0,0,249856,114704,ARENA
+T1,126976,0,0,262144,126992,ARENA
+T1,129024,0,0,262144,129040,ARENA
+T1,130048,0,0,262144,130064,ARENA
+T1,130560,0,0,262144,130576,ARENA
+T1,130944,0,0,262144,130960,ARENA
+T1,131040,0,0,266240,131056,ARENA
+T1,131048,0,0,266240,131056,ARENA
+T1,131049,1,135168,0,0,MMAP
+T1,131056,1,135168,0,0,MMAP
+T1,131063,1,135168,0,0,MMAP
+T1,131064,1,135168,0,0,MMAP
+T1,131072,1,135168,0,0,MMAP
+T1,131136,1,135168,0,0,MMAP
+T1,132096,1,135168,0,0,MMAP
+T1,262144,1,266240,0,0,MMAP
+T1,1048576,1,1052672,0,0,MMAP
+T1,33554432,1,33558528,0,0,MMAP
+TD,262144,1,266240,0,0,ARENA
+TD,262144,1,266240,0,0,ARENA
+TD,262144,1,266240,1,528384,MMAP
+TD,1048576,1,1052672,0,0,ARENA
+TD,1048576,1,1052672,0,0,ARENA
+TD,1048576,1,1052672,1,2101248,MMAP
+TD,8388608,1,8392704,0,0,ARENA
+TD,8388608,1,8392704,0,0,ARENA
+TD,8388608,1,8392704,1,16781312,MMAP
+TD,33554400,1,33554432,0,0,ARENA
+TD,33554400,1,33554432,1,33554432,MMAP
+TD,33554400,1,33554432,1,33558528,MMAP
+TD,33554432,1,33558528,1,16781312,MMAP
+TD,67108864,1,67112960,1,16781312,MMAP
+TS,1048576,1,1052672,0,0,ARENA
+TM,131072,8388608,1,8392704,1,4198400,MMAP
+TM,67108864,1048576,0,0,0,0,ARENA
