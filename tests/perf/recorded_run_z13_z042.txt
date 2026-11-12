@@ -1,0 +1,332 @@
+MimirAlloc Z13 recorded run - Z-042 Thread-churn storm
+slice: Z-042 - Thread-churn storm (10,000 short-lived allocating threads: TLS/arena teardown correctness, drain cost, and leak accounting to the byte. Gate: storm green; retained-bytes-after-storm figure recorded.)
+date: 2026-11-12 (America/New_York; recorded reps run back to back in one runner invocation, standing gate after)
+base: team branch yrsa/mimiralloc-team-03 after merging seat main 35f7f55 (banked Z-001..Z-035; merge commit 99b1ffd, clean, no conflicts). Merge verification: the seat's 3-way-merged src/core/mimir_core.c won as required - 4553 lines, 221 tls references (Z-029 TLS cache intact) and 14 MIMIR_OOL_META references (Z-034 trial intact) counted in the merged tree before any Z-042 work.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: tests/perf/probe_z042.c + tests/perf/run_z042.sh + tests/perf/summarize_z042.py + this recorded run. NO production code changed by this slice; NO Makefile change (the runner compiles both legs directly into build/z42/, the Z-034 pattern), so the standing gate's counts cannot move.
+arena note: no arena variant exists in this tree (Z-037/Z-038 are the arena slices and are not banked here), so the teardown surface under test is the Wave-4 TLS freelist cache (Z-029) and its C11 tss destructor. When an arena variant banks, its teardown under churn is a named follow-up for the Wave-5 verdict (Z-045), not a claim of this slice.
+
+environment header (scripts/z13/host_truth.sh, captured 2026-11-12T10:26:15Z, verbatim):
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T10:26:15Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2962259
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 65%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.31 3.23 1.97
+
+load honesty: SHARED HOST in a LIGHT window. loadavg 1.11/3.12/1.95 at runner start and 1.32/3.10/1.96 at runner end (1-min figure ~1.1-1.3 on 32 threads; a top snapshot in the window showed 99.7% idle). The elevated 5-minute figure is residual from earlier sibling-campaign activity, declining throughout; no heavy co-tenant process was observed during the recorded reps. Storm accounting identities (exit counters, byte accounting) are scheduling-independent and are asserted exactly in every rep; only the wall times carry the window's load, and they are reported per rep, never averaged into the accounting.
+limits pre-check (recorded before the storm, per the slice's risk review): /proc/sys/kernel/threads-max = 994508; RLIMIT_NPROC (ulimit -u) = 497254; thread stack default 8 MiB (ulimit -s = 8192), never overridden by the probe; concurrency is capped at 32 live churn threads, so the resident stack commitment is ~256 MiB of virtual space and no limit is approached. Per-thread stacks are OS (glibc) allocations, outside the allocator under test, and are excluded from the leak accounting, which covers mimir spans/mappings only.
+
+THE STORM SHAPE (tests/perf/probe_z042.c, one process per rep; Z-004 protocol: one warm-up process per leg discarded, then 3 recorded processes per leg, alternating):
+Per churn thread: 8 blocks in each of classes 16/64/256/1024, one 2048-byte large block, plus two blocks (64 and 512) left LIVE at exit and handed to main through the thread's argument slot - 35 allocations, every block pattern-touched (first/middle/last bytes, seed a function of thread id, sequence and size) and verified before free. The 33 non-held blocks are freed by their owner thread into its own TLS bins. Threads run in waves of 32 concurrent (the host's hardware-thread count), 10,000 threads per storm. The checksum folded from the verified pattern bytes is reset before the storm phase in both legs, so the STORM checksum covers the storm only: it is 89250992 in all 6 recorded reps, both legs - the two legs did identical work (K-002 discipline).
+
+PHASES AND THE IDENTITIES THEY ASSERT (mimir leg; every snapshot at a quiescent point, after all threads of the phase are joined; full CHECK lines in the raw section below):
+  S0 pristine: process start, nothing allocated through mimir yet (all counters 0).
+  CAL calibration: ONE thread runs the exact storm shape and captures its own TLS snapshot just before exit: cached_blocks=46, cached_bytes=14912 (identical in every rep). Asserted: exit_drains +1 exactly, exit_drain_blocks +46 exactly - the destructor returned precisely the blocks the calibration thread's bins held, no more, no fewer.
+  DRN exactly-once: 256 threads run the shape but call mimir_tls_cache_drain_thread() before returning. Asserted: every post-drain snapshot shows 0 cached blocks, exit_drains +256, exit_drain_blocks +0 - an explicit drain and the exit destructor together return every block exactly once; a double-return would appear here as a nonzero blocks delta or a metadata violation.
+  NUL control: 10,000 threads that never touch the allocator. Asserted: exit counters and allocator state do not move at all (a thread that never initialised TLS is never counted as a drain).
+  STM the storm: 10,000 churn threads. Asserted: exit_drains +10000 exactly; exit_drain_blocks +460000 exactly (= 10000 x the calibration thread's 46); a settle re-read 100 ms after the joins returns identical counter values (no drain still in flight at snapshot time); live_small_objects after the storm is exactly baseline + 20000 (the held blocks, per class +10000 at 64 and +10000 at 512, nothing else live); J-006 metadata check 0; zero alloc/pattern/create failures.
+  HELD post-exit frees: main verifies and frees all 20,000 held blocks of the dead threads. Asserted: held count exactly 20000, live_small_objects returns to baseline, exit counters frozen throughout (main's frees are not exit drains).
+  TRIM byte-exact close: main's own cache snapshot is 0 blocks (its frees were all remote, routed to the core); mimir_core_trim_retained() releases exactly the retained spans counted at the pre-trim snapshot (9 spans, 36864 B, every rep); final snapshot: retained 0, bytes_cached 0, bytes_mapped == the pristine S0 figure TO THE BYTE (0), live_spans and live_mappings back to S0. This identity - not the retained figure alone - is the leak proof: any span or mapping the storm failed to account for would survive the trim and appear here.
+  At EVERY snapshot, three cross-surface identities are asserted: bytes_cached == mimir_core_retained_bytes() (two surfaces, one quantity); bytes_cached == (sum of per-class empty spans) x 4096; bytes_mapped == live span bytes + live mapping bytes. J-006 metadata check is 0 at all 8 snapshots of every mimir rep. Total across the raw file: 162 CHECK lines, 0 FAIL.
+
+RETAINED-BYTES-AFTER-STORM FIGURE (the gate's named figure): 20480 bytes in every recorded rep (5 empty spans of 4096 B). Decomposition: these are empty small-path spans held by the G-007 retention policy (bound 2 per class, read from the allocator at runtime; policy cap for the touched classes is far above the figure, and the all-class cap is 163840 B). The figure is legitimate retention, not a leak, and the proof is the TRIM phase of the same process: after the held blocks are freed, the retained set is 9 spans / 36864 B, trim releases exactly those 36864 B, and bytes_mapped returns to the pristine 0. A pre-recording trial run of the same probe recorded 24576 B (6 spans) at S1: the one-span variance is which spans the final waves' held blocks happen to vacate, it is bounded by the same policy, and the post-trim identity - the arbiter - held in the trial and in every recorded rep.
+
+DRAIN COST (honest form): the tss destructor runs inside pthread teardown, so no per-drain timer exists that does not also time thread creation. Reported instead: storm wall vs the same-process null-thread wall (10,000 create/joins with no allocator work), per rep, and their difference divided by the exact exit-drained block count as an UPPER-BOUND drain-inclusive figure (it also contains all alloc/free work; it is never a pure drain price).
+
+RESULTS (medians of the 3 recorded reps; per-rep values in the summary and raw sections):
+  mimir: storm wall 1.163 s (reps 1.116/1.176/1.163), null wall 0.118 s, alloc+free+teardown over null = 104574 ns per thread (reps 99785/105474/104574), worst single wave 5.6 ms, drain-inclusive upper bound 2273 ns per exit-drained block (reps 2169/2293/2273), exit drains 10000 and exit-drained blocks 460000 in every rep.
+  glibc (same source, -DUSE_GLIBC, wall-time comparator only): storm wall 0.115 s (reps 0.115/0.114/0.117), null wall 0.113 s. Its alloc+free delta over its own null wall (195/390/268 ns per thread) is at the noise floor of the differential method; the honest comparator is the absolute storm wall: for this full create+allocate+free+teardown shape the mimir leg's wall is ~10.1x the glibc leg's. That is a whole-shape wall ratio under a central-lock allocator whose per-op costs Waves 3-4 already priced; it is recorded here for the Wave-5 verdict (Z-045) and is NOT a verdict of this slice, whose gate claims no glibc comparison.
+
+SUMMARY (python3 tests/perf/summarize_z042.py hidden_files/z042_raw.txt):
+REP leg=mimir i=1 ===
+  null_wall_s=0.118 storm_wall_s=1.116 worst_wave_ms=5.6 alloc_teardown_ns_per_thread=99785
+  retained_after_storm_bytes=20480
+  exit_blocks_delta=460000
+  result=PASS
+REP leg=glibc i=1 ===
+  null_wall_s=0.113 storm_wall_s=0.115 worst_wave_ms=0.7 alloc_teardown_ns_per_thread=195
+  result=PASS
+REP leg=mimir i=2 ===
+  null_wall_s=0.121 storm_wall_s=1.176 worst_wave_ms=5.9 alloc_teardown_ns_per_thread=105474
+  retained_after_storm_bytes=20480
+  exit_blocks_delta=460000
+  result=PASS
+REP leg=glibc i=2 ===
+  null_wall_s=0.110 storm_wall_s=0.114 worst_wave_ms=0.8 alloc_teardown_ns_per_thread=390
+  result=PASS
+REP leg=mimir i=3 ===
+  null_wall_s=0.117 storm_wall_s=1.163 worst_wave_ms=5.6 alloc_teardown_ns_per_thread=104574
+  retained_after_storm_bytes=20480
+  exit_blocks_delta=460000
+  result=PASS
+REP leg=glibc i=3 ===
+  null_wall_s=0.114 storm_wall_s=0.117 worst_wave_ms=0.7 alloc_teardown_ns_per_thread=268
+  result=PASS
+MEDIAN storm_wall_s leg=mimir 1.163 (n=3)
+MEDIAN storm_wall_s leg=glibc 0.115 (n=3)
+RETAINED figures across mimir reps: [20480, 20480, 20480]
+SUMMARY RESULT: PASS
+
+RAW (complete runner output, all 6 recorded reps; warm-ups discarded by the runner):
+=== REP leg=mimir i=1 ===
+SNAP S0_pristine mapped=0 cached=0 released=0 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=0 exit_blocks=0 metadata=0 retention_bound=2 peak_mapped=0
+CHECK snap_cached_eq_retained PASS cached=0 retained=0
+CHECK snap_cached_eq_empty_spans PASS empty=0 cached=0
+CHECK snap_mapped_eq_parts PASS mapped=0 parts=0
+CHECK snap_metadata_clean PASS J-006 walk
+SNAP S_cal mapped=28672 cached=20480 released=12288 live_small=2 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 empty_spans_sum=5 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+CHECK snap_cached_eq_retained PASS cached=20480 retained=20480
+CHECK snap_cached_eq_empty_spans PASS empty=20480 cached=20480
+CHECK snap_mapped_eq_parts PASS mapped=28672 parts=28672
+CHECK snap_metadata_clean PASS J-006 walk
+CALIB cached_blocks=46 cached_bytes=14912 hits=28 misses=6 refills=6 drains=0 drain_blocks=0 local_frees=32
+CHECK calibration_exit_drain_exact PASS drains_delta=1 blocks_delta=46 calib_cached=46
+SNAP S_base mapped=28672 cached=28672 released=12288 live_small=0 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=28672 retained_spans=7 empty_spans_sum=7 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+CHECK snap_cached_eq_retained PASS cached=28672 retained=28672
+CHECK snap_cached_eq_empty_spans PASS empty=28672 cached=28672
+CHECK snap_mapped_eq_parts PASS mapped=28672 parts=28672
+CHECK snap_metadata_clean PASS J-006 walk
+SNAP S_drn mapped=36864 cached=36864 released=3383296 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=257 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=331776
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK predrain_exit_returns_zero_blocks PASS drains_delta=256 blocks_delta=0 cap_sum=0
+CHECK predrain_live_back_to_base PASS held blocks of DRN threads freed by main
+SNAP S_null mapped=36864 cached=36864 released=3383296 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=257 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=331776
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK null_threads_no_drain PASS drains_delta=0 blocks_delta=0
+CHECK null_threads_no_state_change PASS mapped/live unchanged by allocator-free threads
+SNAP S1_after_storm mapped=6549504 cached=20480 released=126783488 live_small=20000 live_spans=1599 live_mappings=0 live_span_bytes=6549504 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 empty_spans_sum=5 total_spans_sum=1599 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6672384
+CHECK snap_cached_eq_retained PASS cached=20480 retained=20480
+CHECK snap_cached_eq_empty_spans PASS empty=20480 cached=20480
+CHECK snap_mapped_eq_parts PASS mapped=6549504 parts=6549504
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK exit_counters_settled_after_join PASS counter re-read after 100 ms quiesce equals S1
+CHECK storm_exit_drains_exact PASS drains_delta=10000 blocks_delta=460000 expect_blocks=460000
+CHECK storm_live_is_held_only PASS live_small=20000 base=0 expect=+20000
+CHECK storm_held_per_class PASS live64=10000 live512=10000
+CHECK storm_retained_within_policy PASS retained=20480 bound_cap=163840
+RETAINED_AFTER_STORM_BYTES 20480
+HELD blocks_verified_and_freed=20000
+CHECK held_count_exact PASS held_seen=20000
+SNAP S2_after_held_free mapped=36864 cached=36864 released=133296128 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6672384
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK held_free_returns_live_to_base PASS live_small=0 base=0
+CHECK no_exit_drains_during_main_free PASS exit counters frozen while main frees
+CHECK main_cache_empty PASS main_cached_blocks=0
+SNAP S3_pre_trim mapped=36864 cached=36864 released=133296128 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6672384
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK trim_releases_exactly_retained PASS released_spans=9 pre_retained_spans=9
+TRIM released_spans=9 released_bytes=36864
+SNAP S4_final mapped=0 cached=0 released=133332992 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6672384
+CHECK snap_cached_eq_retained PASS cached=0 retained=0
+CHECK snap_cached_eq_empty_spans PASS empty=0 cached=0
+CHECK snap_mapped_eq_parts PASS mapped=0 parts=0
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK final_mapped_eq_pristine_to_the_byte PASS final_mapped=0 pristine_mapped=0 final_live_spans=0 pristine_live_spans=0
+CHECK zero_failures PASS alloc=0 pattern=0 create=0
+STORM threads=10000 waves_of=32 null_wall_s=0.118 storm_wall_s=1.116 worst_wave_ms=5.6 alloc_teardown_ns_per_thread=99785 checksum=89250992
+DRAIN exit_blocks=460000 drain_inclusive_ns_per_exit_block=2169 (upper bound: (storm-null) wall over exit-drained blocks; includes alloc/free work, labelled not pure drain)
+STORM RESULT: PASS (0 checks failed)
+PROBE EXIT: 0
+=== REP leg=glibc i=1 ===
+HELD blocks_verified_and_freed=20000
+CHECK zero_failures PASS alloc=0 pattern=0 create=0
+STORM threads=10000 waves_of=32 null_wall_s=0.113 storm_wall_s=0.115 worst_wave_ms=0.7 alloc_teardown_ns_per_thread=195 checksum=89250992
+STORM RESULT: PASS (0 checks failed)
+PROBE EXIT: 0
+=== REP leg=mimir i=2 ===
+SNAP S0_pristine mapped=0 cached=0 released=0 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=0 exit_blocks=0 metadata=0 retention_bound=2 peak_mapped=0
+CHECK snap_cached_eq_retained PASS cached=0 retained=0
+CHECK snap_cached_eq_empty_spans PASS empty=0 cached=0
+CHECK snap_mapped_eq_parts PASS mapped=0 parts=0
+CHECK snap_metadata_clean PASS J-006 walk
+SNAP S_cal mapped=28672 cached=20480 released=12288 live_small=2 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 empty_spans_sum=5 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+CHECK snap_cached_eq_retained PASS cached=20480 retained=20480
+CHECK snap_cached_eq_empty_spans PASS empty=20480 cached=20480
+CHECK snap_mapped_eq_parts PASS mapped=28672 parts=28672
+CHECK snap_metadata_clean PASS J-006 walk
+CALIB cached_blocks=46 cached_bytes=14912 hits=28 misses=6 refills=6 drains=0 drain_blocks=0 local_frees=32
+CHECK calibration_exit_drain_exact PASS drains_delta=1 blocks_delta=46 calib_cached=46
+SNAP S_base mapped=28672 cached=28672 released=12288 live_small=0 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=28672 retained_spans=7 empty_spans_sum=7 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+CHECK snap_cached_eq_retained PASS cached=28672 retained=28672
+CHECK snap_cached_eq_empty_spans PASS empty=28672 cached=28672
+CHECK snap_mapped_eq_parts PASS mapped=28672 parts=28672
+CHECK snap_metadata_clean PASS J-006 walk
+SNAP S_drn mapped=36864 cached=36864 released=3428352 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=257 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=393216
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK predrain_exit_returns_zero_blocks PASS drains_delta=256 blocks_delta=0 cap_sum=0
+CHECK predrain_live_back_to_base PASS held blocks of DRN threads freed by main
+SNAP S_null mapped=36864 cached=36864 released=3428352 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=257 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=393216
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK null_threads_no_drain PASS drains_delta=0 blocks_delta=0
+CHECK null_threads_no_state_change PASS mapped/live unchanged by allocator-free threads
+SNAP S1_after_storm mapped=6545408 cached=20480 released=128253952 live_small=20000 live_spans=1598 live_mappings=0 live_span_bytes=6545408 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 empty_spans_sum=5 total_spans_sum=1598 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6713344
+CHECK snap_cached_eq_retained PASS cached=20480 retained=20480
+CHECK snap_cached_eq_empty_spans PASS empty=20480 cached=20480
+CHECK snap_mapped_eq_parts PASS mapped=6545408 parts=6545408
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK exit_counters_settled_after_join PASS counter re-read after 100 ms quiesce equals S1
+CHECK storm_exit_drains_exact PASS drains_delta=10000 blocks_delta=460000 expect_blocks=460000
+CHECK storm_live_is_held_only PASS live_small=20000 base=0 expect=+20000
+CHECK storm_held_per_class PASS live64=10000 live512=10000
+CHECK storm_retained_within_policy PASS retained=20480 bound_cap=163840
+RETAINED_AFTER_STORM_BYTES 20480
+HELD blocks_verified_and_freed=20000
+CHECK held_count_exact PASS held_seen=20000
+SNAP S2_after_held_free mapped=36864 cached=36864 released=134762496 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6713344
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK held_free_returns_live_to_base PASS live_small=0 base=0
+CHECK no_exit_drains_during_main_free PASS exit counters frozen while main frees
+CHECK main_cache_empty PASS main_cached_blocks=0
+SNAP S3_pre_trim mapped=36864 cached=36864 released=134762496 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6713344
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK trim_releases_exactly_retained PASS released_spans=9 pre_retained_spans=9
+TRIM released_spans=9 released_bytes=36864
+SNAP S4_final mapped=0 cached=0 released=134799360 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6713344
+CHECK snap_cached_eq_retained PASS cached=0 retained=0
+CHECK snap_cached_eq_empty_spans PASS empty=0 cached=0
+CHECK snap_mapped_eq_parts PASS mapped=0 parts=0
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK final_mapped_eq_pristine_to_the_byte PASS final_mapped=0 pristine_mapped=0 final_live_spans=0 pristine_live_spans=0
+CHECK zero_failures PASS alloc=0 pattern=0 create=0
+STORM threads=10000 waves_of=32 null_wall_s=0.121 storm_wall_s=1.176 worst_wave_ms=5.9 alloc_teardown_ns_per_thread=105474 checksum=89250992
+DRAIN exit_blocks=460000 drain_inclusive_ns_per_exit_block=2293 (upper bound: (storm-null) wall over exit-drained blocks; includes alloc/free work, labelled not pure drain)
+STORM RESULT: PASS (0 checks failed)
+PROBE EXIT: 0
+=== REP leg=glibc i=2 ===
+HELD blocks_verified_and_freed=20000
+CHECK zero_failures PASS alloc=0 pattern=0 create=0
+STORM threads=10000 waves_of=32 null_wall_s=0.110 storm_wall_s=0.114 worst_wave_ms=0.8 alloc_teardown_ns_per_thread=390 checksum=89250992
+STORM RESULT: PASS (0 checks failed)
+PROBE EXIT: 0
+=== REP leg=mimir i=3 ===
+SNAP S0_pristine mapped=0 cached=0 released=0 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=0 exit_blocks=0 metadata=0 retention_bound=2 peak_mapped=0
+CHECK snap_cached_eq_retained PASS cached=0 retained=0
+CHECK snap_cached_eq_empty_spans PASS empty=0 cached=0
+CHECK snap_mapped_eq_parts PASS mapped=0 parts=0
+CHECK snap_metadata_clean PASS J-006 walk
+SNAP S_cal mapped=28672 cached=20480 released=12288 live_small=2 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 empty_spans_sum=5 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+CHECK snap_cached_eq_retained PASS cached=20480 retained=20480
+CHECK snap_cached_eq_empty_spans PASS empty=20480 cached=20480
+CHECK snap_mapped_eq_parts PASS mapped=28672 parts=28672
+CHECK snap_metadata_clean PASS J-006 walk
+CALIB cached_blocks=46 cached_bytes=14912 hits=28 misses=6 refills=6 drains=0 drain_blocks=0 local_frees=32
+CHECK calibration_exit_drain_exact PASS drains_delta=1 blocks_delta=46 calib_cached=46
+SNAP S_base mapped=28672 cached=28672 released=12288 live_small=0 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=28672 retained_spans=7 empty_spans_sum=7 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+CHECK snap_cached_eq_retained PASS cached=28672 retained=28672
+CHECK snap_cached_eq_empty_spans PASS empty=28672 cached=28672
+CHECK snap_mapped_eq_parts PASS mapped=28672 parts=28672
+CHECK snap_metadata_clean PASS J-006 walk
+SNAP S_drn mapped=36864 cached=36864 released=3391488 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=257 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=315392
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK predrain_exit_returns_zero_blocks PASS drains_delta=256 blocks_delta=0 cap_sum=0
+CHECK predrain_live_back_to_base PASS held blocks of DRN threads freed by main
+SNAP S_null mapped=36864 cached=36864 released=3391488 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=257 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=315392
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK null_threads_no_drain PASS drains_delta=0 blocks_delta=0
+CHECK null_threads_no_state_change PASS mapped/live unchanged by allocator-free threads
+SNAP S1_after_storm mapped=6545408 cached=20480 released=128126976 live_small=20000 live_spans=1598 live_mappings=0 live_span_bytes=6545408 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 empty_spans_sum=5 total_spans_sum=1598 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6639616
+CHECK snap_cached_eq_retained PASS cached=20480 retained=20480
+CHECK snap_cached_eq_empty_spans PASS empty=20480 cached=20480
+CHECK snap_mapped_eq_parts PASS mapped=6545408 parts=6545408
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK exit_counters_settled_after_join PASS counter re-read after 100 ms quiesce equals S1
+CHECK storm_exit_drains_exact PASS drains_delta=10000 blocks_delta=460000 expect_blocks=460000
+CHECK storm_live_is_held_only PASS live_small=20000 base=0 expect=+20000
+CHECK storm_held_per_class PASS live64=10000 live512=10000
+CHECK storm_retained_within_policy PASS retained=20480 bound_cap=163840
+RETAINED_AFTER_STORM_BYTES 20480
+HELD blocks_verified_and_freed=20000
+CHECK held_count_exact PASS held_seen=20000
+SNAP S2_after_held_free mapped=36864 cached=36864 released=134635520 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6639616
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK held_free_returns_live_to_base PASS live_small=0 base=0
+CHECK no_exit_drains_during_main_free PASS exit counters frozen while main frees
+CHECK main_cache_empty PASS main_cached_blocks=0
+SNAP S3_pre_trim mapped=36864 cached=36864 released=134635520 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 empty_spans_sum=9 total_spans_sum=9 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6639616
+CHECK snap_cached_eq_retained PASS cached=36864 retained=36864
+CHECK snap_cached_eq_empty_spans PASS empty=36864 cached=36864
+CHECK snap_mapped_eq_parts PASS mapped=36864 parts=36864
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK trim_releases_exactly_retained PASS released_spans=9 pre_retained_spans=9
+TRIM released_spans=9 released_bytes=36864
+SNAP S4_final mapped=0 cached=0 released=134672384 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=10257 exit_blocks=460046 metadata=0 retention_bound=2 peak_mapped=6639616
+CHECK snap_cached_eq_retained PASS cached=0 retained=0
+CHECK snap_cached_eq_empty_spans PASS empty=0 cached=0
+CHECK snap_mapped_eq_parts PASS mapped=0 parts=0
+CHECK snap_metadata_clean PASS J-006 walk
+CHECK final_mapped_eq_pristine_to_the_byte PASS final_mapped=0 pristine_mapped=0 final_live_spans=0 pristine_live_spans=0
+CHECK zero_failures PASS alloc=0 pattern=0 create=0
+STORM threads=10000 waves_of=32 null_wall_s=0.117 storm_wall_s=1.163 worst_wave_ms=5.6 alloc_teardown_ns_per_thread=104574 checksum=89250992
+DRAIN exit_blocks=460000 drain_inclusive_ns_per_exit_block=2273 (upper bound: (storm-null) wall over exit-drained blocks; includes alloc/free work, labelled not pure drain)
+STORM RESULT: PASS (0 checks failed)
+PROBE EXIT: 0
+=== REP leg=glibc i=3 ===
+HELD blocks_verified_and_freed=20000
+CHECK zero_failures PASS alloc=0 pattern=0 create=0
+STORM threads=10000 waves_of=32 null_wall_s=0.114 storm_wall_s=0.117 worst_wave_ms=0.7 alloc_teardown_ns_per_thread=268 checksum=89250992
+STORM RESULT: PASS (0 checks failed)
+PROBE EXIT: 0
+STANDING GATE: scripts/z13/run_gate.sh, log hidden_files/z042_gate.log - GREEN, 4988 checks / 0 failed / 77 by-design skips, make exit 0. Identical counts to the baseline: this slice adds no make-test tests (the probe is standalone via its runner, the Z-034 precedent) and changes no production code, delta zero.
+
+VERDICT (roadmap Law 2; this is a correctness/storm slice and its honest grade is a proof statement, not a WIN/TIE/LOSS against glibc):
+  PASS - storm green. 10,000 short-lived allocating threads, three recorded repetitions, every teardown identity exact in every rep: 10,000 thread-exit drains returning 460,000 cached blocks (exactly 10,000 x the calibration thread's 46), zero double-returns (DRN phase), zero lost blocks, zero metadata violations, zero allocation or pattern failures.
+  Retained-bytes-after-storm figure recorded: 20480 bytes (5 empty spans) in every rep, fully decomposed as G-007 retention-policy holding (bound 2 per class) - and proven not a leak by the same process's trim phase, after which bytes_mapped returns to the pristine figure to the byte (0) with retained bytes 0.
+  Drain cost recorded: alloc+free+teardown over the null-thread control = 104574 ns per thread (median); drain-inclusive upper bound 2273 ns per exit-drained block (median), labelled as an upper bound, never a pure drain price.
+  Gate: storm green - MET. Retained-bytes-after-storm figure recorded - MET (20480 B, decomposed and trim-proven above).
+
+defects: no allocator defect found (no production code changed). Tooling incidents in this slice's own transfer path, caught and repaired before any run: two base64 transfer pieces of the probe source were corrupted in re-emission (caught by per-piece sha256 both times, nothing bad landed; the affected piece crossed in hash-verified 1000-byte sub-pieces), the same failure class as Z-034's transfer note.
+repro: sh tests/perf/run_z042.sh hidden_files/z042_raw.txt then python3 tests/perf/summarize_z042.py hidden_files/z042_raw.txt. Raw evidence: hidden_files/z042_raw.txt (canonical, 6 reps) + z042_summary.txt + warm-up outputs z042_raw.txt.warm_mimir / z042_raw.txt.warm_glibc, trial logs z042_trial1.log / z042_trial_glibc.log, host header z042_host_truth.txt, load files z042_load_before.txt / z042_load_after.txt, gate log z042_gate.log. Probe source sha256 1e49a238b0d49ef2bed5f4b11be8c74955f98ab0180956b127bbb36ebb657f70 (byte-identical to the authored source; assembled on-device from hash-verified pieces).
