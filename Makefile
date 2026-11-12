@@ -875,6 +875,31 @@ test-z017: $(BUILD)/probe_z017_glibc $(BUILD)/probe_z017_mimir
 
 .PHONY: test-z017
 
+# Z-025: calloc and realloc anatomy probe - dual-leg
+# (probe_z017 pattern): glibc leg (-DLEG_GLIBC) and
+# MimirAlloc leg (production LIBOBJS) built from
+# tests/perf/probe_z025.c. Standalone via make test-z025;
+# NOT part of make test. Recorded run:
+# tests/perf/recorded_run_z13_z025.txt. Runner:
+# tests/perf/run_z025.sh (Z-004 protocol).
+$(BUILD)/probe_z025_glibc.o: tests/perf/probe_z025.c | $(BUILD)
+	$(CC) $(CFLAGS) -DLEG_GLIBC -c tests/perf/probe_z025.c -o $@
+
+$(BUILD)/probe_z025_glibc: $(BUILD)/probe_z025_glibc.o
+	$(CC) $(CFLAGS) $(BUILD)/probe_z025_glibc.o -o $@
+
+$(BUILD)/probe_z025_mimir.o: tests/perf/probe_z025.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_z025.c -o $@
+
+$(BUILD)/probe_z025_mimir: $(LIBOBJS) $(BUILD)/probe_z025_mimir.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_z025_mimir.o -o $@
+
+test-z025: $(BUILD)/probe_z025_glibc $(BUILD)/probe_z025_mimir
+	./$(BUILD)/probe_z025_glibc > /dev/null
+	./$(BUILD)/probe_z025_mimir > /dev/null
+
+.PHONY: test-z025
+
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies
 # cross-thread frees on the span and mapping paths,
