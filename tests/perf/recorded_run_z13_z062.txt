@@ -1,0 +1,462 @@
+Z-062 RECORDED RUN - Reuse-distance and L3 (MIMIRALLOC_Z13_ROADMAP.md Wave 7)
+=====================================================================
+Slice: Z-062 - Reuse-distance and L3. Allocation reuse policy
+(LIFO/FIFO per class) measured against L3: does hot reuse stay
+cache-resident at desktop working-set sizes?
+Gate: reuse-policy table; any per-class policy change proposed
+with its numbers. PROPOSALS ONLY in this slice - no core change
+is made or adopted here.
+Base: team HEAD 8014317, merge of seat main c2ed635 (banked
+Z-001..Z-056) into yrsa/mimiralloc-team-06. No production code
+is changed by this slice.
+Run of record: main sweep 2026-11-12, start 10:30:18-05:00
+(hidden_files/z062_run_start.txt, host truth below); native
+diagnostics as provenanced in the DIAGNOSTICS section (one cell
+completed by the finishing lead 2026-11-12 ~12:16-12:22-05:00).
+Host: purpleraider (ASUS ROG Flow Z13, AMD Ryzen AI MAX+ 395 /
+Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44,
+kernel 7.3.0-10-generic.
+Artifacts: tests/perf/probe_z062.c (sha256 4d4148438d62e62c00c6c847df7173c0e285a36a0df56bf682bc2719da2dd7a1),
+tests/perf/run_z062.sh (099f688d4f3fa79e07feb8198cfba4f17feaa17ff69c962bcc45a735b2dae171),
+tests/perf/summarize_z062.py (f95b4d9709cbcca6c6e9818c63039bbed8239bd9e0f2f75f3e15bfdc40eaab5d).
+Raw of record: hidden_files/z062_raw.csv (565 rows, sha256
+90cac0eb4c6df8202d1396ef56330e140591ca546686d8fc5f3add8a28c96623),
+hidden_files/z062_raw.csv.diag (3 rows, sha256 a98083c2720608d8e62ec8f631bffbfbd207436ec83e5b71f07feecbca81c6bc),
+hidden_files/z062_attempt1_raw.csv (102 rows, sha256 eb5c6fbe0af67cebbcb9e4a7026640ec5ed7fb93c2ae885abdcc3f3cd46a009c).
+All hidden_files are team-local evidence, not banked.
+
+ENVIRONMENT STAMP (run of record, scripts/z13/host_truth.sh verbatim)
+---------------------------------------------------------------------
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T15:30:18Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2748346
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 63%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.10 0.38 1.11
+
+TOPOLOGY RECONCILIATION (roadmap wording vs measured fact)
+---------------------------------------------------------------------
+The roadmap says "the 64 MiB L3". Measurement governs, and the
+facts of record (Z-010, tests/perf/recorded_run_z010.txt) say
+otherwise: lscpu reports "L3 cache: 64 MiB (2 instances)" - an
+AGGREGATE of two per-CCD caches. Per-CCD L3 is 32 MiB:
+lscpu -C shows L3 ONE-SIZE 32M / ALL-SIZE 64M, and sysfs (via
+Z-010) shows cpu0 L3 32768K shared by cpus 0-7,16-23 (CCD0),
+cpu8 L3 32768K shared by 8-15,24-31 (CCD1). Z-010's pointer
+chase found the L3 boundary AT 32 MiB and expressly NO step at
+64 MiB: a single pinned core cannot use the other CCD's L3 as
+local cache. This slice's probe is pinned to one core (CPU 5,
+CCD0), so the L3 that governs every number below is the 32 MiB
+per-CCD L3. Footprints 33554432 (32 MiB) sit at that boundary;
+50331648 (48 MiB) and 100663296 (96 MiB) are BEYOND one CCD's
+L3 (they are not "inside the 64 MiB L3"). L1d is 48 KiB/core,
+L2 is 1 MiB/core (16 MiB aggregate): footprints 65536 (64 KiB)
+cross L1d, 2097152 (2 MiB) crosses L2, 16777216 (16 MiB) sits
+inside per-CCD L3, 32 MiB at its edge, 48/96 MiB beyond it.
+
+LOAD STATE (honest record, shared host)
+---------------------------------------------------------------------
+Main sweep start (10:30:18-05:00): loadavg 0.10 0.38 1.11 - a
+quiet window at sweep start (host truth above, governor
+performance). The host is SHARED (sibling forge teams, Aesir,
+Lifthrasir, Tensile lab are co-tenants; the Z-057/Z-060-era
+work was active that morning per the assignment note). Probes
+pinned taskset -c 5 (CCD0), away from cores 2/3. The finishing
+lead's diagnostic completion run (12:16-12:22-05:00) ran under
+loadavg 2.27 2.73 3.03 rising to 2.51 3.40 3.23 with the Z-061
+soak live on cores 2/3 - that cell is a contended n=1
+diagnostic, indicative only. Headline medians are this-machine
+measurements under the recorded load, NOT quiet-machine
+baselines; the drift and disagreement flags in the summary are
+carried into the verdicts below, never smoothed away.
+
+METHOD (Z-004 protocol)
+---------------------------------------------------------------------
+One process per measured value, pinned taskset -c 5; 3 warm-up
+processes per leg at the smallest cell, discarded; 5 measured
+processes per cell, legs interleaved round-robin per repetition
+round; headline = MEDIAN (summarize_z062.py). Workload per
+process: W = footprint / class_size blocks; initial fill writes
+0xA5 over every block; each cycle releases all W blocks, then
+reacquires all W, then touches every block (a byte per 64 B
+line read into a volatile sink and written back incremented).
+One warm-up cycle inside the probe proves the allocator hands
+out W pairwise-distinct pointers (qsort check, else exit 5).
+Checksum is a deterministic function of (block index, cycle),
+identical across policies and allocators by construction - the
+K-002 workload-equivalence proof. Content preservation across
+a native free is NOT assumed: a full free-all empties spans and
+MimirAlloc releases empty spans beyond its per-class retention
+bound, so a reacquired block may sit on a fresh zero page (the
+probe's first draft found exactly that; recorded here as a
+reuse-policy fact). Policies: native = real free/malloc each
+cycle (the allocator's own reuse order: MimirAlloc LIFO
+end-to-end - TLS bin capacity 16 over central span free lists,
+both LIFO; glibc tcache LIFO at these sizes); lifo / fifo =
+EMULATED order over a probe-held pool allocated once from the
+same allocator (release pushes/enqueues 0..W-1, reacquire pops
+in reverse / same order). The lifo emulation is the control
+for the fifo emulation: same blocks, only the order differs.
+The mimir lifo leg runs twice per round (lifo + lifo_dup) as
+the identical-leg agreement control, bound 5%. Cells: classes
+64 / 256 / 1024 at footprints 65536, 2097152, 16777216,
+33554432, 50331648, 100663296; large class 8192 at 2097152,
+33554432, 100663296 (legs native + fifo + glibc native only -
+no lifo pair was measured for 8192, and no order claim is made
+for it). Timed rounds per process: 4, or 2 when W > 200000.
+
+NATIVE CAP AND DIAGNOSTICS (attempt-2 rescoping, disclosed)
+---------------------------------------------------------------------
+Attempt 1 (hidden_files/z062_attempt1_raw.csv, 102 rows, class
+64 only, stopped mid-sweep) measured mimir native at class 64 /
+32 MiB taking 51,437 ns/block (53.9 s for one process) - a
+superlinear cliff (emulated LIFO at the same cell: 5.9
+ns/block). The main sweep therefore runs mimir native only
+where W <= 262144 blocks; above the cap the other legs run at
+full reps and mimir native is measured as a SINGLE-PROCESS
+DIAGNOSTIC (1 rep, 1 timed round) written to the .diag file -
+n=1, never a median. Main-sweep completeness: 565 rows =
+exactly the rescoped design (finishing lead re-derived the
+expected row count per cell from run_z062.sh and matched it
+against the raw, cell by cell). Diagnostics of record:
+  class 64 / 33554432: attempt 1 holds TWO full native
+    processes (rounds=2): 51437.049 and 50778.031 ns/block.
+    This cell was not re-run in the main sweep, by design.
+  class 64 / 50331648: 130593.008 ns/block (diag, n=1)
+  class 64 / 100663296: 498637.968 ns/block (diag, n=1)
+  class 256 / 100663296: 316759.294 ns/block (diag, n=1) -
+    completed by the finishing lead 2026-11-12 ~12:16-12:22
+    (probe rebuilt with run_z062.sh's exact gcc commands;
+    hidden_files/z062_diag_completion_note.txt). The previous
+    lead's 11:28 EST re-run attempt failed before measuring
+    anything (hidden_files/z062_run2.log: build/z62/probe_mimir
+    missing - that hand-rolled attempt skipped the build step
+    run_z062.sh performs itself; the finishing lead's rebuild
+    with the runner's own commands succeeds, BUILD_OK).
+
+SUMMARY (python3 tests/perf/summarize_z062.py hidden_files/z062_raw.csv, verbatim;
+re-running the summariser on the preserved raw reproduces
+hidden_files/z062_summary.txt BYTE-IDENTICALLY - verified by
+the finishing lead this session, diff empty)
+---------------------------------------------------------------------
+Z-062 reuse-distance summary (median of processes, Z-004 protocol)
+  glibc  fifo   class=   64 fp=    65536 n=5 median     1.478 min     1.463 max     1.497 ns/block
+  glibc  native class=   64 fp=    65536 n=5 median    10.572 min    10.422 max    11.420 ns/block
+  mimir  fifo   class=   64 fp=    65536 n=5 median     1.396 min     1.392 max     1.399 ns/block
+  mimir  lifo   class=   64 fp=    65536 n=10 median     1.366 min     1.352 max     1.377 ns/block
+  mimir  native class=   64 fp=    65536 n=5 median   367.252 min   360.726 max   369.015 ns/block
+  glibc  fifo   class=   64 fp=  2097152 n=5 median     1.374 min     1.373 max     1.403 ns/block
+  glibc  native class=   64 fp=  2097152 n=5 median    10.888 min    10.808 max    11.034 ns/block
+  mimir  fifo   class=   64 fp=  2097152 n=5 median     1.432 min     1.425 max     1.567 ns/block
+  mimir  lifo   class=   64 fp=  2097152 n=10 median     1.441 min     1.435 max     1.455 ns/block
+  mimir  native class=   64 fp=  2097152 n=5 median   414.837 min   411.449 max   417.307 ns/block
+  glibc  fifo   class=   64 fp= 16777216 n=5 median     1.916 min     1.837 max     1.989 ns/block
+  glibc  native class=   64 fp= 16777216 n=5 median    11.353 min    11.142 max    11.424 ns/block
+  mimir  fifo   class=   64 fp= 16777216 n=5 median     3.568 min     3.144 max     6.254 ns/block
+  mimir  lifo   class=   64 fp= 16777216 n=10 median     2.792 min     2.529 max     5.522 ns/block
+  mimir  native class=   64 fp= 16777216 n=5 median 13872.502 min 13781.664 max 13937.505 ns/block
+  glibc  fifo   class=   64 fp= 33554432 n=5 median     3.014 min     2.945 max     3.159 ns/block
+  glibc  native class=   64 fp= 33554432 n=5 median    12.720 min    12.592 max    13.230 ns/block
+  mimir  fifo   class=   64 fp= 33554432 n=5 median     6.442 min     6.399 max     6.895 ns/block
+  mimir  lifo   class=   64 fp= 33554432 n=10 median     6.016 min     5.931 max     6.290 ns/block
+  glibc  fifo   class=   64 fp= 50331648 n=5 median     3.299 min     3.198 max     3.348 ns/block
+  glibc  native class=   64 fp= 50331648 n=5 median    12.998 min    12.890 max    13.355 ns/block
+  mimir  fifo   class=   64 fp= 50331648 n=5 median     6.804 min     6.729 max     6.926 ns/block
+  mimir  lifo   class=   64 fp= 50331648 n=10 median     6.718 min     6.537 max     8.094 ns/block
+  glibc  fifo   class=   64 fp=100663296 n=5 median     3.607 min     3.589 max     3.670 ns/block
+  glibc  native class=   64 fp=100663296 n=5 median    13.214 min    13.127 max    13.258 ns/block
+  mimir  fifo   class=   64 fp=100663296 n=5 median     7.121 min     7.081 max     7.175 ns/block
+  mimir  lifo   class=   64 fp=100663296 n=10 median     7.154 min     7.126 max     7.280 ns/block
+  glibc  fifo   class=  256 fp=    65536 n=5 median     2.828 min     2.809 max     2.856 ns/block
+  glibc  native class=  256 fp=    65536 n=5 median    11.917 min    11.623 max    12.181 ns/block
+  mimir  fifo   class=  256 fp=    65536 n=5 median     2.866 min     2.827 max     2.877 ns/block
+  mimir  lifo   class=  256 fp=    65536 n=10 median     2.641 min     2.593 max     2.699 ns/block
+  mimir  native class=  256 fp=    65536 n=5 median   764.487 min   756.602 max   921.381 ns/block
+  glibc  fifo   class=  256 fp=  2097152 n=5 median     2.786 min     2.763 max     4.289 ns/block
+  glibc  native class=  256 fp=  2097152 n=5 median    13.297 min    12.648 max    14.168 ns/block
+  mimir  fifo   class=  256 fp=  2097152 n=5 median     3.276 min     3.238 max     3.333 ns/block
+  mimir  lifo   class=  256 fp=  2097152 n=10 median     3.327 min     3.297 max     3.888 ns/block
+  mimir  native class=  256 fp=  2097152 n=5 median   969.755 min   958.915 max   982.920 ns/block
+  glibc  fifo   class=  256 fp= 16777216 n=5 median     4.945 min     3.880 max     5.348 ns/block
+  glibc  native class=  256 fp= 16777216 n=5 median    15.577 min    13.263 max    16.695 ns/block
+  mimir  fifo   class=  256 fp= 16777216 n=5 median     5.225 min     4.972 max    11.925 ns/block
+  mimir  lifo   class=  256 fp= 16777216 n=10 median     4.753 min     4.591 max     5.386 ns/block
+  mimir  native class=  256 fp= 16777216 n=5 median  2720.134 min  2675.353 max  2762.125 ns/block
+  glibc  fifo   class=  256 fp= 33554432 n=5 median     6.420 min     6.324 max     7.882 ns/block
+  glibc  native class=  256 fp= 33554432 n=5 median    21.112 min    20.338 max    22.930 ns/block
+  mimir  fifo   class=  256 fp= 33554432 n=5 median    15.742 min    15.112 max    18.237 ns/block
+  mimir  lifo   class=  256 fp= 33554432 n=10 median    16.796 min    15.719 max    23.444 ns/block
+  mimir  native class=  256 fp= 33554432 n=5 median 17530.245 min 16217.405 max 17916.688 ns/block
+  glibc  fifo   class=  256 fp= 50331648 n=5 median     7.313 min     7.197 max     7.426 ns/block
+  glibc  native class=  256 fp= 50331648 n=5 median    25.047 min    24.549 max    25.465 ns/block
+  mimir  fifo   class=  256 fp= 50331648 n=5 median    19.040 min    18.486 max    19.193 ns/block
+  mimir  lifo   class=  256 fp= 50331648 n=10 median    20.956 min    20.259 max    21.381 ns/block
+  mimir  native class=  256 fp= 50331648 n=5 median 55410.423 min 54072.635 max 56797.921 ns/block
+  glibc  fifo   class=  256 fp=100663296 n=5 median     7.972 min     7.882 max     8.201 ns/block
+  glibc  native class=  256 fp=100663296 n=5 median    27.835 min    27.745 max    29.019 ns/block
+  mimir  fifo   class=  256 fp=100663296 n=5 median    20.658 min    20.506 max    20.673 ns/block
+  mimir  lifo   class=  256 fp=100663296 n=10 median    23.328 min    23.236 max    23.805 ns/block
+  glibc  fifo   class= 1024 fp=    65536 n=5 median     8.375 min     8.293 max    22.543 ns/block
+  glibc  native class= 1024 fp=    65536 n=5 median    25.676 min    25.164 max    26.219 ns/block
+  mimir  fifo   class= 1024 fp=    65536 n=5 median     8.141 min     8.141 max     8.531 ns/block
+  mimir  lifo   class= 1024 fp=    65536 n=10 median     7.571 min     7.438 max     9.004 ns/block
+  mimir  native class= 1024 fp=    65536 n=5 median  2605.617 min  2481.203 max  2694.570 ns/block
+  glibc  fifo   class= 1024 fp=  2097152 n=5 median     8.887 min     8.750 max    17.051 ns/block
+  glibc  native class= 1024 fp=  2097152 n=5 median    28.293 min    27.800 max    29.903 ns/block
+  mimir  fifo   class= 1024 fp=  2097152 n=5 median    12.352 min    12.078 max    13.355 ns/block
+  mimir  lifo   class= 1024 fp=  2097152 n=10 median    11.829 min    11.566 max    17.949 ns/block
+  mimir  native class= 1024 fp=  2097152 n=5 median  4345.807 min  4222.370 max  4394.613 ns/block
+  glibc  fifo   class= 1024 fp= 16777216 n=5 median    14.147 min    13.056 max    20.273 ns/block
+  glibc  native class= 1024 fp= 16777216 n=5 median    33.021 min    32.079 max    35.193 ns/block
+  mimir  fifo   class= 1024 fp= 16777216 n=5 median    23.961 min    23.267 max    26.329 ns/block
+  mimir  lifo   class= 1024 fp= 16777216 n=10 median    20.733 min    19.843 max    22.888 ns/block
+  mimir  native class= 1024 fp= 16777216 n=5 median 14119.058 min 13475.644 max 14778.497 ns/block
+  glibc  fifo   class= 1024 fp= 33554432 n=5 median    22.515 min    21.937 max    26.152 ns/block
+  glibc  native class= 1024 fp= 33554432 n=5 median    43.465 min    42.050 max    44.626 ns/block
+  mimir  fifo   class= 1024 fp= 33554432 n=5 median    69.698 min    67.338 max    71.114 ns/block
+  mimir  lifo   class= 1024 fp= 33554432 n=10 median    65.892 min    65.028 max    69.508 ns/block
+  mimir  native class= 1024 fp= 33554432 n=5 median 45611.585 min 38715.660 max 47270.310 ns/block
+  glibc  fifo   class= 1024 fp= 50331648 n=5 median    25.205 min    24.207 max    28.483 ns/block
+  glibc  native class= 1024 fp= 50331648 n=5 median    48.604 min    46.399 max    49.447 ns/block
+  mimir  fifo   class= 1024 fp= 50331648 n=5 median    77.867 min    77.699 max    78.015 ns/block
+  mimir  lifo   class= 1024 fp= 50331648 n=10 median    70.689 min    67.750 max    71.968 ns/block
+  mimir  native class= 1024 fp= 50331648 n=5 median 84947.897 min 81050.980 max 85783.038 ns/block
+  glibc  fifo   class= 1024 fp=100663296 n=5 median    27.553 min    27.420 max    28.023 ns/block
+  glibc  native class= 1024 fp=100663296 n=5 median    51.540 min    50.908 max    52.683 ns/block
+  mimir  fifo   class= 1024 fp=100663296 n=5 median    82.140 min    81.624 max    82.381 ns/block
+  mimir  lifo   class= 1024 fp=100663296 n=10 median    79.218 min    77.368 max   100.947 ns/block
+  mimir  native class= 1024 fp=100663296 n=5 median 217472.357 min 209011.394 max 220791.668 ns/block
+  glibc  native class= 8192 fp=  2097152 n=5 median  1179.961 min  1165.647 max  1191.271 ns/block
+  mimir  fifo   class= 8192 fp=  2097152 n=5 median    84.953 min    81.755 max    89.719 ns/block
+  mimir  native class= 8192 fp=  2097152 n=5 median  3154.074 min  3075.284 max  3243.214 ns/block
+  glibc  native class= 8192 fp= 33554432 n=5 median  1507.218 min  1496.217 max  1515.418 ns/block
+  mimir  fifo   class= 8192 fp= 33554432 n=5 median   434.520 min   431.965 max   436.561 ns/block
+  mimir  native class= 8192 fp= 33554432 n=5 median 14798.499 min 14457.658 max 15040.144 ns/block
+  glibc  native class= 8192 fp=100663296 n=5 median  1862.206 min  1806.428 max  1870.590 ns/block
+  mimir  fifo   class= 8192 fp=100663296 n=5 median   547.102 min   545.505 max   563.242 ns/block
+  mimir  native class= 8192 fp=100663296 n=5 median 70135.099 min 67368.457 max 74393.763 ns/block
+checksum proof: OK (one checksum per cell across all legs)
+drift (split-half, bound 8%):
+  DRIFT-REJECT ('glibc', 'fifo', 256, 2097152): 26.8%
+  DRIFT-REJECT ('glibc', 'fifo', 256, 16777216): 15.4%
+  DRIFT-REJECT ('mimir', 'fifo', 256, 16777216): 64.0%
+  DRIFT-REJECT ('glibc', 'fifo', 256, 33554432): 10.6%
+  DRIFT-REJECT ('mimir', 'fifo', 256, 33554432): 9.8%
+  DRIFT-REJECT ('mimir', 'lifo', 256, 33554432): 16.1%
+  DRIFT-REJECT ('glibc', 'fifo', 1024, 65536): 84.4%
+  DRIFT-REJECT ('glibc', 'fifo', 1024, 2097152): 47.1%
+  DRIFT-REJECT ('mimir', 'lifo', 1024, 2097152): 21.4%
+  DRIFT-REJECT ('glibc', 'fifo', 1024, 16777216): 32.4%
+  DRIFT-REJECT ('glibc', 'native', 1024, 16777216): 8.9%
+  DRIFT-REJECT ('mimir', 'fifo', 1024, 16777216): 11.6%
+policy ratios (median ns/block):
+  class=   64 fp=    65536 fifo/lifo 1.022 TIE | native/lifo 268.852 LOSS (first-named slower) | mimir-native/glibc-native 34.738 LOSS (first-named slower)
+  class=   64 fp=  2097152 fifo/lifo 0.994 TIE | native/lifo 287.981 LOSS (first-named slower) | mimir-native/glibc-native 38.100 LOSS (first-named slower)
+  class=   64 fp= 16777216 fifo/lifo 1.278 LOSS (first-named slower) | native/lifo 4969.551 LOSS (first-named slower) | mimir-native/glibc-native 1221.924 LOSS (first-named slower)
+  class=   64 fp= 33554432 fifo/lifo 1.071 LOSS (first-named slower) | native/lifo n/a | mimir-native/glibc-native n/a
+  class=   64 fp= 50331648 fifo/lifo 1.013 TIE | native/lifo n/a | mimir-native/glibc-native n/a
+  class=   64 fp=100663296 fifo/lifo 0.995 TIE | native/lifo n/a | mimir-native/glibc-native n/a
+  class=  256 fp=    65536 fifo/lifo 1.085 LOSS (first-named slower) | native/lifo 289.469 LOSS (first-named slower) | mimir-native/glibc-native 64.151 LOSS (first-named slower)
+  class=  256 fp=  2097152 fifo/lifo 0.985 TIE | native/lifo 291.524 LOSS (first-named slower) | mimir-native/glibc-native 72.930 LOSS (first-named slower)
+  class=  256 fp= 16777216 fifo/lifo 1.099 LOSS (first-named slower) | native/lifo 572.298 LOSS (first-named slower) | mimir-native/glibc-native 174.625 LOSS (first-named slower)
+  class=  256 fp= 33554432 fifo/lifo 0.937 WIN (first-named faster) | native/lifo 1043.747 LOSS (first-named slower) | mimir-native/glibc-native 830.345 LOSS (first-named slower)
+  class=  256 fp= 50331648 fifo/lifo 0.909 WIN (first-named faster) | native/lifo 2644.195 LOSS (first-named slower) | mimir-native/glibc-native 2212.258 LOSS (first-named slower)
+  class=  256 fp=100663296 fifo/lifo 0.886 WIN (first-named faster) | native/lifo n/a | mimir-native/glibc-native n/a
+  class= 1024 fp=    65536 fifo/lifo 1.075 LOSS (first-named slower) | native/lifo 344.180 LOSS (first-named slower) | mimir-native/glibc-native 101.481 LOSS (first-named slower)
+  class= 1024 fp=  2097152 fifo/lifo 1.044 TIE | native/lifo 367.401 LOSS (first-named slower) | mimir-native/glibc-native 153.600 LOSS (first-named slower)
+  class= 1024 fp= 16777216 fifo/lifo 1.156 LOSS (first-named slower) | native/lifo 680.978 LOSS (first-named slower) | mimir-native/glibc-native 427.578 LOSS (first-named slower)
+  class= 1024 fp= 33554432 fifo/lifo 1.058 LOSS (first-named slower) | native/lifo 692.212 LOSS (first-named slower) | mimir-native/glibc-native 1049.387 LOSS (first-named slower)
+  class= 1024 fp= 50331648 fifo/lifo 1.102 LOSS (first-named slower) | native/lifo 1201.722 LOSS (first-named slower) | mimir-native/glibc-native 1747.755 LOSS (first-named slower)
+  class= 1024 fp=100663296 fifo/lifo 1.037 TIE | native/lifo 2745.239 LOSS (first-named slower) | mimir-native/glibc-native 4219.487 LOSS (first-named slower)
+  class= 8192 fp=  2097152 fifo/lifo n/a | native/lifo n/a | mimir-native/glibc-native 2.673 LOSS (first-named slower)
+  class= 8192 fp= 33554432 fifo/lifo n/a | native/lifo n/a | mimir-native/glibc-native 9.818 LOSS (first-named slower)
+  class= 8192 fp=100663296 fifo/lifo n/a | native/lifo n/a | mimir-native/glibc-native 37.662 LOSS (first-named slower)
+identical-leg agreement (mimir lifo vs lifo_dup, bound 5%):
+  class=   64 fp=    65536 1.367 vs 1.358 diff 0.7%
+  class=   64 fp=  2097152 1.440 vs 1.442 diff 0.1%
+  class=   64 fp= 16777216 2.801 vs 2.738 diff 2.3%
+  class=   64 fp= 33554432 5.985 vs 6.066 diff 1.3%
+  class=   64 fp= 50331648 6.703 vs 6.733 diff 0.4%
+  class=   64 fp=100663296 7.155 vs 7.146 diff 0.1%
+  class=  256 fp=    65536 2.650 vs 2.622 diff 1.1%
+  class=  256 fp=  2097152 3.334 vs 3.305 diff 0.9%
+  class=  256 fp= 16777216 4.772 vs 4.635 diff 2.9%
+  class=  256 fp= 33554432 17.587 vs 15.901 diff 10.1% DISAGREE
+  class=  256 fp= 50331648 20.890 vs 20.986 diff 0.5%
+  class=  256 fp=100663296 23.483 vs 23.316 diff 0.7%
+  class= 1024 fp=    65536 7.594 vs 7.551 diff 0.6%
+  class= 1024 fp=  2097152 11.884 vs 11.763 diff 1.0%
+  class= 1024 fp= 16777216 20.720 vs 21.212 diff 2.3%
+  class= 1024 fp= 33554432 66.130 vs 65.655 diff 0.7%
+  class= 1024 fp= 50331648 70.785 vs 70.592 diff 0.3%
+  class= 1024 fp=100663296 80.357 vs 78.434 diff 2.4%
+
+REUSE-POLICY TABLE (the gate table, condensed from the summary
+above; medians in ns/block; grades use the 5% noise bound,
+ratio in [0.95,1.05] = TIE)
+---------------------------------------------------------------------
+Emulated order pair (mimir pool; fifo/lifo - the pure reuse-
+order comparison, allocator overhead held identical):
+  class   footprint   lifo     fifo    fifo/lifo  grade
+     64       65536   1.366    1.396    1.022    TIE
+     64     2097152   1.441    1.432    0.994    TIE
+     64    16777216   2.792    3.568    1.278    LOSS (fifo slower)
+     64    33554432   6.016    6.442    1.071    LOSS
+     64    50331648   6.718    6.804    1.013    TIE
+     64   100663296   7.154    7.121    0.995    TIE
+    256       65536   2.641    2.866    1.085    LOSS
+    256     2097152   3.327    3.276    0.985    TIE
+    256    16777216   4.753    5.225    1.099    LOSS
+    256    33554432  16.796   15.742    0.937    WIN (fifo) *INDICATIVE
+    256    50331648  20.956   19.040    0.909    WIN (fifo)
+    256   100663296  23.328   20.658    0.886    WIN (fifo)
+   1024       65536   7.571    8.141    1.075    LOSS
+   1024     2097152  11.829   12.352    1.044    TIE
+   1024    16777216  20.733   23.961    1.156    LOSS
+   1024    33554432  65.892   69.698    1.058    LOSS
+   1024    50331648  70.689   77.867    1.102    LOSS
+   1024   100663296  79.218   82.140    1.037    TIE
+*INDICATIVE: the 256 / 32 MiB cell carries a DRIFT-REJECT on
+both emulated legs (fifo 9.8%, lifo 16.1%) and the slice's
+only identical-leg DISAGREE (lifo parity 10.1% at that cell).
+Shipped policy (native) against the emulated LIFO control
+(mimir native / mimir lifo, main sweep only): LOSS at every
+measured cell, 268.9x at the smallest (64 / 64 KiB) growing
+superlinearly to 2745.2x (1024 / 96 MiB). Above the cap the
+diagnostics extend the same curve: ~51.4k ns/block (64 / 32
+MiB, attempt 1), 130.6k (64 / 48 MiB), 498.6k (64 / 96 MiB),
+316.8k (256 / 96 MiB), all n=1 or n=2 diagnostics.
+Against glibc native: mimir native LOSS at every measured
+cell (34.7x at 64 / 64 KiB to 4219.5x at 1024 / 96 MiB);
+glibc native itself stays in a narrow band (10.4-13.4 ns/block
+at class 64, 11.6-27.8 at 256, 25.2-51.5 at 1024) at every
+footprint. Large class 8192 (no lifo pair; emulated fifo is
+the control): mimir fifo 84.953 / 434.520 / 547.102 vs mimir
+native 3154.074 / 14798.499 / 70135.099 vs glibc native
+1179.961 / 1507.218 / 1862.206 ns/block at 2 / 32 / 96 MiB -
+mimir native LOSS vs glibc native 2.673x / 9.818x / 37.662x.
+Cache-residency shape (emulated legs, the roadmap question):
+both orders show the expected gentle slope as the footprint
+crosses L1d (48 KiB), L2 (1 MiB) and the per-CCD L3 edge
+(32 MiB) - e.g. class 1024 lifo 7.571 -> 11.829 -> 20.733 ->
+65.892 -> 70.689 -> 79.218 ns/block - with NO cliff at any
+boundary for either order. Hot reuse in the emulated sense
+stays as cache-resident as the hardware allows at every
+desktop working-set size measured; the residency story is a
+slope, not a wall.
+
+VERDICTS (roadmap grades)
+---------------------------------------------------------------------
+V1 - Reuse ORDER (LIFO vs FIFO), emulated pair: SECOND-ORDER.
+Across 18 cells the fifo/lifo ratio spans 0.886-1.278; 7 TIE,
+8 LOSS (fifo slower, worst +27.8% at 64 / 16 MiB), 3 WIN
+(fifo faster, all at class 256 beyond the per-CCD L3 edge:
+-6.3% at 32 MiB INDICATIVE, -9.1% at 48 MiB, -11.4% at 96
+MiB, the last two drift-clean). No footprint produces an
+order-driven cache cliff for either policy: the hypothesised
+LIFO hot-reuse advantage does not appear as a large effect at
+desktop working-set sizes, and neither does a FIFO collapse.
+V2 - Shipped native policy vs the emulated control: LOSS,
+and it is not an order effect. Mimir native pays 269x-2745x
+the emulated-LIFO median in the main sweep (worse above the
+cap, per the diagnostics) because a full free-all churn runs
+through span release and re-carve/re-map, not through the
+freelist order: the emulated legs reuse the same blocks at
+1.4-82 ns/block while native climbs superlinearly with
+footprint. glibc native shows no such cliff (flat band
+above). The reuse-distance problem on this host is the
+native churn path, not LIFO-vs-FIFO.
+V3 - Cache residency: hot reuse stays cache-resident on a
+gentle slope across L1/L2/per-CCD-L3 for BOTH orders (see
+table section). The 32 MiB per-CCD boundary is visible as a
+slope change (e.g. class 1024 lifo 20.7 -> 65.9 ns/block
+between 16 and 32 MiB), never as a step to DRAM-only cost,
+because the touch pattern streams the working set either way.
+Evidence quality: checksum proof OK (one checksum per cell
+across all legs); identical-leg agreement within 5% at 17 of
+18 cells (sole DISAGREE: 256 / 32 MiB lifo parity, 10.1%);
+12 DRIFT-REJECT split-half flags (listed in the summary),
+concentrated in the glibc fifo and class-256/1024 mid cells
+under shared-host load. No headline verdict rests on a
+flagged cell except V1's 256 / 32 MiB WIN, labelled
+INDICATIVE wherever it is cited.
+
+PER-CLASS POLICY PROPOSALS (proposals only - NO adoption in
+this slice; each carries its numbers)
+---------------------------------------------------------------------
+P1 - Class 256, footprints beyond the per-CCD L3 edge
+(> 32 MiB): PROPOSE FIFO (or FIFO-leaning) reuse for that
+regime. Numbers: fifo/lifo 0.937 (32 MiB, INDICATIVE -
+drift + parity flags), 0.909 (48 MiB), 0.886 (96 MiB).
+Expected gain at most ~11%, and only in the beyond-L3 regime;
+below L3 the same class grades LOSS/TIE for fifo (1.085 at
+64 KiB, 0.985 at 2 MiB, 1.099 at 16 MiB), so the proposal is
+regime-scoped, not class-wide.
+P2 - Classes 64 and 1024: PROPOSE KEEPING LIFO (no change).
+Numbers: class 64 fifo grades LOSS at 16 MiB (1.278) and
+32 MiB (1.071), TIE elsewhere; class 1024 fifo grades LOSS
+at 4 of 6 footprints (worst 1.156 at 16 MiB), TIE at the
+other two. There is no measured case for switching these
+classes.
+P3 - All classes, the dominant term: PROPOSE a future slice
+investigate the native full-churn cliff (span retention /
+reacquire path under free-all churn) BEFORE any order change
+is adopted: native/emulated ratios of 269x-2745x (main
+sweep) dwarf every order effect in this table (<= 1.278x).
+Any LIFO/FIFO adoption decision taken before the cliff is
+understood would be tuning the second-order term.
+P4 - Large class 8192: PROPOSE NO CHANGE. No lifo/fifo pair
+was measured for this class (fifo-only control), so no order
+claim is made; its native-vs-glibc LOSS (2.673x-37.662x) is
+the same cliff as V2, referred to P3.
+
+STANDING GATE (scripts/z13/run_gate.sh on the final tree)
+---------------------------------------------------------------------
+Gate verdict: GREEN 4988 checks / 0 failed / 77 by-design
+skips (log hidden_files/z062_gate_completion.log, re-run by
+the finishing lead on the final tree; footer read back from
+the log: GATE COUNTS checks=4988 failed=0 skips=77, GATE
+RESULT: GREEN, make exit 0) - identical to the Z-001 baseline
+and to the previous lead's z062_gate_final.log. The slice
+adds no make tests and changes no production code.
+
+PROVENANCE AND COMPLETION RECORD
+---------------------------------------------------------------------
+The previous lead built the probe, runner and summariser,
+ran attempt 1 and the rescoped main sweep, and left the raw,
+summary and a GREEN gate log (hidden_files/z062_gate_final.log,
+4988/0/77 at 11:06 EST) on disk, then stalled pre-commit: no
+recorded run, nothing committed, and an 11:28 EST diag re-run
+attempt failed on a missing build directory. The finishing
+lead (2026-11-12, ~12:13 EST onward) verified from disk:
+raw row-count re-derived from run_z062.sh and matched (565);
+summariser re-run reproduces the summary byte-identically;
+gate log tail read first-hand; the one missing diagnostic
+cell (256 / 96 MiB native) measured and appended to the diag
+raw with its own note; this recorded run assembled; the
+standing gate re-run on the final tree (log
+hidden_files/z062_gate_completion.log). Team structure: the
+finishing lead ran the six Mythic Engineering roles
+sequentially itself; no sub-agents were spawned for the
+completion. Z-062 queues for banking behind Z-061; the lead
+never pushes.
