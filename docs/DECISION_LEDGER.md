@@ -51,6 +51,7 @@ leaves open. Statuses in this ledger mean:
 | D-008 | Z13 Wave 5 second geometry: lock-sharding (geometry B); per-thread arenas NOT taken | Adopted | Z13 roadmap Z-039; Z-039 recorded run decision rule R1-R4 | Z-039 follow-up (settler) |
 | D-009 | Z13 placement policy trial: current policy retained; best-fit NOT taken, first-fit TIE | Adopted | Z13 roadmap Z-059; Z-059 recorded run pre-registered rule (a)-(f) | Z-059 (settler) |
 | D-010 | Z13 silent courses (D-02): COUNTER chosen over sentinel for drain/trim/free lock-failure outcomes | Adopted | Z13 roadmap Z-065; defect register D-02 (INC-M002-02) | Z-065 (settler) |
+| D-011 | Z13 diagnostics emission gate (L-07): the opt-in gate stands as the permanent posture; INC-J007-01 discharged | Adopted | Z13 roadmap Z-071; INC-J007-01 (docs/PHASE_10_DIAGNOSTICS.md S5) | Z-071 (settler) |
 
 ---
 
@@ -344,6 +345,72 @@ leaves open. Statuses in this ledger mean:
   occurs), with the standing gate green (4988/0/77) on
   the final tree.
 - **Supersedes:** None. **Status of entry:** Current.
+
+---
+
+## D-011 - Z13 diagnostics emission gate (L-07): the opt-in gate stands, at Z-071
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice
+  Z-071 (Wave 8), which requires the campaign's ruling on
+  the diagnostics default to be recorded in this ledger,
+  discharging INC-J007-01 "one way or the other"; the item
+  itself is docs/PHASE_10_DIAGNOSTICS.md S5/S8
+  (INC-J007-01) and limitation L-07 in
+  docs/LIMITATIONS_AND_KNOWN_DEFECTS.md.
+- **Decision:** (1) The emission gate STANDS as the
+  permanent production posture: mimir_core_diag_report
+  emits only when the process environment carries
+  MIMIRALLOC_DIAG=1. The default does NOT flip to on.
+  J-001 S5.4's default-on reading ("never no words") is
+  superseded by this entry: the channel's words are
+  wired, proven and available in every production build,
+  and the process opts in. (2) Detection and counting
+  are NOT gated and never were: every wired detection
+  (Z-064 unlock failures, Z-065 silent-course tallies,
+  Z-066 length detections, Z-067 live_count release
+  refusals) moves its stats-surface tally with the gate
+  closed; only the stderr line is opt-in. The always-on
+  record is the stats surface; the line is a courtesy
+  copy for an opted-in operator. (3) No gate bypass for
+  corruption detections (the open half of INC-J007-02):
+  the gate applies uniformly to every channel emission,
+  the discipline Z-066 and Z-067 shipped. (4)
+  INC-J007-03 is discharged by inventory, not wiring:
+  the remaining unwired sites are listed with their
+  state and reason in the Z-071 packet S6; no site was
+  wired by this slice. Grounds, measured on purpleraider
+  at Z-071 (packet of record below): gate-open versus
+  gate-closed is a TIE on all four oracle workloads
+  (medians within -0.26%..+0.29%, inside the
+  0.07%..1.09% identical-leg agreement; emitted exactly
+  0 and stderr exactly 0 bytes on every success leg in
+  both postures -- success paths make no report calls,
+  so the gate costs nothing there and the flip would
+  buy nothing there); emission costs a measured ~97 ns
+  per genuine failure (one fixed line, 88.5-93.5 bytes,
+  exactly one per failure) on a path already returning
+  NULL. Cost therefore decides neither way; the
+  contract does: the banked C-006 silence battery
+  (MA-6.3-020..023, inside the standing gate) grades
+  zero bytes on fds 1/2 as a banked observable, and
+  four banked suites (test_c006, test_j007, test_z066,
+  test_z067) assert the unset-means-silent posture. An
+  allocator does not write uninvited to a host
+  process's fd 2; opting in is one environment
+  variable. Flipping would amend four banked evidence
+  suites to change a default whose measured price is
+  zero and whose benefit is a line the operator can
+  already have by asking.
+- **Evidence:** tests/perf/recorded_run_z13_z071.txt
+  (probe / runner / summariser tests/perf/probe_z071.c,
+  run_z071.sh, summarize_z071.py; raw and summary logs
+  in the slice's team hidden_files), with the standing
+  gate green (4988/0/77) on the final tree.
+- **Supersedes:** the default-on reading of J-001 S5.4
+  as recorded in docs/PHASE_10_DIAGNOSTICS.md S5 (the
+  interim gate posture itself is unchanged and becomes
+  permanent). **Status of entry:** Current.
 
 ---
 

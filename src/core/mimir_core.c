@@ -869,9 +869,11 @@ void mimir_core_diag_report(int op, int cause,
      * no-reporting baseline, and J-001 S5.4's default-on
      * reading cannot hold simultaneously with that banked
      * gate; the channel therefore ships in production,
-     * wired and proven, with emission explicitly enabled
-     * until the banking reconciliation rules on flipping
-     * the default (docs/PHASE_10_DIAGNOSTICS.md S5). The
+     * wired and proven, with emission explicitly enabled.
+     * The owed ruling was taken at Z-071: DECISION_LEDGER
+     * D-011 keeps this gate as the permanent production
+     * posture (INC-J007-01 discharged; evidence packet
+     * tests/perf/recorded_run_z13_z071.txt). The
      * gate itself is allocation-free: getenv performs no
      * allocation (a bounded scan of environ), takes no
      * lock and allocates no storage, so every bound proven

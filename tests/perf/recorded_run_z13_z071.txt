@@ -1,0 +1,366 @@
+Z-071 -- The diagnostics default-on packet (L-07)
+Wave 8. Recorded run / evidence packet of record.
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64,
+  4 KiB pages) -- this machine only (Roadmap Law 1).
+Tree measured: team-01 branch at merge f28fac9 (seat
+  a950f96, banked Z-001..Z-066, merged with team Z-067
+  ab80cad per Z-067 S7). The final committed tree differs
+  from the measured tree only in comments (the D-011
+  pointer inside mimir_core_diag_report's gate comment),
+  the DECISION_LEDGER ruling, and this file; the standing
+  gate was re-run green on the final tree (S7).
+Date: 2026-11-12 (raw header 19:40:15Z). Load: SHARED
+  HOST throughout (Aesir forge + keeper banking gates
+  co-tenant; loadavg 0.74/0.81/0.73 at measurement start).
+  Every graded timing quantity is a median under the
+  Z-004 drift discipline with an identical-leg control;
+  emission quantities are exact counters, not timings.
+
+S1. Roadmap gate and the pre-registered ruling rule
+Gate: "Measure diag-on cost across the oracle workloads;
+  file the evidence packet and record the campaign's
+  ruling in DECISION_LEDGER (INC-J007-01 discharged one
+  way or the other); wire the remaining detection sites
+  (INC-J007-03) or list them. Gate: packet + ledger
+  ruling + site inventory in-tree."
+This file is the packet; DECISION_LEDGER D-011 is the
+  ruling; S6 is the site inventory (listed, none wired
+  by this slice -- the gate's own alternative).
+Ruling rule, registered before the measurement ran:
+  (R1) If gate-open medians on any oracle workload move
+  beyond the identical-leg agreement (bound 5%), the
+  gate has a real success-path price and the ruling
+  must weigh it. (R2) If success-path cost is nil, the
+  ruling is taken on the banked-contract evidence: what
+  a flip would have to amend, and what is lost by
+  keeping the gate (nothing counted is lost -- S5).
+
+S2. Method
+Harness: tests/perf/probe_z071.c + run_z071.sh +
+  summarize_z071.py (this slice). One process = one
+  cell, pinned taskset -c 5, 1 discarded warm-up process
+  per (leg, cell) plus the probe's internal 1/10-scale
+  warm-up pass, 5 measured processes per (leg, cell),
+  legs interleaved round-robin with rotating order,
+  headline = median (Z-004 protocol).
+Legs (the runner sets the posture via the process
+  environment; the probe never touches it):
+  closed     MIMIRALLOC_DIAG unset
+  open       MIMIRALLOC_DIAG=1; timed reps write stderr
+             to /dev/null; emission counted exactly by
+             the probe's emitted/suppressed deltas
+  closed_dup identical to closed (agreement control)
+Success cells: the four K-002 oracle workloads with
+  bench_k002.c's workload logic, size tables and
+  iteration counts verbatim (small_churn 100000 ops,
+  mixed_batch 256000, large_batch 9600,
+  mixed_lifecycle 307200). Workload equivalence is
+  proven, not assumed: the probe's checksums equal
+  bench_k002's on this tree for all four workloads
+  (12756656 / 34727552 / 1106008 / 40359936), identical
+  across all legs and reps.
+Failure cells: three genuine-failure shapes, 2000
+  attempts per process -- fail_malloc_huge
+  (mimir_malloc(SIZE_MAX)), fail_calloc_overflow
+  (mimir_calloc(SIZE_MAX/2+1, 4)), fail_malloc_backing
+  (mimir_malloc(2^58)). One extra gate-open capture rep
+  per shape wrote stderr to a file; lines and bytes are
+  exact counts in the raw trailer.
+Raw: hidden_files/z071_raw.txt (130 lines); summary:
+  hidden_files/z071_summary.txt (summariser exit 0, no
+  BROKEN cells).
+
+S3. Success legs -- the gate costs nothing on success
+  paths (all medians ns/op, 5 reps per leg)
+  workload          closed    open     dup   agree%  gate%
+  small_churn        28.39   28.34   28.70    1.09   -0.18
+  mixed_batch        26.58   26.61   26.52    0.23   +0.11
+  large_batch        93.89   94.16   93.96    0.07   +0.29
+  mixed_lifecycle   410.67  409.60  413.96    0.80   -0.26
+Verdict: TIE on all four workloads -- every gate delta
+  sits inside its identical-leg agreement and far under
+  the 5% bound. Exact counters agree with the mechanism:
+  emitted delta = 0 on every success leg in BOTH
+  postures, and captured stderr = 0 bytes on every one
+  of the 60 success reps (errbytes trailer). Success
+  paths make no report calls, so an open gate has
+  nothing to pay for; R1's condition does not trigger.
+
+S4. Failure legs -- what emission itself costs
+  (medians ns/attempt, 5 reps per leg, stderr /dev/null)
+  shape               closed    open     dup  emit/att
+  fail_malloc_huge     16.43  113.93   16.44    1.00
+  fail_calloc_overflow 11.15  107.76   11.15    1.00
+  fail_malloc_backing  70.94  169.52   70.85    1.00
+Emission is exact: gate-open emitted precisely one
+  report per genuine failure (1.00/attempt over 10000
+  attempts per shape; suppressed 0 everywhere), and
+  gate-closed emitted exactly 0 while the failure paths
+  themselves ran at the closed medians above (the
+  getenv gate check is inside those figures and
+  indistinguishable from the dup leg: agreement
+  0.01-0.13%). Per-report emission price (open minus
+  closed, /dev/null): 97.50 / 96.61 / 98.58 ns -- one
+  fixed-format line of 93.5 / 93.5 / 88.5 bytes exact
+  (capture reps: 2200 lines each = 2000 timed + 200
+  warm-up attempts; 205693 / 205693 / 194693 bytes).
+Sample lines as emitted (first capture line per shape):
+  mimiralloc: error op=malloc cause=arithmetic req=18446744073709551615 failures=1 posture=0
+  mimiralloc: error op=calloc cause=arithmetic req=18446744073709551615 failures=1 posture=0
+  mimiralloc: error op=malloc cause=backing req=288230376151711744 failures=1 posture=0
+  (calloc's req is the INC-J007-08 SIZE_MAX sentinel for
+  an unrepresentable product, as documented.)
+Reading: ~97 ns buys one line on a path that is already
+  returning NULL; it is paid only by failing calls, and
+  only when emission is on. It decides neither way --
+  which is exactly R2's branch.
+
+S5. The ruling (DECISION_LEDGER D-011)
+D-011 rules: the MIMIRALLOC_DIAG=1 opt-in gate STANDS
+  as the permanent production posture; the default does
+  NOT flip to on; INC-J007-01 is DISCHARGED in the keep
+  direction. Full text and grounds in the ledger; the
+  short form:
+  (a) Cost decides neither way (S3/S4): the flip buys
+  nothing on success paths (nothing to emit) and the
+  keep costs nothing there either; on failure paths
+  the ~97 ns line is priced on a NULL return.
+  (b) The banked contract decides: the C-006 silence
+  battery (MA-6.3-020..023) inside the standing gate
+  grades zero bytes on fds 1/2, and four banked suites
+  (test_c006, test_j007 L0, test_z066 gate-off leg,
+  test_z067 gate-off leg) assert unset-means-silent.
+  A flip amends four banked evidence suites to change
+  a default whose measured price is zero.
+  (c) Nothing counted is lost by the gate: detection
+  and counting are always on (S6 tallies move with the
+  gate closed -- proven by the z066/z067 gate-off
+  legs: tally=1, emitted=0). The stats surface is the
+  always-on record; the stderr line is a courtesy copy
+  for an operator who opts in with one env variable.
+  An allocator does not write uninvited to a host
+  process's fd 2.
+Consequential-amendment scope, resolved explicitly:
+  in the keep direction, C-006 needs no amendment; the
+  J-001 S5.4 default-on reading is superseded by D-011
+  itself (the ledger's own supersession mechanism),
+  and L-07's "ruling still owed" sentence is discharged
+  by the same entry. INC-J007-02's open half is ruled
+  in D-011 point (3): no gate bypass for corruption
+  detections -- the gate is uniform, the discipline
+  Z-066/Z-067 shipped. X6's production-emits clause
+  grades: production emits, identically to the proven
+  test posture, when the process opts in -- that is
+  now the ruled posture, not an interim one.
+
+S6. Site inventory (INC-J007-03 -- listed, none wired
+    by this slice; census on the final tree)
+WIRED to the channel (emission gate-controlled;
+  14 direct mimir_core_diag_report call sites in
+  src/core/mimir_core.c):
+  - Entry-point genuine failures, 9 sites: malloc x2,
+    calloc x3, realloc x4 (causes backing / arithmetic
+    / lock / page-size / internal via the carried
+    cause label). Posture NULLs emit nothing (S6c).
+  - Locked construction / lock courses, 3 sites: the
+    alloc-path reports carrying op + cause LOCK or the
+    carried last_cause.
+  - Detection emission points, 2 sites (the consumer
+    helpers): z066_free_report (op free, cause
+    metadata), consumed at 3 free exits (2 central
+    span-event, 1 legacy/descriptor course);
+    z067_release_report (op free / drain / trim,
+    cause metadata), consumed at 10 exits (free x5,
+    trim x4 incl. the thread-exit retention sweep,
+    drain x1). The tallies move at the audit sites
+    under the lock; only emission defers to here.
+COUNTED, NOT EMITTED (tally-only by the deciding
+  slice's own design; the tally is the surface):
+  - Z-064 unlock_failures (D-01): failed unlocks are
+    counted at the site by a pre-lock atomic; there is
+    no caller to report to (the unlock IS the exit),
+    and the tally is readable lock-free.
+  - Z-065 drain/trim/free lock-failure tallies (D-02,
+    ledger D-010): COUNTER was chosen as the
+    distinguishing mechanism; emission was never part
+    of that decision.
+NOT WIRED (each listed with its state and reason --
+  the gate's "or list them" branch):
+  (a) INC-J007-04, free lock-failure EMISSION: the
+    substance was discharged by Z-065 -- the counter
+    semantic J-007 found missing now exists
+    (free_lock_failures, lock-free getter). Emission
+    remains unwired: the course's defined record is
+    the tally. No work owed unless an operator
+    requirement for a line appears.
+  (b) INC-J007-05, H-001 unload drain's discarded
+    released-span count: destructor time; no failing
+    caller exists to inform; the value remains
+    available to any in-process caller of
+    mimir_core_drain_retained. Unwired by design.
+  (c) INC-J006-04 (span free_head naming a live
+    object): no detection exists to wire --
+    undetectable by design in the in-band free list
+    (Z-067 S6, with its five compensating controls).
+    Stronger machinery is Z-069/Z-070 economics, not
+    a wiring gap.
+  (d) J-005 debug-detection adoption (INC-J007-02):
+    the MIMIR_DEBUG flavour's detection reports are
+    not part of the production channel surface; the
+    adoption shape is specified in
+    docs/PHASE_10_DIAGNOSTICS.md S6. If adopted, D-011
+    point (3) rules the gate applies uniformly.
+  (e) Posture NULLs (U-09/U-12 zero-size postures,
+    invalid-pointer realloc refusals): emit NOTHING
+    by standing design (posture is not an error; the
+    J-002 counters keep their disjoint semantics).
+    Deliberately unwired, permanent.
+  Named non-sites: INC-J007-06 (cause-label race, a
+  documented label limit, not a site) and INC-J007-08
+  (req=SIZE_MAX sentinel, a reading convention).
+Disposition: INC-J007-03 is discharged by this
+  inventory. Every detected-corruption refusal the
+  allocator makes is either emitted (gate-open) or
+  counted (always) or listed above with its reason.
+
+S7. Banking composition and verification
+Banking: this slice banks only after Z-067..Z-070 in
+  roadmap order. Files: tests/perf/probe_z071.c,
+  run_z071.sh, summarize_z071.py (new, no conflict
+  surface), this recorded run (new),
+  docs/DECISION_LEDGER.md (append-shaped: one index
+  row + the D-011 entry before the Notes section),
+  src/core/mimir_core.c (comment-only hunk inside
+  mimir_core_diag_report's gate comment, pointing at
+  D-011). No stats appends, no enum or table changes,
+  no Makefile changes, no test changes by this slice.
+  If Z-068..Z-070 touched the gate comment's exact
+  lines, drop the comment hunk at banking -- the
+  ledger is the ruling of record; the comment is a
+  pointer. At banking, re-run on the merged tree:
+  run_gate.sh (expect 4988/0/77), make test-z066,
+  make test-z067, make test-j006 (expect 15 ok /
+  10 FAIL, unchanged by this slice). Do NOT expect
+  make test-j007 green -- see the pre-existing defect
+  at S8, identical on both parent trees.
+Verification on the final committed tree (this
+  worktree): scripts/z13/run_gate.sh GREEN 4988
+  checks / 0 failed / 77 by-design skips, exit 0
+  (hidden_files/z071_gate.log); make test-z066 5/5
+  legs PASS; make test-z067 7/7 legs PASS; post-merge
+  battery on the clean merged tree before this slice's
+  edits: test-z064 19/0, test-z065 561/0, test-j006
+  15 ok / 10 FAIL -- exactly Z-067 S7's pre-declared
+  expectation for the composition.
+
+S8. Review record and defects
+Team: lead + 6 Mythic Engineering sub-agent reviewers
+  mustered in parallel (roadmap/gate, diag code, site
+  inventory, measurement, silence battery/ledger,
+  banking risk); no 429s. The roadmap/gate review
+  reported in full: its obligations checklist is S1's
+  shape, and its flagged ambiguities are resolved
+  explicitly in this packet (oracle workloads =
+  the K-002 set, S2; consequential amendments, S5;
+  INC-J007-02, S5/D-011; packet home = this recorded
+  run per house pattern). The remaining roles'
+  substance was also verified first-hand by the lead
+  from disk: the S6 census is a direct grep census of
+  the final tree, the S2 design follows the Z-062
+  runner pattern and the Z-004 protocol text, and the
+  ledger entry follows D-010's format and the
+  ledger's append/supersession rules.
+Defects discovered:
+  (1) PRE-EXISTING, not this slice's and not the
+    merge's: make test-j007 fails 59 checks / 10
+    failures (fault-injection legs L4/L5/L6/L11 area:
+    armed acquire/lock/page-size legs see non-NULL
+    returns) IDENTICALLY on seat a950f96, on team
+    ab80cad, and on the merged tree -- FAIL sets
+    byte-identical across all three (logs
+    hidden_files/z071_j007*.log). It predates the
+    Z-066/Z-067 split and no recent slice's battery
+    ran it (it is a standalone target outside
+    run_gate). NOT fixed by Z-071 (fault-injection
+    vs pool/trim semantics is another slice's
+    territory); recorded in team-01 CAMPAIGN_STATE.md
+    as immediate next work for the campaign.
+  (2) Build-hygiene hazard, recorded in
+    CAMPAIGN_STATE.md: after the merge grew struct
+    mimir_stats by 64 B, a battery run without
+    make clean linked stale objects and test-z067
+    stack-smashed; clean builds are uniformly green.
+    run_gate.sh cleans first, so the standing gate
+    is immune; standalone make test-zNNN after a
+    merge needs make clean first.
+  No allocator defect was discovered by this slice;
+  nothing in scope is left unfixed.
+
+S9. Review fold-in (post-commit, pre-banking; text-only
+    amendment of this file -- no code, ledger or harness
+    change, gate counts unaffected)
+The six reviewer reports landed after the slice commit;
+  the material findings are folded in here.
+  (i) Inventory completion (site-inventory review):
+  S6's census stands (14 wired call sites, verified
+  independently by the diag-code review), and the
+  following unwired items are added to the INC-J007-03
+  list so the inventory is complete:
+  (f) mimir_core_metadata_check() itself and the 16
+    walk-only J-006 probes whose detection exists only
+    as its return value (desc-magic, desc-state,
+    desc-base, desc-len-incons, desc-requested,
+    desc-uoff, desc-next-cycle, desc-flags-reserved,
+    span-magic, span-class-mismatch,
+    span-carve-reduced, span-carve-inflated,
+    span-len-incons, span-freehead-wild,
+    span-freelist-cycle, span-next-cycle): operational
+    paths bypass or refuse via the liveness predicates,
+    but no production caller runs the walk, it never
+    tallies and never emits. This is the root
+    INC-J007-03 remainder: Z-066/Z-067 promoted two of
+    its invariants to operational paths; the rest stay
+    walk-only, listed here per the gate's alternative.
+    Crash-only probes (desc-next-wild, span-next-wild)
+    have no detection at all (expected SIGSEGV).
+  (g) The J-004 red-zone canary (MIMIR_DEBUG only)
+    reports through its OWN write(2)+abort, not the
+    J-007 channel, and keeps no tally -- a non-channel
+    reporter, listed for completeness with (d).
+  (h) Detection limits, not wiring gaps (Z-066 S6 /
+    Z-067 S2, restated so Z-072 does not mistake them
+    for unwired sites): compensating descriptor
+    corruption (+1/-1 page with requested_size cover)
+    is NOT DETECTED by the Z-066 audit; pooled-
+    descriptor corruption sits off the live registry;
+    relation-preserving live_count corruption sits
+    outside the Z-067 audit. The silent classes
+    desc-owner-scratch (INC-J006-03) and
+    span-class-consist (INC-J006-05) are Z-068's
+    remainder, not Z-071's.
+  (ii) Banking state correction (banking-risk review):
+  while this slice ran, the seat advanced past
+  a950f96 -- Z-067 banked (seat ee9ad17) with the same
+  S7 resolution this branch composed at f28fac9. At
+  Z-071 banking the keeper should tree-diff the
+  composed files (core/header/Makefile/test_j006)
+  between f28fac9 and the banked seat: the resolutions
+  are expected to agree line-for-line; any divergence
+  is the seat's banked text winning. Z-070 (team-03)
+  appends its stats pair AFTER live_release_* and
+  takes diag causes 7/8; this slice adds no stats
+  fields and no enum values, so there is no
+  interaction. One check IS owed at banking: this
+  slice's ledger entry is D-011 (the next free number
+  on the a950f96 ledger, and Z-068/Z-069/Z-070 touch
+  no ledger in their recorded diffs) -- if any slice
+  banking before Z-071 claims D-011, renumber this
+  entry to D-012 in both the index row and the entry
+  heading, and update the pointer comment in
+  mimir_core.c to match.
+  (iii) Measurement caveat (measurement review): the
+  S4 per-report prices are a /dev/null floor -- the
+  write(2) syscall with no reader; a terminal or pipe
+  destination costs more and varies. The packet's
+  ruling does not rest on the absolute figure (S5),
+  so the caveat changes no verdict.
