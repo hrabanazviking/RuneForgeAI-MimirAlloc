@@ -1,0 +1,90 @@
+MimirAlloc Z13 slice Z-041 - recorded run of tests/perf/probe_z041.c
+slice: Z-041 - SMT and pinning policy (Wave 5): 16 vs 32 threads, pinned vs floating, for allocator-heavy loads; the campaign recommended affinity posture for this machine. Gate: policy table + recommendation doc; no code change implied.
+date: 2026-11-12T05:15-05:17-05:00 (invocations of record a2 and a3, back to back, America/New_York); attempt 1 (main-thread timing window) 05:11-05:12, superseded - see method.
+base: 1506b9c (branch yrsa/mimiralloc-team-01: merge of seat main 35f7f55, banked Z-001..Z-035, into the team branch; clean merge, no conflicts). The measured core is therefore the banked Wave 4 core: TLS cache (Z-029) + remote-free queue (Z-030) + metadata diet (Z-034) + LTO build flags of record (Z-035; the standalone probe build below uses -O2 without -flto, identically for both legs, the Z-020/Z-021 standalone convention).
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (Strix Halo), 16 cores / 32 threads, 2 CCDs, 128 GiB UMA (single NUMA node)
+
+environment header (scripts/z13/host_truth.sh, Z-002, verbatim in runner output):
+  governor performance, driver amd-pstate-epp, cur 2000000 kHz, min 2000000, max 5187500
+  THP enabled=madvise defrag=madvise shmem=never; page_size_bytes 4096; glibc 2.44
+  cache topology: L1d 768 KiB (16), L1i 512 KiB (16), L2 16 MiB (16), L3 64 MiB (2 instances)
+topology (sysfs, printed by the runner; identical to Z-012):
+  cpu0 core_id=0 siblings=0,16 L3 32768K shared 0-7,16-23 (CCD0)
+  cpu8 core_id=8 siblings=8,24 L3 32768K shared 8-15,24-31 (CCD1)
+  smt active: 1. SMT sibling of logical CPU n (n<16) is n+16.
+compiler: gcc -std=c11 -Wall -Wextra -Werror -pthread -O2 (standalone builds in run_z041.sh; Makefile untouched; mimir leg links the production core objects, glibc leg is the same probe source built -DLEG_GLIBC)
+sha256 (identical in both invocations of record - each rebuilt from the same sources):
+  a09199ec772868435f92439d9015e43cb71379b4848de0de6de925858bab683d  tests/perf/probe_z041.c
+  c7af94858d959aae9ff40331c0a8fb110deaffe0d3b30377a95c693d69d27093  tests/perf/run_z041.sh
+  a2c2091bffa0a24053f618e9f9efee33ee3eb01808373e7894c830071a27ce47  tests/perf/summarize_z041.py
+  2f55fac05ffd6894fddbfe471cd5f2dc2b1f5e9b360474e03c74c20a31bb4e3e  build/z41/probe_z041_mimir
+  45c18b274bf35aa2e3596745ff9341161110e3443245edc49c23e56be2e988f8  build/z41/probe_z041_glibc
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004):
+  Probe derived from the banked Z-020/Z-021 ladder probe: bench_k002.c included UNMODIFIED (main renamed away); fixed work PER THREAD (small_churn 50000 iterations; mixed_batch 200 batches = 51200 ops; the scale is printed on every LADDER line); mixed_batch runs the Z-020 thread-local replica (bench pointer array is a static) and the selfcheck phase proves replica == bench in both legs before any number is taken (SELF mixed_batch 1228352/1228352 ops 9472 MATCH; small_churn 100000 reference 12756656 MATCH_K002, both legs, both invocations).
+  Matrix: leg (mimir / glibc) x workload (small_churn / mixed_batch) x threads (8 / 16 / 32) x mode (pinned / floating) = 24 cells. Repetitions are separate PROCESSES, 5 per cell, headline = median of processes (summarize_z041.py); one discarded warm-up process per cell at 1/10 scale plus the probe in-process 1/10 warm-up pass; 2 s pauses between cells. TWO full invocations (a2, a3) run back to back; cross-invocation agreement tiered by the protocol bounds: delta <= 5% AGREE, <= 8% DRIFT, beyond DISAGREE (cell graded INDICATIVE, direction-only).
+  Modes: pinned = worker t pins itself to CPU t via pthread_setaffinity_np (identity order 0-15 physical cores, 16-31 SMT siblings), verified with sched_getcpu() before AND after the timed pass (a pinned thread ending on another CPU fails the process; median migration count 0 in every pinned cell of both invocations). floating = no affinity call at all; each worker records sched_getcpu() before/after its timed pass and the LADDER line carries mig = workers whose CPU changed (a floor on migration). Both modes run under the same outer taskset -c 0-31 bound, so floating placement is the scheduler own choice inside the full machine.
+  Timing: PER-THREAD (the Z-021 window): each worker stamps CLOCK_MONOTONIC (bench now_ns()) right after the barrier releases and again at the end of its timed pass; the point elapsed is max(end) - min(start) across workers.
+  TIMING DEVIATION FROM Z-020, WITH CAUSE (Z-021 precedent, re-proven here): attempt 1 of this slice used the Z-020 main-thread window (release..last-join) and produced correct-checksum glibc reps up to 14.9 Gops/s with a 702% spread at 32 pinned threads - a main thread waking late from the barrier, or starved by 32 pinned workers, truncates the window while the work is already done. Attempt 1 raw files (hidden_files/z041_attempt1_mimir.raw, z041_attempt1_glibc.raw, log z041_attempt1_mainwindow.log) are SUPERSEDED and kept as method evidence only; no number below comes from them. A second attempt (tag inv2) was started on the same flawed build and killed at the fix; its partial files were deleted, attempt 1 already preserves that evidence.
+  Checksum discipline (K-002): every worker runs identical work; the probe aborts if per-thread checksums diverge inside a process, and the summariser verifies chk_each against the ladder references (small_churn 6371544, mixed_batch 6627200 - identical in the banked Z-020 and Z-021 runs) in every rep: zero BADCHK flags in all 240 processes of record.
+load state (SHARED HOST - recorded honestly):
+  Invocation a2 start loadavg 1.03 / 0.93 / 0.55; a3 start 0.66 / 0.85 / 0.54; end of a3 0.71 / 0.81 / 0.55. No co-resident campaign load was visible in the runner start snapshots (top process under 1% CPU); per-point loadavg is recorded as a #-comment before every cell in the raw files. This is the quietest class of window this campaign records; the numbers are this-machine under that stated near-quiet load.
+correctness gate: scripts/z13/run_gate.sh - GREEN, 4988 checks / 0 failed / 77 by-design skips, make exit 0 (hidden_files/z041_gate.log, sha256 90a6e49a9bf042c8435d82013deb9c7d890a40959bafc4d093e817e78048530d) - identical to the Z-001 baseline. Run AFTER the measurement invocations so the gate build could not contend with them.
+
+=== RESULTS - mimir leg (banked Wave 4 core), median aggregate ops/sec of 5 processes ===
+cell                    a2              a3              agreement   within-invocation spread (a2/a3)
+small_churn  8 pinned   31,595,464      30,943,193      AGREE 2.06%   1.6% / 1.0%
+small_churn  8 floating 16,900,441      26,000,227      DISAGREE 53.84%  93.7% / 46.6% (bimodal - see findings)
+small_churn 16 pinned   22,777,291      22,227,522      AGREE 2.41%   5.9% / 1.3%
+small_churn 16 floating 22,260,866      22,565,481      AGREE 1.37%   29.4% / 49.6%
+small_churn 32 pinned   33,197,465      33,771,705      AGREE 1.73%   6.6% / 1.4%
+small_churn 32 floating 33,205,617      32,386,804      AGREE 2.47%   5.8% / 11.1%
+mixed_batch  8 pinned   31,083,066      30,726,693      AGREE 1.15%   0.3% / 0.8%
+mixed_batch  8 floating 16,622,742      15,590,903      DRIFT 6.21%   81.0% / 41.0%
+mixed_batch 16 pinned   21,330,483      21,105,664      AGREE 1.05%   2.6% / 4.3%
+mixed_batch 16 floating 21,463,385      22,139,471      AGREE 3.15%   52.9% / 33.9%
+mixed_batch 32 pinned   39,883,443      39,716,838      AGREE 0.42%   0.8% / 0.6%
+mixed_batch 32 floating 32,771,977      37,236,039      DISAGREE 13.62%  31.2% / 25.4%
+Every mimir PINNED cell agrees across invocations within 2.41% and spreads at most 6.6% inside an invocation: the pinned mimir table is PROVEN. Floating mimir medians land within the 8% drift bound in 4 of 6 cells (3 AGREE, 1 DRIFT, 2 DISAGREE) but carry 25-94% spreads - floating magnitudes are INDICATIVE even where the medians happen to agree.
+Migration (median workers ending on a different CPU than they started): floating t=8: 5-6 of 8; t=16: 11-14 of 16; t=32: 26-30 of 32. Pinned: 0 of N in every cell (verified, not assumed).
+
+=== RESULTS - glibc leg (scalable-allocator comparator), median aggregate ops/sec ===
+cell                    a2              a3              agreement
+small_churn  8 pinned   1,306,664,315   2,261,663,114   DISAGREE 73.09%
+small_churn  8 floating 1,289,528,065   1,261,181,159   AGREE 2.20%
+small_churn 16 pinned   4,396,329,065   2,930,177,532   DISAGREE 33.35%
+small_churn 16 floating 2,672,635,553   2,502,126,808   DRIFT 6.38%
+small_churn 32 pinned   5,453,900,903   4,619,764,508   DISAGREE 15.29%
+small_churn 32 floating 3,187,257,345   2,912,973,108   DISAGREE 8.61%
+mixed_batch  8 pinned   1,743,943,458   1,357,667,040   DISAGREE 22.15%
+mixed_batch  8 floating 1,173,460,764   1,285,035,734   DISAGREE 9.51%
+mixed_batch 16 pinned   4,258,482,396   2,758,295,594   DISAGREE 35.23%
+mixed_batch 16 floating 2,383,383,812   2,368,951,467   AGREE 0.61%
+mixed_batch 32 pinned   4,490,341,818   3,306,712,522   DISAGREE 26.36%
+mixed_batch 32 floating 3,151,241,917   2,723,974,769   DISAGREE 13.56%
+The glibc passes are short (~0.3-1.7 ms per process), so a single preempted worker stretches the max(end)-min(start) window and reps crater individually (within-invocation spreads 3-113%, always downward outliers, never a checksum failure). This is the same behaviour the banked Z-021 ladder graded 17 of 24 rungs INDICATIVE for. Accordingly every glibc MAGNITUDE here is INDICATIVE; only directions that hold in all four (invocation x workload) instances are claimed as proven:
+  pinned > floating at equal threads: 12 of 12 pairs (ratios 1.01-1.79 in a2, 1.06-1.79 in a3).
+  32 > 16 pinned (SMT gain): 4 of 4 pairs (1.05-1.58). 32 > 16 floating: 4 of 4 (1.15-1.32).
+  16 > 8 pinned (physical scaling): 4 of 4 (1.30-3.37) - the opposite sign of the mimir leg.
+
+=== RATIOS OF RECORD (medians; mimir = proven, glibc = direction-proven, magnitude indicative) ===
+comparison              mimir small_churn   mimir mixed_batch   glibc small_churn   glibc mixed_batch
+SMT pinned 32/16        1.46 / 1.52         1.87 / 1.88         1.24 / 1.58         1.05 / 1.20
+CCD pinned 16/8         0.72 / 0.72         0.69 / 0.69         3.37 / 1.30         2.44 / 2.03
+pin/float t=8           1.87 / 1.19         1.87 / 1.97         1.01 / 1.79         1.49 / 1.06
+pin/float t=16          1.02 / 0.99         0.99 / 0.95         1.65 / 1.17         1.79 / 1.16
+pin/float t=32          1.00 / 1.04         1.22 / 1.07         1.71 / 1.59         1.43 / 1.21
+(each cell: invocation a2 / invocation a3)
+
+=== FINDINGS ===
+1. For the banked mimir core, 16 pinned threads spread across both CCDs is the WORST pinned posture measured: 0.69-0.72x of the 8-thread one-CCD posture, identically in both workloads and both invocations (the tightest ratio in this slice). The remaining shared structures (central lock on cache miss / span supply, registry walks of Z-024) pay the Z-012 cross-CCD line price (~103 ns vs ~32 ns) as soon as the second CCD joins, and at 16 threads nothing compensates yet.
+2. SMT is a real gain for allocator-heavy paths on this machine, for BOTH allocator classes: mimir pinned 32/16 = 1.46-1.88 (PROVEN), glibc 32/16 direction 4/4 in both modes. This does not contradict Z-011/Z-012: bandwidth-bound streaming gains nothing from siblings (Z-011: 32T 4-10% BELOW 16T) and a sibling is worth ~0.2 core of streaming (Z-012) - but the allocator path is latency/serialisation-bound, not bandwidth-bound, and siblings hide exactly that latency. SMT value is a property of the bottleneck, not of the core count.
+3. Pinning never loses beyond a tie band and usually wins. At 8 threads it is worth 1.19-1.97x for mimir (scheduler placement of few floating threads is bimodal: floating t=8 small_churn reps split between ~16M and ~31M clusters inside one invocation; the probe does not distinguish which placement makes the slow cluster - sibling-packing and split-across-CCDs with shared-structure bouncing (finding 1) are both consistent with it - but pinned identity placement never produces the slow cluster). At 16-32 mimir threads pinning ties floating on medians (0.95-1.22) but removes the variance (pinned spreads <= 6.6% vs floating up to 93.7%). For glibc, pinned > floating in 12 of 12 pairs. Floating migration is wholesale: a median 26-30 of 32 floating workers end their pass on a different CPU than they started it.
+4. Allocator class decides the thread-count answer (the disagreement is allocator-attributable, not hardware-attributable): the scalable glibc leg scales monotonically 8 -> 16 -> 32 in every pair, while the mimir leg dips at 16 (cross-CCD sharing) and recovers at 32 (SMT latency-hiding). A single machine-wide thread cap would be wrong for one of the two classes.
+5. Best aggregate mimir posture measured: 32 pinned (33.2-33.8M small_churn, 39.7-39.9M mixed_batch ops/sec), edging 8 pinned one-CCD (1.05-1.09x small_churn, 1.28-1.29x mixed_batch) with far better per-thread cost at 8 (8 pinned per-thread ~3.9M ops/sec vs 32 pinned ~1.0M). Posture choice is aggregate-vs-efficiency, stated in the policy doc.
+
+=== GATE VERDICT ===
+Gate: policy table + recommendation doc; no code change implied - MET by docs/Z13_SMT_PINNING_POLICY.md (policy table + recommendations, scoped PROVISIONAL - it is superseded by the Z-038 arena ladder for the arena variant) together with this recorded run as its evidence annex. No src/ or Makefile change: the commit carries only tests/perf/probe_z041.c, tests/perf/run_z041.sh, tests/perf/summarize_z041.py, this recorded run, and the policy doc.
+Standing gate: run_gate.sh GREEN 4988/0/77 (above).
+Defects: one probe-method defect found and fixed before any number of record was taken (main-thread timing window, attempt 1 superseded - see method). No repo-code defect found. NOT TESTED, named plainly: SMT-off host configuration (no host setting was changed; the policy covers the shipped SMT-on state), a sibling-packed 16-thread layout (16 threads on 8 physical cores of one CCD), and any arena-variant posture (Z-037/Z-038 not yet built - OWED re-run of this matrix on the arena variant, recorded in the policy doc).
+Traceability: raw LADDER lines in hidden_files/z041_a2_mimir.raw (sha256 4af59915d9e2f8cecb6c3ef7f87777e0b453275192e66704adc6a5da97db0bfc), z041_a2_glibc.raw (6f212ecdb5e9d38369f128782f08acdda02f8f5794a98ea4e38b64c9149d104d), z041_a3_mimir.raw (46b747383b8d9626b35ccfd2708488a6cd7294d5e7e5c2760bb92dc01f5b9ec6), z041_a3_glibc.raw (cbcbd2d9cce901da446cbe0970177637565f6677838566b845409a6ffa226063); runner output for both invocations in hidden_files/z041_a2a3_driver.log; combined summariser output in hidden_files/z041_summary_a2a3.txt; gate log hidden_files/z041_gate.log.
