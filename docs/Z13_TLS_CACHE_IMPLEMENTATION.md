@@ -277,3 +277,103 @@ and records it here:
 - MIMIR_LOCK_HIST builds still compile (checked); the
   hit path takes no lock and so records no sample,
   which is the honest statement about a lock-free hit.
+
+## 8. Post-banking stress campaign and accounting corrections
+
+After this slice banked (seat 84e860a), a self-imposed
+stress campaign ran against the banked build: a 16-thread
+slot-handoff probe with cross-thread frees, and a mutex-
+queue handoff probe (ownership transfer with clean
+happens-before). The contract suite and the standing gate
+do not reach these geometries; the probes did, and the
+banked accounting failed them: live-count drift
+(+42..+79 objects), one segfault, and metadata-check
+violations of the shape nodes == carve, live == 0,
+tally == 1 per affected span. Three defects were found,
+proven by instrumentation (an API-level live-pointer
+tracker cleared the probes themselves; an event ring over
+every tally operation isolated the accounting), and
+fixed in a follow-on commit on this branch. The contract
+suite (119/0) and the standing gate (4988/0/77) pass
+unchanged before and after: the defects lived entirely
+in interleavings the suites do not generate.
+
+Defect 1 - hit handouts booked in the owner's pending
+list. A hit recorded (span, +1) in the owner's thread-
+local pending list, applied to the span's live count
+only at the owner's next flush. A cross-thread free of
+such a block decremented the locked live count at once:
+the two ledgers disagreed about the block, and the
+span's books skewed permanently (the +42..+79 drift and
+the flush-range underflows). Correction: a hit now
+flags the block HANDED in its owner record (bit 0 of
+the record's span word; exactly one writer per lifecycle
+phase - the owner sets it at the hit, clears it when the
+block is binned, retired or converted; a cross-thread
+freer clears the whole record) and appends the handout
+(block, span, byte pair) to a per-thread handed list
+(cap 64; a full list takes the locked cold path). The
+binned tally counts unconverted handouts, so
+free_nodes + live_count + tally == carve_count holds at
+every instant, not only at quiescence. The flush
+converts exactly the listed blocks whose records still
+carry the flag (tally -1, live +1, bytes booked, flag
+cleared); entries whose flag was cleared meanwhile were
+accounted at that moment and are skipped. A cross-
+thread free (or non-owner realloc retire) of a flagged
+block returns it against the TALLY
+(small_free_tally_locked), never the live count.
+
+Defect 2 - settled bin-free pending versus a re-hit.
+A settled block freed to a bin records a pending -1
+(its unit still sits in the live count). If the block
+was hit-popped before the owner's flush, it acquired
+the handed flag while its unit still sat in the live
+count: the two accounting streams (pending and handed)
+could each spend the same transition - a cross-thread
+tally-free charged the tally for a unit that was never
+there, and the later flush applied the stale pending
+(+1 tally: exactly the observed phantom). Correction:
+a per-slot SETTLED BIT in the bin records whether the
+binned block's unit is live-count-with-pending (bit 1)
+or tally-counted (bit 0). A hit (or realloc take) that
+pops a bit-1 block cancels the pending unit (+1 against
+the span's pending entry) and leaves the block live-
+counted: no flag, no handed entry, byte pair on the
+pending scalars. Invariant after the fix: the handed
+flag is set exactly for blocks whose unit sits in the
+tally. The flush clears the settled bit on the blocks
+whose pending units it converts; every drain path
+flushes first, so drains only ever move bit-0 blocks;
+realloc's retire flushes first for the same reason.
+
+Defect 3 - owner-record chain duplication, and a span
+release guard. tls_owner_set claimed the first tomb-
+stone slot on the probe chain without scanning the rest
+of the chain for an existing record; a record placed
+further down the chain (when nearer slots were occupied)
+was duplicated, and after the nearer record cleared,
+readers found the stale one - an old owner, span and
+handed flag - and accounted the block a second time.
+The set now scans the whole chain for the key before
+claiming any slot (an empty slot ends the search).
+Separately, small_free_locked's retention tail could
+release a span on the strength of the class-wide empty
+count while another thread's bin still held its blocks;
+the release now also requires this span's own tally
+to be zero (the trim and drain paths already checked).
+
+Verification of the fixed build (purpleraider,
+2026-11-12, on top of seat-merged HEAD a22ca68):
+Z-028 contract suite 119 run / 0 failed PASS; standing
+gate GREEN 4988 / 0 / 77 (log
+hidden_files/z029_gate_fixed.log); queue-handoff probe
+(4 threads x 3000 iterations, 20 classes, cross-thread
+frees) 90/90 runs PASS with live counts at baseline and
+metadata 0; slot stress (16 threads x 3000) 21/21 PASS
+(it segfaulted and drifted before the fix); micro
+probes for single-thread hit/bin cycles, exited-owner
+remote frees, and live-owner remote frees of handed
+blocks all PASS; MIMIR_DEBUG test-debug pattern
+identical to the banked baseline; shared library still
+exports exactly the four public symbols.
