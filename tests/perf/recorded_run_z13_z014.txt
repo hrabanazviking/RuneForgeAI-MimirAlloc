@@ -1,0 +1,324 @@
+MimirAlloc Z13 recorded run - Z-014 page-fault cost curve
+slice: Z-014 - Page-fault cost curve (fresh-mapping fault cost by size, first-touch vs recycled; the number the large path KL-C lives or dies by)
+date: 2026-11-12T02:48-02:52-05:00 (fault run window, America/New_York)
+base: da6bfb5 (branch yrsa/mimiralloc-team-05, Z-005 commit; seat main eb2672c at build time)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+probe: tests/perf/probe_z014.c - host/kernel probe, no allocator under test. Runner: tests/perf/run_fault_z014.sh. Summariser: tests/perf/summarize_z014.py.
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004 banked): every measured value is a separate PROCESS pinned taskset -c 2 (CCD0 physical core); 7 measured processes per (size, mode); modes interleaved fresh,recyc_map,recyc_keep per repetition so drift lands on all legs; warm-up processes discarded before measuring (3 per mode below 16 MiB, 1 per mode at/above 16 MiB - stated deviation from the protocol default of 3: large-size processes run 0.03-0.7 s each and the recycled legs self-warm through their internal cycles; fresh-leg medians at large sizes show drift <= 0.8%, so the deviation cost nothing measurable). Headline = median ns/page across processes. Timing CLOCK_MONOTONIC_RAW around the first-touch loop only (one byte written per 4 KiB page, ascending); mmap, MADV_DONTNEED and munmap times are separate columns. Minor-fault delta around the timed touch from /proc/self/stat.
+modes: fresh = mmap + MADV_NOHUGEPAGE + first touch + munmap, measured in a process that has touched nothing else at that size. recyc_map = 5 cycles (3 at >=256 MiB) of mmap/touch/munmap in one process, only the LAST cycle timed: pages come from the kernel free pool the earlier cycles just released. recyc_keep = the pooled-mapping case Z-013 deferred here: mmap once, touch, then MADV_DONTNEED + re-touch (3 reps, 2 at >=256 MiB), only the LAST re-touch timed: VMA retained, pages dropped and re-faulted.
+THP: every leg takes MADV_NOHUGEPAGE explicitly, so this curve is the pure 4 KiB fault cost with no THP confound (host THP mode is madvise; THP-on costs are Z-013, banked adf1303/unbanked at build time).
+sizes: 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824 bytes (4 KiB..1 GiB).
+load state: load average 1.05 / 1.68 / 1.69 at run 1 start, 1.26 / 1.70 / 1.69 at run 1 end, 1.29 / 1.64 / 1.67 after run 2 - a QUIET window on this shared 32-thread host (co-tenants Aesir/Lifthrasir forges + Tensile lab idle-ish; no known heavy co-tenant work). NOT labelled contended. Two full runs were taken; run 2 is a reproducibility confirmation, its ratio table is filed below the run 1 raw data.
+correctness gate: full make test in this worktree, log hidden_files/z014_make_test.log (team-local, not banked): 4988 checks run (18 smoke + 4970 CHECKS), 0 failed, 77 by-design SKIP lines, 7/7 RESULT: PASS, make exit 0 - identical counts to the Z-001 baseline.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh at the seat, Z-002, run verbatim at run start) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T07:48:04Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 61%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.05 1.70 1.69
+
+=== CURVE TABLE - RUN 1 (summarize_z014.py on the raw CSV below) ===
+checksum status: OK - one checksum per size across all modes/processes
+       size        mode  n med ns/page  med ns total      min      max  spread%  drift% flt/page  med map ns  med unmap ns
+       4096       fresh  7      401.00           401   381.00   431.00     12.5     5.1    1.000         561          1022
+       4096   recyc_map  7      410.00           410   380.00   471.00     22.2     6.0    1.000         381           752
+       4096  recyc_keep  7      391.00           391   371.00   411.00     10.2     0.0    1.000         571           912
+      16384       fresh  7      348.25          1393   323.25   776.50    130.2     6.9    1.000         591          1383
+      16384   recyc_map  7      370.50          1482   328.25   696.25     99.3    25.0    1.000         371          1182
+      16384  recyc_keep  7      360.75          1443   323.00   656.25     92.4     3.8    1.000         561          1202
+      65536       fresh  7      343.81          5501   309.31   482.12     50.3    29.4    1.000         551          2294
+      65536   recyc_map  7      360.06          5761   304.31   383.19     21.9    16.1    1.000         380          2174
+      65536  recyc_keep  7      319.94          5119   305.56   417.62     35.0    11.2    1.000         571          2164
+     262144       fresh  7      373.20         23885   366.14   400.59      9.2     0.2    1.000         591          6282
+     262144   recyc_map  7      340.17         21771   339.84   422.52     24.3     1.7    1.000         380          5100
+     262144  recyc_keep  7      339.38         21720   333.75   484.97     44.6     0.1    1.000         611          5290
+    1048576       fresh  7      360.91         92393   356.53   399.50     11.9     1.6    1.000         752         17633
+    1048576   recyc_map  7      346.94         88816   340.40   365.56      7.3     0.2    1.000         521         16832
+    1048576  recyc_keep  7      344.71         88245   341.22   383.14     12.2     6.6    1.000         721         17202
+    4194304       fresh  7      360.87        369531   355.69   367.88      3.4     1.5    1.000         741         66915
+    4194304   recyc_map  7      355.57        364100   351.12   399.19     13.5     0.6    1.000         761         69159
+    4194304  recyc_keep  7      359.68        368308   352.84   362.94      2.8     2.3    1.000         711         66714
+   16777216       fresh  7      378.98       1552292   372.30   390.69      4.9     0.6    1.000         892        262671
+   16777216   recyc_map  7      370.81       1518839   361.08   377.24      4.4     1.3    1.000         832        266217
+   16777216  recyc_keep  7      368.04       1507488   361.89   384.56      6.2     1.7    1.000         822        259555
+   67108864       fresh  7      466.08       7636285   460.36   470.49      2.2     0.0    1.000         922       1130623
+   67108864   recyc_map  7      466.57       7644210   459.15   469.41      2.2     0.2    1.000        1292       1084307
+   67108864  recyc_keep  7      462.77       7582004   459.00   471.63      2.7     0.5    1.000        1132       1107060
+  268435456       fresh  7      484.91      31779387   476.86   492.69      3.3     0.0    1.000         991       5113409
+  268435456   recyc_map  7      483.42      31681714   476.16   499.82      4.9     1.4    1.000        1973       5249493
+  268435456  recyc_keep  7      476.77      31245448   474.07   483.83      2.0     0.6    1.000         871       5162381
+ 1073741824       fresh  7      504.88     132351199   499.04   520.89      4.3     0.8    1.000        1162      27269967
+ 1073741824   recyc_map  7      505.33     132469470   503.81   550.91      9.3     0.8    1.000        6653      28459179
+ 1073741824  recyc_keep  7      506.68     132823051   501.70   530.12      5.6     0.4    1.000        1202      26558407
+
+recycled-vs-fresh ratio (median ns/page, recycled / fresh; <1 = recycled cheaper):
+       size  recyc_map/fresh  recyc_keep/fresh
+       4096            1.022             0.975
+      16384            1.064             1.036
+      65536            1.047             0.931
+     262144            0.911             0.909
+    1048576            0.961             0.955
+    4194304            0.985             0.997
+   16777216            0.978             0.971
+   67108864            1.001             0.993
+  268435456            0.997             0.983
+ 1073741824            1.001             1.004
+headline (median across sizes): recyc_map 0.999, recyc_keep 0.979
+large sizes >=16 MiB (median): recyc_map 0.999, recyc_keep 0.988
+
+=== VERDICT - THE RECYCLED-VS-FRESH RATIO ===
+Headline ratio (median across all sizes, run 1): recyc_map/fresh 0.999, recyc_keep/fresh 0.979. Large sizes >=16 MiB: recyc_map 0.999, recyc_keep 0.988 (run 1); run 2 confirms 0.999 / 0.997 at large sizes. Per the protocol section 7 noise bound (5%), a median difference inside 5% is WITHIN NOISE: at the sizes the large path actually faults (16 MiB..1 GiB), RECYCLING DOES NOT MAKE FAULTS CHEAPER ON THIS MACHINE. Replacement pages cost the same ~460-505 ns/page to fault in whether they come from a brand-new mapping, a re-mmap of just-freed space, or a retained pooled mapping re-faulted after MADV_DONTNEED.
+Proof the recycled legs really re-fault: median minor faults per page = 1.000 in EVERY leg at EVERY size - recycled mappings hold no hidden resident pages; every page is paid for again, in full.
+The one real discount is mid-size: at 262144 bytes the recycled legs run 0.91x fresh in run 1 and 0.89x in run 2 (both modes, reproducible, outside noise), and at 1 MiB ~0.96x in both runs - recently freed pages at cache-resident scales are slightly cheaper. By 16 MiB the discount is gone (0.97-0.99x, inside noise) and by 64 MiB it is exactly 1.00x. Fault cost per page rises with size in all legs: ~345-375 ns/page at 256 KiB..4 MiB, 379 at 16 MiB, 466 at 64 MiB, 485 at 256 MiB, 505 at 1 GiB - at large sizes the cost is dominated by page zeroing + page-table work at memory bandwidth, which no recycling scheme avoids.
+What recycling DOES save (separate columns, run 1 medians): mmap itself is ~0.5-6.5 us at all sizes (noise), but munmap of a faulted mapping costs ~104 ns/page at 1 GiB (27.3 ms total) and ~78 ns/page at 256 MiB - a retained pooled mapping (recyc_keep) avoids repeated mmap/munmap/VMA churn, and the pooled legs own discard step is not free either: MADV_DONTNEED costs 69 ns/page at 64 MiB, 74 ns/page at 256 MiB and 103 ns/page at 1 GiB (run 1 medians, aux column in the raw data) - the same order as munmap, since both zap page tables. So the KL-C large path lives or dies by this: pooling mappings is worth it for syscall/VMA economics (Z-015 territory), but NO fault-cost saving may be booked for it - a design that assumes recycled mappings fault cheaper at large sizes is designing on a number this machine does not have.
+Small-size honesty: at 4-64 KiB the total touch times are 0.4-24 us, spreads reach 130% and drift 29% on individual cells; the ratios there (0.87-1.13 across runs) are timer noise and no claim is made from them. Every size >=256 KiB cell in both runs has spread <=25% and, except run 1 recyc_map at 64 KiB (a sub-6 us cell), drift <=7%.
+Baseline status: baseline-of-record for fault costs on this line - protocol sections 2-9 green where they apply (checksums: exactly one per size across all 210+210 processes and all modes; drift within bounds at every size the verdict rests on; quiet load recorded at both ends of both runs).
+
+=== CONFIRMATION - RUN 2 RATIO TABLE (full raw filed in team hidden_files/z014_raw_run2.csv) ===
+       size  recyc_map/fresh  recyc_keep/fresh
+       4096            0.976             0.976
+      16384            1.133             0.993
+      65536            0.872             0.882
+     262144            0.892             0.891
+    1048576            0.968             0.969
+    4194304            0.989             0.987
+   16777216            0.986             0.983
+   67108864            1.002             0.998
+  268435456            0.999             1.001
+ 1073741824            0.999             0.996
+headline (median across sizes): recyc_map 0.988, recyc_keep 0.985
+large sizes >=16 MiB (median): recyc_map 0.999, recyc_keep 0.997
+
+=== RAW CSV - RUN 1 (size,mode,pages,touch_ns,ns_per_page,map_ns,aux_ns,unmap_ns,minflt_delta,checksum) ===
+4096,fresh,1,431,431.00,561,0,831,1,1
+4096,recyc_map,1,391,391.00,380,2684,872,1,1
+4096,recyc_keep,1,391,391.00,541,260,872,1,1
+4096,fresh,1,401,401.00,661,0,1022,1,1
+4096,recyc_map,1,420,420.00,390,3227,701,1,1
+4096,recyc_keep,1,411,411.00,571,261,992,1,1
+4096,fresh,1,411,411.00,531,0,1022,1,1
+4096,recyc_map,1,380,380.00,381,2685,831,1,1
+4096,recyc_keep,1,391,391.00,602,281,832,1,1
+4096,fresh,1,391,391.00,611,0,881,1,1
+4096,recyc_map,1,410,410.00,380,3056,732,1,1
+4096,recyc_keep,1,391,391.00,591,301,892,1,1
+4096,fresh,1,381,381.00,541,0,992,1,1
+4096,recyc_map,1,471,471.00,381,3566,781,1,1
+4096,recyc_keep,1,400,400.00,541,261,1002,1,1
+4096,fresh,1,420,420.00,531,0,1132,1,1
+4096,recyc_map,1,421,421.00,381,2966,752,1,1
+4096,recyc_keep,1,371,371.00,531,281,912,1,1
+4096,fresh,1,390,390.00,571,0,1223,1,1
+4096,recyc_map,1,381,381.00,381,3336,621,1,1
+4096,recyc_keep,1,391,391.00,581,270,922,1,1
+16384,fresh,4,1312,328.00,561,0,1142,4,46
+16384,recyc_map,4,1683,420.75,371,3557,1112,4,46
+16384,recyc_keep,4,1473,368.25,521,420,1192,4,46
+16384,fresh,4,1293,323.25,531,0,1383,4,46
+16384,recyc_map,4,1332,333.00,381,3536,1252,4,46
+16384,recyc_keep,4,2625,656.25,601,431,1562,4,46
+16384,fresh,4,1453,363.25,591,0,1703,4,46
+16384,recyc_map,4,1313,328.25,370,3538,932,4,46
+16384,recyc_keep,4,1292,323.00,551,761,1202,4,46
+16384,fresh,4,3106,776.50,601,0,1563,4,46
+16384,recyc_map,4,1432,358.00,370,4098,1032,4,46
+16384,recyc_keep,4,1392,348.00,601,431,1122,4,46
+16384,fresh,4,1352,338.00,641,0,1453,4,46
+16384,recyc_map,4,1924,481.00,531,5820,1463,4,46
+16384,recyc_keep,4,1353,338.25,561,421,1333,4,46
+16384,fresh,4,1423,355.75,632,0,1273,4,46
+16384,recyc_map,4,2785,696.25,380,3556,1343,4,46
+16384,recyc_keep,4,1443,360.75,551,451,1102,4,46
+16384,fresh,4,1393,348.25,541,0,1212,4,46
+16384,recyc_map,4,1482,370.50,371,3767,1182,4,46
+16384,recyc_keep,4,2615,653.75,611,431,1322,4,46
+65536,fresh,16,7714,482.12,561,0,2915,16,856
+65536,recyc_map,16,4869,304.31,371,8285,1903,16,856
+65536,recyc_keep,16,4889,305.56,571,1202,2164,16,856
+65536,fresh,16,5130,320.62,521,0,2294,16,856
+65536,recyc_map,16,5821,363.81,391,8165,2324,16,856
+65536,recyc_keep,16,5891,368.19,521,1212,2835,16,856
+65536,fresh,16,6883,430.19,641,0,2415,16,856
+65536,recyc_map,16,4879,304.94,370,7615,2194,16,856
+65536,recyc_keep,16,4909,306.81,671,1903,2064,16,856
+65536,fresh,16,5029,314.31,551,0,2134,16,856
+65536,recyc_map,16,5851,365.69,380,7795,2174,16,856
+65536,recyc_keep,16,5841,365.06,571,1202,2695,16,856
+65536,fresh,16,4949,309.31,521,0,2054,16,856
+65536,recyc_map,16,4929,308.06,381,7895,1903,16,856
+65536,recyc_keep,16,4929,308.06,571,1713,1974,16,856
+65536,fresh,16,7053,440.81,571,0,2835,16,856
+65536,recyc_map,16,5761,360.06,381,7315,2104,16,856
+65536,recyc_keep,16,6682,417.62,611,1212,2374,16,856
+65536,fresh,16,5501,343.81,491,0,2244,16,856
+65536,recyc_map,16,6131,383.19,371,8086,2564,16,856
+65536,recyc_keep,16,5119,319.94,641,1523,2024,16,856
+262144,fresh,64,25367,396.36,591,0,4889,64,7264
+262144,recyc_map,64,27041,422.52,531,21321,6543,64,7264
+262144,recyc_keep,64,21690,338.91,531,4548,5831,64,7264
+262144,fresh,64,23584,368.50,511,0,5981,64,7264
+262144,recyc_map,64,22111,345.48,370,19026,5179,64,7264
+262144,recyc_keep,64,21720,339.38,792,4238,5720,64,7264
+262144,fresh,64,23885,373.20,812,0,6352,64,7264
+262144,recyc_map,64,22061,344.70,371,18284,5060,64,7264
+262144,recyc_keep,64,21721,339.39,611,4318,5290,64,7264
+262144,fresh,64,24235,378.67,731,0,6282,64,7264
+262144,recyc_map,64,21751,339.86,380,19206,5240,64,7264
+262144,recyc_keep,64,21661,338.45,541,4158,5280,64,7264
+262144,fresh,64,23634,369.28,591,0,6442,64,7264
+262144,recyc_map,64,21771,340.17,380,19978,5100,64,7264
+262144,recyc_keep,64,21740,339.69,682,4127,5470,64,7264
+262144,fresh,64,23433,366.14,541,0,5741,64,7264
+262144,recyc_map,64,21750,339.84,371,19195,4688,64,7264
+262144,recyc_keep,64,31038,484.97,531,4007,4940,64,7264
+262144,fresh,64,25638,400.59,652,0,6912,64,7264
+262144,recyc_map,64,21750,339.84,541,19888,4698,64,7264
+262144,recyc_keep,64,21360,333.75,641,3907,4678,64,7264
+1048576,fresh,256,91401,357.04,801,0,17693,256,32640
+1048576,recyc_map,256,88024,343.84,651,74511,16801,256,32640
+1048576,recyc_keep,256,94005,367.21,721,15279,17723,256,32640
+1048576,fresh,256,102271,399.50,662,0,17473,256,32640
+1048576,recyc_map,256,90519,353.59,441,65412,16772,256,32640
+1048576,recyc_keep,256,98083,383.14,721,16220,17663,256,32640
+1048576,fresh,256,93504,365.25,631,0,17633,256,32640
+1048576,recyc_map,256,88816,346.94,572,67746,16771,256,32640
+1048576,recyc_keep,256,87353,341.22,752,16220,17202,256,32640
+1048576,fresh,256,91692,358.17,771,0,17713,256,32640
+1048576,recyc_map,256,87143,340.40,391,76724,16832,256,32640
+1048576,recyc_keep,256,87875,343.26,541,24656,17202,256,32640
+1048576,fresh,256,92393,360.91,752,0,17583,256,32640
+1048576,recyc_map,256,88666,346.35,521,67906,17162,256,32640
+1048576,recyc_keep,256,88245,344.71,641,17693,17152,256,32640
+1048576,fresh,256,100799,393.75,651,0,18234,256,32640
+1048576,recyc_map,256,93584,365.56,371,67656,17773,256,32640
+1048576,recyc_keep,256,88436,345.45,782,16140,17513,256,32640
+1048576,fresh,256,91271,356.53,872,0,17552,256,32640
+1048576,recyc_map,256,89247,348.62,651,67557,17022,256,32640
+1048576,recyc_keep,256,88115,344.20,632,15329,17202,256,32640
+4194304,fresh,1024,365984,357.41,741,0,66915,1024,130560
+4194304,recyc_map,1024,363981,355.45,611,266758,70341,1024,130560
+4194304,recyc_keep,1024,361376,352.91,671,64371,65132,1024,130560
+4194304,fresh,1024,368188,359.56,742,0,70592,1024,130560
+4194304,recyc_map,1024,361857,353.38,782,269724,64952,1024,130560
+4194304,recyc_keep,1024,361306,352.84,802,64781,66714,1024,130560
+4194304,fresh,1024,364231,355.69,912,0,66004,1024,130560
+4194304,recyc_map,1024,408775,399.19,722,262903,142416,1024,130560
+4194304,recyc_keep,1024,361847,353.37,671,65964,69269,1024,130560
+4194304,fresh,1024,371995,363.28,721,0,66995,1024,130560
+4194304,recyc_map,1024,369440,360.78,761,266818,69159,1024,130560
+4194304,recyc_keep,1024,369881,361.21,711,65332,66284,1024,130560
+4194304,fresh,1024,369531,360.87,662,0,65973,1024,130560
+4194304,recyc_map,1024,368529,359.89,771,612454,64931,1024,130560
+4194304,recyc_keep,1024,371655,362.94,702,63990,65532,1024,130560
+4194304,fresh,1024,371284,362.58,641,0,66896,1024,130560
+4194304,recyc_map,1024,359542,351.12,772,262720,65061,1024,130560
+4194304,recyc_keep,1024,369682,361.02,821,68027,66895,1024,130560
+4194304,fresh,1024,376705,367.88,1122,0,67035,1024,130560
+4194304,recyc_map,1024,364100,355.57,751,266088,69760,1024,130560
+4194304,recyc_keep,1024,368308,359.68,811,65402,69099,1024,130560
+16777216,fresh,4096,1600251,390.69,852,0,258513,4096,522240
+16777216,recyc_map,4096,1545159,377.24,861,1088825,277939,4096,522240
+16777216,recyc_keep,4096,1525120,372.34,801,258844,258713,4096,522240
+16777216,fresh,4096,1542834,376.67,892,0,464378,4096,522240
+16777216,recyc_map,4096,1501056,366.47,1092,1080912,258343,4096,522240
+16777216,recyc_keep,4096,1495757,365.18,761,260507,268502,4096,522240
+16777216,fresh,4096,1534278,374.58,1042,0,256660,4096,522240
+16777216,recyc_map,4096,1489635,363.68,761,1113462,271157,4096,522240
+16777216,recyc_keep,4096,1575154,384.56,822,261499,257602,4096,522240
+16777216,fresh,4096,1552692,379.08,942,0,262671,4096,522240
+16777216,recyc_map,4096,1479004,361.08,752,1271096,266217,4096,522240
+16777216,recyc_keep,4096,1482301,361.89,912,269654,259555,4096,522240
+16777216,fresh,4096,1524961,372.30,791,0,265607,4096,522240
+16777216,recyc_map,4096,1526975,372.80,832,1213568,261098,4096,522240
+16777216,recyc_keep,4096,1507488,368.04,1122,276747,262831,4096,522240
+16777216,fresh,4096,1556770,380.07,891,0,281155,4096,522240
+16777216,recyc_map,4096,1518839,370.81,952,1073677,260677,4096,522240
+16777216,recyc_keep,4096,1550910,378.64,801,265396,258914,4096,522240
+16777216,fresh,4096,1552292,378.98,1012,0,261720,4096,522240
+16777216,recyc_map,4096,1522937,371.81,731,1052699,267019,4096,522240
+16777216,recyc_keep,4096,1490225,363.82,891,264214,260557,4096,522240
+67108864,fresh,16384,7708590,470.49,731,0,1627172,16384,2088960
+67108864,recyc_map,16384,7646203,466.69,1333,4689455,1084307,16384,2088960
+67108864,recyc_keep,16384,7727115,471.63,1152,1091561,1209621,16384,2088960
+67108864,fresh,16384,7636285,466.08,802,0,1070240,16384,2088960
+67108864,recyc_map,16384,7644210,466.57,1703,4469495,1073517,16384,2088960
+67108864,recyc_keep,16384,7536518,459.99,722,1127848,1108692,16384,2088960
+67108864,fresh,16384,7542580,460.36,992,0,1104846,16384,2088960
+67108864,recyc_map,16384,7536148,459.97,962,4460488,1072194,16384,2088960
+67108864,recyc_keep,16384,7612390,464.62,1153,1174826,1140693,16384,2088960
+67108864,fresh,16384,7582344,462.79,1052,0,1130623,16384,2088960
+67108864,recyc_map,16384,7563699,461.65,1262,4542631,1100237,16384,2088960
+67108864,recyc_keep,16384,7520208,459.00,1232,1111127,1107060,16384,2088960
+67108864,fresh,16384,7619634,465.07,812,0,1136354,16384,2088960
+67108864,recyc_map,16384,7522733,459.15,922,4467841,1075951,16384,2088960
+67108864,recyc_keep,16384,7582004,462.77,1132,1108212,1094687,16384,2088960
+67108864,fresh,16384,7646725,466.72,971,0,1140943,16384,2088960
+67108864,recyc_map,16384,7689474,469.33,1332,4917713,1228316,16384,2088960
+67108864,recyc_keep,16384,7597242,463.70,812,1238545,1082864,16384,2088960
+67108864,fresh,16384,7646644,466.71,922,0,1078596,16384,2088960
+67108864,recyc_map,16384,7690837,469.41,1292,4372032,1146684,16384,2088960
+67108864,recyc_keep,16384,7563229,461.62,901,1189233,1068217,16384,2088960
+268435456,fresh,65536,31864996,486.22,841,0,5070729,65536,8355840
+268435456,recyc_map,65536,31205353,476.16,1763,10757650,5041885,65536,8355840
+268435456,recyc_keep,65536,31350735,478.37,1313,5282044,4790115,65536,8355840
+268435456,fresh,65536,31251289,476.86,991,0,4985730,65536,8355840
+268435456,recyc_map,65536,31814352,485.45,2104,9349217,5337047,65536,8355840
+268435456,recyc_keep,65536,31156462,475.41,871,4788812,5294016,65536,8355840
+268435456,fresh,65536,31779387,484.91,1072,0,5354520,65536,8355840
+268435456,recyc_map,65536,31681714,483.42,1853,11140386,5249493,65536,8355840
+268435456,recyc_keep,65536,31621300,482.50,811,4715064,5053317,65536,8355840
+268435456,fresh,65536,31534168,481.17,1222,0,5561376,65536,8355840
+268435456,recyc_map,65536,31599210,482.17,3156,11110509,4887226,65536,8355840
+268435456,recyc_keep,65536,31245448,476.77,941,5419150,6380127,65536,8355840
+268435456,fresh,65536,32015778,488.52,791,0,5113409,65536,8355840
+268435456,recyc_map,65536,32658850,498.33,1973,10185160,5692612,65536,8355840
+268435456,recyc_keep,65536,31707963,483.83,1173,4613213,5162381,65536,8355840
+268435456,fresh,65536,31317002,477.86,851,0,4908055,65536,8355840
+268435456,recyc_map,65536,32755892,499.82,2214,10854552,5503377,65536,8355840
+268435456,recyc_keep,65536,31068677,474.07,801,4990239,5789402,65536,8355840
+268435456,fresh,65536,32289190,492.69,1012,0,5744759,65536,8355840
+268435456,recyc_map,65536,31217296,476.34,1874,9609894,4830640,65536,8355840
+268435456,recyc_keep,65536,31098043,474.52,831,4863551,4673756,65536,8355840
+1073741824,fresh,262144,132351199,504.88,1002,0,28271138,262144,33423360
+1073741824,recyc_map,262144,132469470,505.33,2876,56715220,28960597,262144,33423360
+1073741824,recyc_keep,262144,131518412,501.70,1553,28541013,34232703,262144,33423360
+1073741824,fresh,262144,133404498,508.90,922,0,28142618,262144,33423360
+1073741824,recyc_map,262144,132445315,505.24,3446,56543699,28459179,262144,33423360
+1073741824,recyc_keep,262144,132898081,506.97,912,27224091,27950208,262144,33423360
+1073741824,fresh,262144,132084520,503.86,1603,0,27014700,262144,33423360
+1073741824,recyc_map,262144,133553756,509.47,3307,66684275,29554267,262144,33423360
+1073741824,recyc_keep,262144,132405490,505.09,1012,26349155,25383260,262144,33423360
+1073741824,fresh,262144,130819155,499.04,1403,0,28800879,262144,33423360
+1073741824,recyc_map,262144,132243979,504.47,8846,58508011,25422633,262144,33423360
+1073741824,recyc_keep,262144,133026101,507.45,1543,23323760,22119819,262144,33423360
+1073741824,fresh,262144,135154088,515.57,1072,0,26942865,262144,33423360
+1073741824,recyc_map,262144,144418988,550.91,10360,57997497,32905802,262144,33423360
+1073741824,recyc_keep,262144,138968760,530.12,1032,40111492,36697630,262144,33423360
+1073741824,fresh,262144,136547794,520.89,1863,0,27269967,262144,33423360
+1073741824,recyc_map,262144,132071296,503.81,8325,52450658,25945851,262144,33423360
+1073741824,recyc_keep,262144,132540242,505.60,1202,26995364,25273946,262144,33423360
+1073741824,fresh,262144,131747600,502.58,1162,0,26748502,262144,33423360
+1073741824,recyc_map,262144,134774990,514.13,6653,56848138,25917359,262144,33423360
+1073741824,recyc_keep,262144,132823051,506.68,1693,25359255,26558407,262144,33423360
