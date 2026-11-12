@@ -900,6 +900,24 @@ test-z025: $(BUILD)/probe_z025_glibc $(BUILD)/probe_z025_mimir
 
 .PHONY: test-z025
 
+# Z-030: cross-thread frees into TLS-owned blocks - the
+# remote-free queue suite under tests/concurrency/
+# (test_z030_remote_queue.c + mimir_remote_queue_z030.h),
+# built against the production LIBOBJS (test-only static
+# link, like run_z028.sh). Standalone via make test-z030;
+# NOT part of make test (standing gate counts untouched).
+# Recorded run: tests/perf/recorded_run_z13_z030.txt.
+$(BUILD)/test_z030_remote_queue.o: tests/concurrency/test_z030_remote_queue.c tests/concurrency/mimir_remote_queue_z030.h include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/concurrency -c tests/concurrency/test_z030_remote_queue.c -o $@
+
+$(BUILD)/test_z030_remote_queue: $(LIBOBJS) $(BUILD)/test_z030_remote_queue.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z030_remote_queue.o -o $@
+
+test-z030: $(BUILD)/test_z030_remote_queue
+	./$(BUILD)/test_z030_remote_queue
+
+.PHONY: test-z030
+
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies
 # cross-thread frees on the span and mapping paths,
