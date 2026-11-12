@@ -110,10 +110,10 @@
  * counts stay exact under concurrent calls without
  * taking the allocator lock on this layer's behalf.
  */
-unsigned long mimir_audit_call_malloc;
-unsigned long mimir_audit_call_calloc;
-unsigned long mimir_audit_call_realloc;
-unsigned long mimir_audit_call_free;
+_Alignas(64) unsigned long mimir_audit_call_malloc; /* Z-040: own 64 B line - lock-free per-call counter (Z-016 rule) */
+_Alignas(64) unsigned long mimir_audit_call_calloc; /* Z-040: own 64 B line - lock-free per-call counter (Z-016 rule) */
+_Alignas(64) unsigned long mimir_audit_call_realloc; /* Z-040: own 64 B line - lock-free per-call counter (Z-016 rule) */
+_Alignas(64) unsigned long mimir_audit_call_free; /* Z-040: own 64 B line - lock-free per-call counter (Z-016 rule) */
 
 void *mimir_malloc(size_t size)
 {

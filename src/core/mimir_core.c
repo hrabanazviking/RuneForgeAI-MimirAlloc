@@ -493,8 +493,8 @@ static uint64_t mimir_stats_bytes_allocated;
 static uint64_t mimir_stats_bytes_released;
 #endif
 static uint64_t mimir_stats_peak_mapped;
-static uint64_t mimir_stats_alloc_failures;
-static uint64_t mimir_stats_alloc_posture_nulls;
+_Alignas(64) static uint64_t mimir_stats_alloc_failures; /* Z-040: own 64 B line - pre-lock atomic (Z-016 rule) */
+_Alignas(64) static uint64_t mimir_stats_alloc_posture_nulls; /* Z-040: own 64 B line - pre-lock atomic (Z-016 rule) */
 static uint64_t mimir_stats_cross_thread_frees;
 
 static void mimir_stats_peak_update_locked(void);
@@ -1426,8 +1426,8 @@ static size_t mimir_live_small_objects;
 
 unsigned long mimir_audit_span_published;
 unsigned long mimir_audit_span_retired;
-unsigned long mimir_audit_small_alloc;
-unsigned long mimir_audit_small_free;
+_Alignas(64) unsigned long mimir_audit_small_alloc; /* Z-040: own 64 B line - lock-free on the TLS hit path */
+_Alignas(64) unsigned long mimir_audit_small_free; /* Z-040: own 64 B line - lock-free on the free-to-bin path */
 
 /* Smallest class index whose class size is >= size.
  * Caller guarantees 1 <= size <= MIMIR_SMALL_CUTOFF, so the
@@ -3181,11 +3181,15 @@ void mimir_tls_cache_drain_thread(void)
 #define TLS_OWNER_PROBE ((size_t)256)
 #define TLS_OWNER_TOMBSTONE ((uintptr_t)1)
 
-struct tls_owner_entry {
-    uintptr_t key;
+struct tls_owner_entry { /* Z-040: one entry per 64 B line (Z-016 rule) */
+    _Alignas(64) uintptr_t key;
     uint64_t owner;
     uintptr_t span;
+    unsigned char z040_pad[40]; /* 24 B fields + 40 B pad = one 64 B line */
 };
+_Static_assert(offsetof(struct tls_owner_entry, span) == 16, "owner span offset unchanged (Z-040)");
+_Static_assert(offsetof(struct tls_owner_entry, owner) == 8, "owner owner offset unchanged (Z-040)");
+_Static_assert(sizeof(struct tls_owner_entry) == 64, "owner entry is exactly one 64 B line (Z-040)");
 static struct tls_owner_entry tls_owner_table[TLS_OWNER_SLOTS];
 
 static uint64_t tls_self_bits(void)

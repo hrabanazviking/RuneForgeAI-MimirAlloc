@@ -1,0 +1,258 @@
+MimirAlloc Z13 slice Z-040 - recorded run of the false-sharing purge
+slice: Z-040 - False-sharing purge (Wave 5)
+date: 2026-11-12T05:21-05:37-05:00 (America/New_York)
+base: fa4fa1d (team branch yrsa/mimiralloc-team-09 after merging seat
+  main 35f7f55, banked Z-001..Z-035 incl. the Z-029 TLS core and the
+  Z-035 -flto build; merge clean, no conflicts)
+host: purpleraider (ASUS ROG Flow Z13, AMD RYZEN AI MAX+ 395,
+  Strix Halo, 16 cores / 32 threads, 2 CCDs, 64 B lines, 4 KiB
+  pages, 128 GB UMA; glibc 2.44; governor performance)
+  Full header: scripts/z13/host_truth.sh output in
+  hidden_files/z040_host_truth.txt.
+compiler: production Makefile flags -std=c11 -Wall -Wextra -Werror
+  -pthread -O2 -flto for the gate and the .so; the layout-proof
+  objects and the e2e probes are built -O2 without -flto (slim LTO
+  objects carry no nm layout; layout is source-determined and the
+  production gate proves the -flto build).
+sha256: probe_z040.c        864925864a53c6747c9e0e29d9b7afb2f61d85bee8c0a1b06fda71f7f61ca012
+        run_z040.sh         4447083c9897644a080aede01a3161adebb438175957b33a054b68102a74dc99
+        summarize_z040.py   5caebab32a07155b1848a7b2fd753c31d841a2004da7c8c2acb4bcf1a49dc7e3
+
+=== STANDING GATE ===
+scripts/z13/run_gate.sh, log hidden_files/z040_gate.log:
+GREEN - 4988 checks (18 smoke + 4970 CHECKS), 0 failed, 77
+by-design SKIP lines, make exit 0. Identical to the Z-001
+baseline: this slice adds no suite tests (layout is pinned by
+_Static_asserts in the source and by the nm proof below, both
+compile-time / object-level, so the counts do not move).
+Shared-library surface: make lib, nm -D --defined-only on
+build/libmimiralloc.so = exactly 4 (mimir_malloc, mimir_free,
+mimir_calloc, mimir_realloc) - unchanged.
+
+=== WHAT THE PROFILES NAME, AND WHAT WAS DONE ===
+Z-016 padding rule of record: every field written by more than
+one thread gets its own 64 B line; guard lines 0; read-mostly
+and single-writer fields exempt. The banked nm layout (BEFORE,
+offsets in the core object's .bss) showed the defect exactly:
+all six core audit counters packed 8 B apart in one line; the
+four L1 call counters inside one 32 B span; the J-002 stats
+counters - including the two PRE-LOCK atomics - sharing lines
+with the lock-held counters and the registry anchors; the TLS
+owner table at 24 B per entry (65536 x 24 = 0x180000), so
+neighbouring slots written by unrelated threads share lines.
+
+PURGED (each given its own 64 B line; variable TYPES unchanged,
+so every test-only extern declaration still binds exactly):
+ 1. L1 audit call counters x4 (src/api/mimir_alloc.c):
+    _Alignas(64) each. Lock-free relaxed fetch_add on EVERY
+    public call. AFTER nm (api object): offsets 0x00, 0x40,
+    0x80, 0xc0 - one per line.
+ 2. Core audit mimir_audit_small_alloc / mimir_audit_small_free
+    (src/core/mimir_core.c): _Alignas(64) each. These two are
+    incremented WITHOUT the lock on the TLS hit path
+    (tls_alloc) and the free-to-bin path (tls_free_local) -
+    found by source audit during this slice; the other four
+    audit counters move only under the lock (see KEPT PACKED).
+    AFTER nm: small_free 0x00, small_alloc 0x40 - own lines.
+ 3. J-002 stats pre-lock pair mimir_stats_alloc_failures /
+    mimir_stats_alloc_posture_nulls: _Alignas(64) each.
+    Relaxed atomic adds on pre-lock admission paths from any
+    thread. AFTER nm: posture 0x...c00, failures 0x...c40 -
+    own lines, no longer sharing with the lock-held counters.
+ 4. TLS owner table entry (Z-029 cache companion): struct
+    tls_owner_entry padded 24 B -> 64 B (_Alignas(64) key +
+    40 B tail pad; field order and offsets 0/8/16 UNCHANGED -
+    the set/get/clear publication order (span, owner, then key
+    CAS) is untouched). _Static_asserts pin sizeof == 64 and
+    the owner/span offsets. AFTER nm: table size 0x400000 =
+    65536 x 64 B. One entry per line, per slot: a block's
+    record never shares a line with another block's record.
+
+KEPT PACKED - measured reason, not oversight. The probe's
+locked7 pattern (below) proves that scattering a group whose
+writes are serialised by ONE mutex COSTS +11..+36% at 8-32
+threads: with the packed group one line migrates per lock
+hand-off; scattered, every line of the group migrates. The
+Z-016 penalty case is CONCURRENT writers; under the global
+lock there is exactly one writer at a time. So the locked
+groups stay packed, and the purge's job for them is the one
+performed above: no lock-free hot field shares their lines
+any more (compare the BEFORE/AFTER nm tables,
+hidden_files/z040_nm_before.txt / z040_nm_after.txt).
+Kept packed: the five lock-held J-002 counters (bytes_requested,
+bytes_allocated, bytes_released, peak_mapped,
+cross_thread_frees); registry anchors (head, live_mappings,
+live_bytes); span anchors (span_head, live_spans,
+live_span_bytes, live_small_objects) and mimir_class_active[20]
+(all lock-held on every path); the four lock-held audit
+counters (alloc_published, mapping_retired, span_published,
+span_retired); the TLS tally (4096 x 16 B, lock-held only);
+the TLS exit-drain pair (lock-held, thread-exit cold);
+the diag counters + guard (atomic but failure-path cold;
+their line carries no hot field after this purge).
+
+NOT APPLICABLE register (examined, nothing to purge):
+ - Span free lists: the links live IN the freed blocks
+   themselves (in-band); no layout change is possible without
+   changing the allocator's storage contract - a redesign
+   question, not a purge.
+ - Span headers / large descriptors: 96 B each, one per
+   reserve page; two headers never share a line.
+ - Z-030 remote-free queue: test-only header, not wired into
+   production mimir_free (Z-030's own dependency honesty);
+   already line-separated by its design (its Q0 phase asserts
+   the offsets).
+ - TLS bins and per-thread counters: _Thread_local, the state
+   struct already _Alignas(64) (Z-029).
+ - Z-034 out-of-line metadata table: exists only under
+   MIMIR_OOL_META, which no production build defines.
+ - Lock histograms (z19_hist): MIMIR_LOCK_HIST builds only,
+   absent from production objects.
+ - Platform mutex: a single object; its line must migrate to
+   each acquirer by definition - padding cannot change that.
+
+=== METHOD (probe_z040, Z-004 protocol) ===
+Standalone probe replicating each purged group's exact access
+pattern in packed vs padded layout (a whole-allocator run
+cannot attribute deltas: every public op touches several
+groups). Threads pinned physical-first (0-7 CCD0, 8-15 CCD1,
+16-31 SMT); median of 5 reps; every rep verified by exact
+counter sums (a mismatch aborts the probe); go-flag start as
+in probe_z016. Patterns:
+ l1mix    4 counters, thread t increments ONLY counter t%4,
+          relaxed atomic, no lock (models groups 1 and 2).
+ l1same   CONTROL: all threads increment counter 0 - TRUE
+          sharing; padding must NOT help, and it does not.
+ prelock2 2 counters, thread t increments ONLY counter t%2,
+          relaxed atomic, no lock (models group 3).
+ owner    per-thread slot in a {key, owner, span} entry:
+          atomic load key + fetch_add owner + store span per
+          op, entry stride 24 vs 64 (models group 4, aggregate
+          over the consecutive-slot geometry the hash produces).
+ locked7  7 plain counters under ONE mutex, all incremented
+          per op (models the KEPT PACKED groups).
+Load state (SHARED HOST, recorded honestly): run 1 (PRIMARY)
+started at loadavg 0.41/0.62/0.54; a sibling campaign's pytest
+suite ramped during the session (load 11.95 mid-session, 18.30
+at the end of run 2). Run 2 is therefore contended; run 3 was
+taken during the e2e ladders. The verdicts rest on WITHIN-RUN
+packed-vs-padded ratios at fixed thread counts, which
+replicate across all three runs within ~2 points on every
+WIN cell and exactly on the control (see CORROBORATION) -
+the same discipline Z-016 used for its contended finals.
+
+=== CONTENTION DELTA TABLE - PRIMARY RUN (median aggregate ns/op) ===
+pattern   threads   packed   padded   ratio   grade
+l1mix           2    5.709    1.964   0.344   WIN
+l1mix           8    5.957    1.553   0.261   WIN
+l1mix          16    6.723    2.076   0.309   WIN
+l1mix          32    9.333    2.665   0.286   WIN
+l1same          2    5.560    5.724   1.029   CONTROL (true sharing)
+l1same          8    5.971    5.905   0.989   CONTROL
+l1same         16    6.791    6.650   0.979   CONTROL
+l1same         32    9.290    9.374   1.009   CONTROL
+prelock2        2    5.438    1.960   0.360   WIN
+prelock2        8    5.877    2.876   0.489   WIN
+prelock2       16    6.668    3.300   0.495   WIN
+prelock2       32    9.369    4.681   0.500   WIN
+owner           2    8.799    1.963   0.223   WIN
+owner           8    4.748    0.497   0.105   WIN
+owner          16    2.381    0.260   0.109   WIN
+owner          32    1.228    0.225   0.183   WIN
+locked7         2   33.852   32.463   0.959   TIE
+locked7         8   49.849   60.286   1.209   LOSS (scattering)
+locked7        16   57.705   72.919   1.264   LOSS (scattering)
+locked7        32   56.073   74.603   1.330   LOSS (scattering)
+
+CORROBORATION: run 2 ratios - l1mix 0.352/0.265/0.314/0.284,
+prelock2 0.357/0.490/0.496/0.498, owner 0.223/0.105/0.112/
+0.125, l1same 0.997/0.997/1.002/0.999, locked7 1.022/1.139/
+1.174/1.355. Run 3 ratios match run 1 within 0.01 on every
+l1mix/prelock2 cell and 0.006 on owner at 8-16 threads;
+locked7 LOSS replicates in sign in both extra runs
+(+11..+36% band). Raw files: hidden_files/z040_raw1.txt,
+z040_raw2.txt, z040_raw3.txt; tables reproducible with
+tests/perf/summarize_z040.py.
+
+=== VERDICTS PER STRUCTURE TOUCHED (roadmap Law 2) ===
+ L1 audit call counters x4: WIN - per-op cost of the counter
+   update falls to 0.26-0.35x at 2-32 threads (l1mix).
+ Core audit small_alloc / small_free: WIN - same lock-free
+   geometry as l1mix (distinct counters, distinct op streams,
+   one atomic add per hit / free-to-bin, no lock).
+ J-002 pre-lock stats pair: WIN - 0.36-0.50x (prelock2).
+ TLS owner table: WIN - 0.10-0.22x per record op (owner);
+   the largest single-structure false-sharing cost in the
+   tree, on the cache's hot path.
+ Lock-held groups: NOT SCATTERED, by measured verdict -
+   scattering is a proven LOSS (+11..+36%, locked7); their
+   purge is isolation from lock-free fields, done above.
+ Control (true sharing): unaffected, ratios 0.98-1.03 -
+   the harness shows no padded-layout bias, and no claim in
+   this file rests on beating true sharing.
+These are STRUCTURE-level verdicts under the replicated
+access patterns. The assembled allocator remains
+lock-dominated on the small path (Z-031: STILL LOST vs glibc
+10.30x / 60.20x, reason named there); this slice does not
+claim the assembled gap moved - see the indicative e2e note.
+
+=== END-TO-END NOTE (INDICATIVE ONLY - NOT A VERDICT) ===
+probe_z020 ladder (banked probe, this tree -/+ this patch,
+5 process reps per point, medians of aggregate ops/s):
+ workload      thr    before       after     delta
+ small_churn     8  31,396,817  35,482,093   +13.0%
+ small_churn    16  21,829,012  20,361,028    -6.7%
+ small_churn    32  33,060,381  33,557,058    +1.5%
+ mixed_batch     8  27,496,379  43,889,901   +59.6%
+ mixed_batch    16  19,103,251  25,994,900   +36.1%
+ mixed_batch    32  15,030,325  34,242,160  +127.8%
+The two windows had UNEQUAL load (before 0.93 -> 1.84; after
+~5.4 with sibling pytest suites active), and the same table
+contains a -6.7% cell, which is itself the proof the windows
+are not comparable at this precision. Recorded as indicative
+only: direction is never negative beyond noise on the
+counter-heavy shapes, and NO grade above rests on it. Raw:
+hidden_files/z040_e2e_before.csv / z040_e2e_after.csv
+(selfcheck MATCH / MATCH_K002 in both).
+
+=== FOOTPRINT COST (the purge's bill, stated) ===
+Core object .bss: 1,645,120 B -> 4,266,760 B (+2,621,640 B =
+owner table +2,621,440 B at 40 B/entry x 65,536, plus 200 B
+of counter alignment slack). The owner growth is virtual
+zero-page BSS: pages are touched only for slots the hash
+reaches, exactly as sparsely as before; the cost is address
+space and worst-case RSS if every slot is touched, never
+up-front RSS. Counter/tail padding total: under 1 KiB.
+
+=== TEAM STRUCTURE ===
+Full 1+6 Mythic Engineering muster: six sub-agents spawned as
+reviewers (source auditor, measurement designer, ABI/layout
+risk, scope/roadmap law, red team, gate verifier); the lead
+built and ran everything on purpleraider. Findings folded in:
+the true-sharing control (l1same) and the not-applicable
+register come from the measurement/scope reviewers; the plain
+_Alignas form (types unchanged for the test externs) from the
+ABI reviewer; the owner-entry publication-order caution from
+the source auditor (order preserved - offsets asserted); the
+locked-group scattering LOSS was the lead's probe result,
+which overrode the design-time assumption that every group
+should be scattered, and is recorded as the slice's central
+negative result.
+
+=== DEFECTS ===
+Production code: none found; no allocator defect is claimed
+or fixed by this slice (layout only, semantics untouched -
+the gate's 4988 checks pass unmodified).
+Tooling/transport, found and fixed during the slice: (1) the
+first e2e-after build chain broke because the standing gate's
+make clean had wiped build/z40/ - rebuilt and re-ran in full;
+no number from the broken attempt is recorded. (2) Two file
+transfers failed their sha256 guards and were discarded and
+re-sent in smaller verified parts; every slice file is
+sha256-verified end to end (hashes above).
+
+repro: sh tests/perf/run_z040.sh <raw1> <raw2> then
+  python3 tests/perf/summarize_z040.py <raw1> <raw2>;
+  gate: scripts/z13/run_gate.sh; layout: nm -S on the core
+  and api objects (hidden_files/z040_nm_before.txt /
+  z040_nm_after.txt).
