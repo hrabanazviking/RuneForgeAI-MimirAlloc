@@ -1,0 +1,153 @@
+MimirAlloc Z13 recorded run - Z-058 split and coalesce audit
+slice: Z-058 - Split and coalesce audit (Wave 7)
+date: 2026-11-12 (run-of-record window, America/New_York); gate + assembly same morning
+base: merge 624aff2 of seat main c2ed635 (banked Z-001..Z-056, remote-verified) into yrsa/mimiralloc-team-03 - clean merge, no conflicts. This branch tip before the slice commit.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below).
+load state: SHARED HOST (Aesir forge, Lifthrasir forge, Tensile lab are co-tenants). loadavg 2.54 / 1.27 / 0.88 at the run-of-record window, 2.79 / 1.38 / 0.92 at gate end - NOT a quiet machine. Every graded quantity here is an exact allocator counter value, address identity, or pattern check at a quiesced point, never a timing, so co-tenant load cannot change them; no timing is asserted anywhere in this slice.
+artifacts: tests/perf/probe_z058.c (sha256 851b10978a027cda0cafaf295802cba84be96c0a99b8955cf9a4b21ec7a69d8d), tests/perf/run_z058.sh (ea87e6f3d92179c1bde644ad8d8fbb268d35c372023614f61841d1f16cdf6aa5), this recorded run. Built by the runner against the library OBJECTS (the Z-055 link shape) into build/z58/ (standalone, NOT part of make test). No production code is changed by this slice.
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z058_gate.log (team-local, not banked): GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN - identical to the Z-001 baseline.
+run of record: hidden_files/z058_raw_final.txt (team-local), reproduced verbatim as the RAW annex below; checks=69 failures=0, RESULT: PASS. Two further full executions (pilot3 after the final source change, and z058_raw_a.txt) are byte-identical to the run of record, including the P5 batch indices. Two earlier pilots are method evidence: pilot1 (failures=2) exposed the P3 page-reuse confound and the P5 strict-LIFO assumption; pilot2 (failures=1) sized the P5 batch at 256.
+
+=== METHOD ===
+Adversarial patterns constructed from Z-055's worst cases (tests/perf/recorded_run_z13_z055.txt, banked): F-3 free-but-unusable 32064 B at R-EXT 0.260937 with class-locked holes; fragmented bearing spans in classes 64/256/1024; the class-1024 span tail of 928 B; large-mapping overheads 20000->24576 and 40000->45056; and the Z-048 size-exact mapping pool those frees feed. Each pattern below asks one question of a freed block's space: can it be SPLIT to serve a smaller request, or COALESCED with its neighbours to serve a larger one? Quiescence per Z-055: mimir_core_trim_retained_some(0) flushes TLS bins before every snapshot; all counters are J-002 stats at those points; large-pool state via the Z-048 query pair.
+
+=== PATTERN-BY-PATTERN BEHAVIOUR TABLE (roadmap gate) ===
+P1 CARVE-SPLIT (fresh page -> class-64 slots): a span page IS split, once, at span birth - carved sequentially into fixed class slots (20 allocs: 1 span, capacity 62, all offsets multiples of 64 from slot 0, patterns intact). This carving is the ONLY split the small path ever performs, and it is irreversible for the span's life: the span serves exactly one class.
+P2 CHECKERBOARD (32 x 64 B, free every other slot): coalescing NO - a class-128 request is served but NOT from any coalesced 64-hole (address outside the freed set); exact-size reuse YES - a class-64 request returns one of the freed holes exactly. Survivor patterns intact.
+P3 CROSS-CLASS SPLIT (free a 1024 slot in a span pinned live by a second 1024 block; request 16 x 16 B): split NO - no 16 B block lands in the freed 1024 slot. Confound found and separated by the pin: unpinned, a 16 B block DID land on the freed address - whole-PAGE reuse after the empty span was released and a class-16 span acquired at the same page, not a slot split. The two mechanisms are now distinguished on record.
+P4 PIN TRAP (124 x 64 B filled, then all but one freed): at full, class-64 spans=3 live=124 mapped(total)=28672; pinned, spans=3 live=1 mapped=28672 retained(total)=24576. The one live block's span cannot be partially released: release granularity is the whole page. See WORST CASE.
+P5 FREE-ORDER REUSE (free A then B, class 64): reuse is exact-slot but NOT strict LIFO and NOT prompt - in the run of record A reappears at batch index 62 and B at 189 of the next 256 class-64 allocations (TLS batching / span distribution order). Both slots are reused whole, never merged, never lost; both further executions reproduced indices 62/189 exactly.
+P6 LARGE SPLIT (pool holds freed 45056 mapping; request 20000 = 24576 mapping): split NO - fresh mapping taken (mapped 45056 -> 69632, delta exactly 24576), pool untouched at 1 entry / 45056 B. A pooled mapping serves only its exact length.
+P7 LARGE COALESCE (pool holds 45056 + 24576; request 70000 = 77824 mapping): coalesce NO - fresh mapping taken, pool untouched at 2 entries. Pooled mappings are never merged.
+P8 LARGE EXACT REUSE (control; request 40000 again): YES - served from the pool at the SAME address as the original block; pool drops by exactly that entry. Exact-length reuse is the pool's only service.
+P9 REALLOC (small grow 32->256: moves, contents preserved. Large shrink 40000->20000): split NO - shrink stays in place at the same address and live_mapping_bytes stays 45056 -> 45056: the 25056 B tail is never split off, released, or pooled while the block lives; it is recovered only at free (into the size-exact pool, P6-P8 rules).
+P10 WHOLE-SPAN RELEASE (free-all + full trim): the only coalescing-like act in the allocator is at page granularity - empty spans past the retention bound (2 per class) are released whole, and after free-all + trim, mapped returns to the baseline 0 exactly, live_small=0, pool=0. Nothing below page granularity is ever reclaimed.
+
+WORST CASE (named, roadmap gate): P4, the pin trap. One live 64 B block pins its whole 4096 B span page: 4032 B of that page (98.44%) is free-but-unusable - it cannot be split for a smaller class, cannot coalesce toward a larger one, and cannot be released until the last block frees. Measured at the pinned point: 28672 B stood mapped behind exactly 1 live class-64 object (64 B), with 24576 B of retained empty spans beside it. This is Z-055's F-3 (32064 B, R-EXT 0.260937) reduced to its atomic cause: in this allocator fragmentation is never healed inside a page, only waited out at page granularity. Runner-up, large path: P9's shrink keeps a 45056 B mapping for a 20000 B request (25056 B, 55.6% of the mapping, dead until free), and P6/P7 show up to the pool's 32 MiB bound of freed mappings can sit equally unusable for any non-exact size.
+
+=== READING ===
+Split: exactly two forms exist - span carving at birth (P1, fixed class slots, one-way) and nothing else. No free block, span slot, pooled mapping, or realloc tail is ever split (P3, P6, P9).
+Coalesce: none, at any granularity below the page. Adjacent free slots never merge (P2), freed slots of one class never serve another (P3), pooled mappings never merge (P7). Reclamation is whole-page only (P10), retention-bounded at 2 empty spans per class.
+Reuse: exact-size only everywhere - a freed class slot serves only its class (P2, P5, on TLS-batch timing, not LIFO), a pooled mapping only its exact length (P8).
+Defects: none in repo / allocator code - every behaviour above is the allocator's documented design (fixed size classes, one class per span, size-exact pool) measured adversarially, not a malfunction. The one probe-side defect found and fixed during the build was P3's unpinned first form, which conflated page reuse with slot splitting; the pinned form is the run of record. No bug is left unfixed; no follow-up is owed by this slice - Z-059 (placement policy trial) inherits P2/P4/P5 as its fragmentation-oracle inputs.
+Team structure: lead + 6 Mythic Engineering sub-agents spawned in parallel (design, implementation, gate verification, battery reconciliation, measurement, risk/commit-scope review) - no 429. Reports advisory; every gate fact verified on-device by the lead.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T14:11:23Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5085466
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 74%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 2.54 1.27 0.88
+
+=== RAW RUN OF RECORD (run_z058.sh output, verbatim) ===
+Z-058 split and coalesce audit (this host)
+page=4096 baseline mapped=0 live_small=0 pool=0/0
+  [ok] host page 4096 (got 4096, want 4096)
+== P1 carve-split: page -> class-64 slots ==
+  [ok] P1 20 distinct slots carved (got 20, want 20)
+  [ok] P1 every slot offset is a multiple of class size 64 from slot 0 (carve stride)
+  P1 measured: spans class64=1 capacity=62 live=20
+  [ok] P1 live class-64 objects (got 20, want 20)
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+  [ok] P1 pattern
+== P2 checkerboard holes: coalesce to 128? ==
+  [ok] P2 class-128 request served
+  [ok] P2 class-128 NOT served from coalesced 64-holes (no coalescing)
+  [ok] P2 class-64 request reuses an exact freed hole
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+  [ok] P2 survivor pattern
+== P3 cross-class split: freed 1024 -> 16s? ==
+  [ok] P3 class-1024 allocs (slot + pin)
+  [ok] P3 no 16-byte block is carved out of the live pinned span's freed 1024 slot (no cross-class split)
+  [ok] P3 pin pattern intact
+== P4 pin trap: one live block pins a span ==
+  P4 measured: full spans=3 live=124 mapped=28672 ; pinned spans=3 live=1 mapped=28672 retained=24576
+  [ok] P4 exactly one live class-64 block remains (got 1, want 1)
+  [ok] P4 at least one whole span stays mapped for the pin
+  [ok] P4 pinned block pattern intact
+  P4 WASTE: pinned span bytes=12288 for 64 live bytes (span granularity is the only release unit)
+== P5 free-order reuse over a batch ==
+  P5 measured: freed A reappears at batch index 62, B at 189 (TLS batch order, not strict LIFO)
+  [ok] P5 both freed slots are reused exactly within the next batch (no merging, no loss)
+== P6 large split: pooled 45056 vs request 24576 ==
+  [ok] P6 pool empty at start (trim drained it) (got 0, want 0)
+  [ok] P6 large 40000 alloc + pattern
+  [ok] P6 freed large mapping pooled (got 1, want 1)
+  [ok] P6 pooled bytes = 45056 (Z-055 F-2 arithmetic) (got 45056, want 45056)
+  [ok] P6 smaller large request gets a FRESH mapping, not a split of the pooled one
+  [ok] P6 pool untouched by the smaller request (no split) (got 1, want 1)
+  P6 measured: mapped 45056 -> 69632 (delta 24576 = fresh 24576 mapping)
+  [ok] P6 mapped delta is the full new mapping (got 24576, want 24576)
+== P7 large coalesce: pooled 45056+24576 vs request 77824 ==
+  [ok] P7 pool holds both freed mappings (got 2, want 2)
+  [ok] P7 larger request gets a fresh mapping (no coalescing of pooled mappings)
+  [ok] P7 pool untouched by the larger request (no coalesce) (got 2, want 2)
+== P8 large exact reuse (control) ==
+  [ok] P8 exact-length request IS served from the pool (same address)
+  [ok] P8 pool drops by the reused entry (3 pooled incl. 77824, minus 1 reused) (got 2, want 2)
+  [ok] P6-P8 cleanup: trim releases the whole pool (got 0, want 0)
+== P9 realloc split behaviour ==
+  [ok] P9 small grow 32->256 preserves contents (move)
+  [ok] P9 large shrink 40000->20000 stays in place (no split)
+  [ok] P9 shrink preserves contents
+  P9 measured: live_mapping_bytes 45056 -> 45056 (whole 45056 mapping retained for a 20000 request)
+  [ok] P9 shrink releases NO mapping bytes (tail never split off) (got 45056, want 45056)
+== P10 whole-span release on empty ==
+  P10 measured: mapped=0 (baseline 0) live_small=0 retained=0 pool=0
+  [ok] P10 no live small objects at end (got 0, want 0)
+  [ok] P10 mapped returns to baseline after free-all + trim (got 0, want 0)
+checks=69 failures=0
+RESULT: PASS
