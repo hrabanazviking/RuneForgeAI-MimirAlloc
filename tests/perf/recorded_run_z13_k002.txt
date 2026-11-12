@@ -1,0 +1,93 @@
+MimirAlloc Z13 recorded run - K-002 oracle, first on-machine loss table
+slice: Z-003 - The K-002 oracle, first on-machine loss table
+date: 2026-11-12T01:57-05:00 (bench run window, America/New_York)
+base: 5ad882b (branch yrsa/mimiralloc-team-03, seat founding commit; tree unmodified)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+arch: x86_64 (uname -m)
+pagesize: 4096 (getconf PAGESIZE)
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, nproc 32
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+compiler: gcc (Ubuntu 15.3.0-4ubuntu1) 15.3.0, repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2
+scaling_governor: performance (cpu0)
+harness: tests/perf/bench_k002.c UNMODIFIED (sha256 30dd0d9a8da12b03aa511fd35a4a098cf593b79c0e9ad352026ecb11eacc7d37), built via make bench-k002; runner tests/perf/run_bench_k002.sh, 7 alternating processes per leg (glibc, mimiralloc, ...), 56 raw lines as expected
+load state: load average 5.82 / 4.42 / 2.28 at bench build, 5.29 (1-min) at run end, 6.14 just after - the Tensile lab bench (bench_sizes.py) shared the host on this 32-thread machine; legs alternate process-by-process and medians are the headline, so drift lands on both legs; these are the campaign's first on-machine numbers, recorded with their contention, not a quiet-machine baseline (Z-004 pins the methodology next)
+correctness gate: full make test in this worktree, log hidden_files/z003_make_test.log (team-local, not banked): 4988 checks / 0 failed, 77 by-design skips - identical counts to the Z-001 baseline
+checksum proof: exactly ONE distinct checksum per workload across both legs and all 7 repetitions each - workloads proven equivalent across legs:
+  small_churn 12756656 | mixed_batch 34727552 | large_batch 1106008 | mixed_lifecycle 40359936
+  (these also match the first campaign's K-002 checksums - same workloads, new machine)
+
+=== RAW TABLE (leg,workload,ops,elapsed_ns,ops_per_sec,ns_per_op,checksum) ===
+glibc,small_churn,100000,903728,110652762.8,9.04,12756656
+glibc,mixed_batch,256000,2534132,101020783.4,9.90,34727552
+glibc,large_batch,9600,12438502,771797.1,1295.68,1106008
+glibc,mixed_lifecycle,307200,4281845,71744773.6,13.94,40359936
+mimiralloc,small_churn,100000,9342584,10703676.8,93.43,12756656
+mimiralloc,mixed_batch,256000,136987559,1868782.8,535.11,34727552
+mimiralloc,large_batch,9600,46573462,206126.0,4851.40,1106008
+mimiralloc,mixed_lifecycle,307200,442899447,693611.2,1441.73,40359936
+glibc,small_churn,100000,901624,110910978.4,9.02,12756656
+glibc,mixed_batch,256000,2572674,99507360.8,10.05,34727552
+glibc,large_batch,9600,18611421,515812.3,1938.69,1106008
+glibc,mixed_lifecycle,307200,5775102,53193865.7,18.80,40359936
+mimiralloc,small_churn,100000,9381608,10659153.5,93.82,12756656
+mimiralloc,mixed_batch,256000,106003470,2415015.3,414.08,34727552
+mimiralloc,large_batch,9600,46833220,204982.7,4878.46,1106008
+mimiralloc,mixed_lifecycle,307200,442823966,693729.4,1441.48,40359936
+glibc,small_churn,100000,970022,103090445.4,9.70,12756656
+glibc,mixed_batch,256000,2557195,100109690.5,9.99,34727552
+glibc,large_batch,9600,16772936,572350.6,1747.18,1106008
+glibc,mixed_lifecycle,307200,4111786,74712059.4,13.38,40359936
+mimiralloc,small_churn,100000,9344438,10701553.2,93.44,12756656
+mimiralloc,mixed_batch,256000,101996552,2509888.8,398.42,34727552
+mimiralloc,large_batch,9600,44489195,215782.7,4634.29,1106008
+mimiralloc,mixed_lifecycle,307200,598113625,513614.8,1946.98,40359936
+glibc,small_churn,100000,1045775,95622863.4,10.46,12756656
+glibc,mixed_batch,256000,3002992,85248312.3,11.73,34727552
+glibc,large_batch,9600,20706047,463632.7,2156.88,1106008
+glibc,mixed_lifecycle,307200,7005483,43851366.1,22.80,40359936
+mimiralloc,small_churn,100000,9518726,10505607.6,95.19,12756656
+mimiralloc,mixed_batch,256000,135313754,1891899.3,528.57,34727552
+mimiralloc,large_batch,9600,29063290,330313.6,3027.43,1106008
+mimiralloc,mixed_lifecycle,307200,269524676,1139784.3,877.36,40359936
+glibc,small_churn,100000,493448,202655599.0,4.93,12756656
+glibc,mixed_batch,256000,1604324,159568765.4,6.27,34727552
+glibc,large_batch,9600,7582738,1266033.5,789.87,1106008
+glibc,mixed_lifecycle,307200,3711674,82765889.5,12.08,40359936
+mimiralloc,small_churn,100000,5268249,18981638.9,52.68,12756656
+mimiralloc,mixed_batch,256000,66053765,3875630.7,258.02,34727552
+mimiralloc,large_batch,9600,29421032,326297.2,3064.69,1106008
+mimiralloc,mixed_lifecycle,307200,276097767,1112649.3,898.76,40359936
+glibc,small_churn,100000,392217,254960901.7,3.92,12756656
+glibc,mixed_batch,256000,1063919,240619821.6,4.16,34727552
+glibc,large_batch,9600,6465148,1484884.8,673.45,1106008
+glibc,mixed_lifecycle,307200,2370444,129595974.4,7.72,40359936
+mimiralloc,small_churn,100000,3824376,26148056.6,38.24,12756656
+mimiralloc,mixed_batch,256000,60854505,4206755.1,237.71,34727552
+mimiralloc,large_batch,9600,28913769,332021.7,3011.85,1106008
+mimiralloc,mixed_lifecycle,307200,264049830,1163416.8,859.54,40359936
+glibc,small_churn,100000,398148,251162884.2,3.98,12756656
+glibc,mixed_batch,256000,1085409,235855792.6,4.24,34727552
+glibc,large_batch,9600,6492500,1478629.2,676.30,1106008
+glibc,mixed_lifecycle,307200,2139020,143617170.5,6.96,40359936
+mimiralloc,small_churn,100000,4180405,23921127.3,41.80,12756656
+mimiralloc,mixed_batch,256000,66285862,3862060.4,258.93,34727552
+mimiralloc,large_batch,9600,28510191,336721.7,2969.81,1106008
+mimiralloc,mixed_lifecycle,307200,263922901,1163976.3,859.12,40359936
+
+=== SUMMARY TABLE (tests/perf/summarize_k002.py on the raw table above) ===
+leg         workload         reps      med_ops_s      min_ops_s      max_ops_s  med_ns_op  min_ns_op  max_ns_op
+glibc       large_batch         7       771797.1       463632.7      1484884.8    1295.68     673.45    2156.88
+glibc       mixed_batch         7    101020783.4     85248312.3    240619821.6       9.90       4.16      11.73
+glibc       mixed_lifecycle     7     74712059.4     43851366.1    143617170.5      13.38       6.96      22.80
+glibc       small_churn         7    110910978.4     95622863.4    254960901.7       9.02       3.92      10.46
+mimiralloc  large_batch         7       326297.2       204982.7       336721.7    3064.69    2969.81    4878.46
+mimiralloc  mixed_batch         7      2509888.8      1868782.8      4206755.1     398.42     237.71     535.11
+mimiralloc  mixed_lifecycle     7      1112649.3       513614.8      1163976.3     898.76     859.12    1946.98
+mimiralloc  small_churn         7     10703676.8     10505607.6     26148056.6      93.43      38.24      95.19
+
+=== VERDICTS (median ns_per_op, mimiralloc vs glibc) ===
+small_churn      glibc median       9.02 ns/op | mimiralloc median      93.43 ns/op | factor  10.4x | LOSS
+mixed_batch      glibc median       9.90 ns/op | mimiralloc median     398.42 ns/op | factor  40.2x | LOSS
+large_batch      glibc median    1295.68 ns/op | mimiralloc median    3064.69 ns/op | factor   2.4x | LOSS
+mixed_lifecycle  glibc median      13.38 ns/op | mimiralloc median     898.76 ns/op | factor  67.2x | LOSS
+Overall: LOSS on all 4 workloads on this machine - the first on-machine loss table. MimirAlloc's closest leg is large_batch (~2.4x); the wounds match the known-loss classes (KL-A small path ~10.4x, KL-E/KL-B mixed_batch ~40.2x, KL-D mixed_lifecycle ~67.2x). A proven loss is a bankable result (roadmap Law 2).
