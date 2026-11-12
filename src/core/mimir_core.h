@@ -367,6 +367,32 @@ void mimir_core_lock_hist_reset(void);
  * both) is a compile error, never a silent miss. */
 struct mimir_tls_cache_snapshot;
 int mimir_tls_cache_snapshot(struct mimir_tls_cache_snapshot *out);
+#ifdef MIMIR_ARENA_CCD
+/* Z-037 arena surface (roadmap Wave 5, slice Z-037): exists
+ * ONLY in a MIMIR_ARENA_CCD build. Internal only, INC-E001-07
+ * shape (b) exactly like the surfaces above: declared here
+ * and re-declared for tests only in
+ * tests/core/mimir_arena_z037.h; bound local in the shared
+ * library (nm -D stays exactly 4). The snapshot is taken
+ * under the one global lock, so every field describes the
+ * same instant; selections counts arena selections made by
+ * the small path (one per small_alloc / TLS refill take
+ * transaction); spans and live_objects are per-arena
+ * registry counts at the snapshot instant. Returns 0 on
+ * success, -1 on NULL out or lock failure. */
+#define MIMIR_ARENA_COUNT 2
+struct mimir_arena_snapshot {
+    uint64_t spans[MIMIR_ARENA_COUNT];
+    uint64_t live_objects[MIMIR_ARENA_COUNT];
+    uint64_t selections[MIMIR_ARENA_COUNT];
+};
+int mimir_arena_snapshot(struct mimir_arena_snapshot *out);
+/* The calling thread's arena under the Z-012 CCD map
+ * (CCD0: logical 0-7 + SMT 16-23; CCD1: 8-15 + 24-31).
+ * Lock-free; falls back to arena 0 when the CPU query
+ * fails. */
+size_t mimir_arena_current(void);
+#endif /* MIMIR_ARENA_CCD */
 size_t mimir_tls_cache_bin_capacity(size_t class_index);
 size_t mimir_tls_cache_batch(size_t class_index);
 void mimir_tls_cache_drain_thread(void);

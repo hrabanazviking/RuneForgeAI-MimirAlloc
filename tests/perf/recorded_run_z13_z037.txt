@@ -1,0 +1,226 @@
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T10:23:08Z (host_truth.sh at assembly time)
+kernel: Linux 7.3.0-10-generic x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32 (16 cores / 32 threads, 2 CCDs)
+cache_topology: L1d 768 KiB (16); L2 16 MiB (16); L3 64 MiB (2 instances)
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+
+=== Z-037 Arena prototype behind a flag - recorded run ===
+slice: Z-037 (roadmap: Per-CCD arena variant (2 arenas,
+  Z-012 constants) selectable at build time, sharing the
+  Wave-4 cache machinery. Gate: prototype builds; standing
+  gate green with the flag on.)
+branch: yrsa/mimiralloc-team-07 (seat main 35f7f55, banked
+  Z-001..Z-035, merged clean - merge commit aad5ec5, no
+  conflicts, no manual resolutions)
+load_state: probe + flag-on suite windows QUIET -
+  loadavg 0.49/0.74/0.55 at runner start (1/5/15 min).
+  The final flag-off gate ran as a later window's load
+  spiked (17.02 1-min at its start, another campaign's
+  burst): the gate is a correctness gate and its counts
+  are load-independent; its own log header records the
+  load. No timing number is claimed anywhere in this
+  slice, so no number here is a baseline of any kind.
+method: tests/perf/run_z037.sh (Z-019/Z-034 pattern) builds
+  production and arena (-DMIMIR_ARENA_CCD=1) objects into
+  build/z37/ (production build/ untouched), then:
+  (1) zero-cost proof vs the pristine seat tree;
+  (2) tests/perf/probe_z037.c functional proof in the
+  arena leg (placement x4 CPUs, cross-CCD free, 16-thread
+  storm); (3) flag-on suite: all eight make-test binaries
+  rebuilt against the arena core, run individually, counts
+  summed from the raw (hidden_files/z037_run.raw.suite).
+  Raw: hidden_files/z037_run.raw (+ .proof / .suite).
+
+=== DESIGN (what the flag buys) ===
+Build-time flag MIMIR_ARENA_CCD (the Makefile never defines
+it; the prototype is exercised via the runner's dedicated
+objects, Z-034 precedent). TWO arenas, one per CCD, under
+the Z-012 constants of record (recorded_run_z012.txt;
+Z13_DESIGN_CONSTANTS.md S4): CCD0 = logical CPUs 0-7 +
+SMT siblings 16-23; CCD1 = logical 8-15 + siblings 24-31;
+cross-CCD shared-line transfer 103 ns vs 32.5 ns intra-CCD
+(penalty 3.2x, ARENA_PER_CCD = YES).
+- A span's owner arena is fixed at span creation (the
+  acquiring thread's arena) and recorded in a side table
+  (65536 slots x 16 B = 1 MiB BSS, flag-on builds only;
+  at table-full registration fails and span creation
+  fails the allocation cleanly, publishing nothing - a
+  defined ceiling at 65536 live spans, never a silent
+  misroute; Z-034 side-table pattern): the span header
+  stays exactly 96 bytes; offsets/capacities unchanged.
+- Serving is arena-restricted at BOTH central roads:
+  small_alloc_locked and the Z-029 TLS refill road
+  (tls_take_one_locked) - i.e. the Wave-4 TLS cache
+  machinery shares the partition by construction. The
+  caller's arena is read from its CURRENT cpu at each
+  central transaction through a flag-guarded L6 query
+  (mimir_platform_current_cpu, sched_getcpu; failure
+  falls back to arena 0). Blocks already in a thread's
+  TLS bins stay valid across a CCD migration.
+- The active-span hint is per arena (mimir_arena_active
+  [2][20]); span_release_locked performs its active-slot
+  writes under the span's OWNER arena (hint saved and
+  restored on both exit paths - verified at source).
+- Retention (G-007 bound) is counted per arena against
+  the bound SPLIT across the arenas (per-arena bound =
+  bound / 2, floor; Dossier S4.2 C5: split, not
+  duplicated). At the default bound 2: at most 1 empty
+  span retained per arena per class, 2 spans = 8192 B
+  per class in total - exactly the banked global figure.
+  At bound 16: 8 per arena, 64 KiB per class in total.
+  An odd bound rounds down (bound 1 -> 0 per arena), so
+  the split never exceeds the operator's global bound.
+- Every free routes by the block's span, never by the
+  freeing thread's arena: cross-CCD and cross-thread
+  frees are exactly as correct as on the banked core.
+- The one global lock is UNCHANGED. This prototype
+  partitions span ownership and selection, not locking:
+  the lock road is Z-039's, and Z-038's ladder owns the
+  verdict on whether the partition pays. No performance
+  claim is made or implied by this slice.
+- Refused combinations (compile-time #error, recorded
+  scope): MIMIR_DEBUG (debug layout owns its serving
+  paths) and MIMIR_OOL_META (the Z-034 trial's serving
+  partition is not composed with this one). Composing
+  either is future work, not silently untested surface.
+- Test surface (INC-E001-07 shape (b), tests/core/
+  mimir_arena_z037.h): mimir_arena_snapshot (per-arena
+  spans / live objects / selections under the one lock)
+  and mimir_arena_current. Internal only; nm -D on the
+  shared library stays exactly 4 (no public symbol added;
+  the arena objects are never linked into the .so by the
+  Makefile).
+
+=== ZERO-COST PROOF (flag off = the banked allocator) ===
+CORE IDENTICAL dd291d0358f1d824e88702c32e5a0b3f5811ee9c8df4a946a9c24eaf4cab9cfc
+PLATFORM IDENTICAL 85eb0588c68e1f01dd1683f5d24ffbc1ebe18e042c49f5639c896cf7862482eb
+API IDENTICAL 1ae7a6ecc4f2006ae015006e06e07f01a2e1b38c8c334c1a2a19c79b5bced5e4
+(objects built flag-off from this tree vs from the
+pristine seat tree at 35f7f55, same flags -std=c11 -O2:
+BYTE-IDENTICAL, all three. The flag-off production object
+is the banked allocator, bit for bit.)
+prod arena symbols (expect 0): 0
+arena arena symbols (expect >0): 7
+prod core bytes: 35320  arena core bytes: 38040
+compiler: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0; runner
+  flags -std=c11 -Wall -Wextra -Werror -pthread -O2 for
+  both trees (production-flag leg in the addenda)
+
+=== FUNCTIONAL PROOF (arena leg, probe_z037) ===
+place cpu=2 size=64 count=200 expect_arena=0 spans=4/0 live=200/0 sel=200/0 -> OK
+place cpu=10 size=64 count=200 expect_arena=1 spans=0/4 live=0/200 sel=0/200 -> OK
+place cpu=18 size=128 count=120 expect_arena=0 spans=4/0 live=120/0 sel=120/0 -> OK
+place cpu=26 size=128 count=120 expect_arena=1 spans=0/4 live=0/120 sel=0/120 -> OK
+crossfree live_small=0 metadata=0 -> OK
+crossfree-rev (alloc CCD1 cpu 10, free CCD0 cpu 2,
+  512 blocks) live_small=0 metadata=0 -> OK
+storm threads=16 iters=4000 checksum=1376772032 metadata=0 -> OK
+Reading: placement is EXACT - in each fresh process every
+span, every live object and every arena selection sits in
+the pinned CPU's arena and the other arena is empty,
+including both SMT-sibling CPUs (18 -> CCD0, 26 -> CCD1),
+which proves the sibling arm of the Z-012 map. Cross-CCD
+free (alloc CCD0 cpu 2, free CCD1 cpu 10, 512 blocks)
+returns the quiescent live count to exactly 0 with the
+J-006 metadata check clean. The storm runs 16 threads
+pinned across both CCDs (64,000 verified fill/check/free
+cycles) with metadata clean.
+Accounting note (named, not hidden): span/core live
+counts were read at quiescent points - after draining the
+calling thread's TLS cache / a central transaction -
+because Z-029 tallies bin publications per thread and
+flushes them at the owner's next central transaction.
+On the UN-quiesced sequence (remote free while the
+owner's tallies are pending) live_small_objects retains
+a residual of 6 after 512 cross-frees - IDENTICALLY on
+the banked production core and on the arena build
+(measured both ways this run). That tally behaviour is
+banked Z-029 semantics, unchanged by this slice, and is
+recorded in CAMPAIGN_STATE.md as follow-up work; this
+prototype neither fixes nor worsens it.
+
+=== FLAG-ON CORRECTNESS (full standing suite, arena build) ===
+All eight make-test binaries rebuilt against the arena
+core and run individually: smoke 18/18; test_core 29/0;
+test_b007 69/0; test_c005 95/0; test_c006 23/0;
+test_c007 122 run / 0 failed / 70 by-design skips;
+test_c008 42 run / 0 failed / 7 skipped-not-yet;
+test_d004 4590/0. Summed: 4988 checks / 0 failed / 77
+skips - IDENTICAL to the production baseline. The flag-on
+suite therefore runs the full concurrency battery
+(test_d004) and the full contract battery against the
+partitioned serving path, not a reduced subset.
+J-006 under the flag is STRENGTHENED, not weakened: its
+active-hint walk now validates BOTH arenas' hints and
+additionally requires each hinted span to be OWNED by
+the arena whose hint names it, and (post-review fix)
+requires every live span to carry an owner-table entry.
+
+=== GATE ===
+Standing gate (flag off, final tree): GREEN
+  checks=4988 failed=0 skips=77
+  (scripts/z13/run_gate.sh, log
+  hidden_files/z037_gate_final.log; baseline pre-change
+  gate also GREEN 4988/0/77,
+  hidden_files/z037_baseline_gate.log)
+Roadmap gate: prototype builds (production + arena legs,
+  -Wall -Wextra -Werror clean) + standing gate green
+  with the flag on (4988/0/77, above). GATE MET.
+sha256 of slice sources:
+  src/core/mimir_core.c        49245c146e38f6c9f1e1ec08d82921bb35213a640fc4e1adf5f11261301846e9
+  src/core/mimir_core.h        99200df6e3b861826f7e3aec8a0f4a5fc757605bc741ce2fafbf9afcd65c2d63
+  src/platform/mimir_platform.c 57f3197664a77cb528dbac96d62ae182fca635d67f0d4c1156f46f42da1f59a1
+  src/platform/mimir_platform.h 557e023ca4c0a0efa375beb104a71cece4365e7612e7ec70631a5fc11e1a2346
+  tests/perf/probe_z037.c      dadedfa71f306fa226d519ff0a8d4add54e66f6a653adb49452293cfe726cdda
+  tests/perf/run_z037.sh       da6e0fee3c6f5ae92fdfd5b5a74aaa9c6c9813bd70a85337f864b40003f44ae3
+  tests/core/mimir_arena_z037.h 15eceb69f3ebcd9d3d387947039c05b4196d2d7167da76ffdfb5f5222b1b71b5
+
+=== ADDENDUM (measurement-audit closure, same run) ===
+The measurement review asked for the production flag set
+to be trialled as well. The seat Makefile's production
+CFLAGS are -O2 -flto (Z-035 adopted -flto; -march=native
+was measured TIE in Z-035 and is NOT a production flag).
+Under -O2 -flto: unlinked LTO objects embed the
+compilation directory, so cross-tree object identity is
+unattainable in principle; at the LINKED level the proof
+closes - a test_core binary linked with the full
+production flags from this tree's flag-off sources is
+BYTE-IDENTICAL to the same binary linked from the
+pristine seat tree (sha256 5aba48ba7fdd1324923eac09fed6
+e05c005bc74c166ed0de3e1c0453cacb4e73, both). The flag-on
+suite under -O2 -flto: 4988 checks / 0 failed / 77 skips
+(raw hidden_files/z037_lto_suite.raw), and the probe's
+CCD1 place leg under -flto reproduces exactly
+(spans=0/4 live=0/200 sel=0/200, OK). Flag engagement in
+the arena leg is evidenced in the run of record by the
+per-leg selection counters, the partitioned span counts,
+7 arena symbols (0 in production) and +2616 B of core
+object code (37936 vs 35320 at -O2).
+
+=== ADDENDUM 2 (review-fix round, same run) ===
+Three review findings were fixed in the committed tree
+before banking, and the affected legs re-run:
+(1) Retention bound is now SPLIT across arenas (above),
+    per Dossier S4.2 C5 - the first build counted each
+    arena against the full bound (a duplication).
+(2) The owner table grew 4096 -> 65536 slots with the
+    fail-clean ceiling stated above (risk review: the
+    Z-034 512-slot scale is far too small for spans).
+(3) J-006 now also requires every live span to carry an
+    owner-table entry (implementation-review blind spot).
+Plus the measurement review's reverse-direction leg:
+crossfree-rev is in the probe output above. Migration
+rate and remote-free ratio are NOT measured by this
+slice (Dossier S4.2 C6 names them for the prototype's
+evidence): they are deferred explicitly to Z-038, whose
+ladder is the measurement vehicle, and no contention
+win is claimed for Z-037 - the single global lock is
+unchanged. Fork posture is likewise unchanged and
+unclaimed (Z-044 owns it). After the fixes: probe all
+legs OK, flag-on suite 4988/0/77, flag-off standing
+gate GREEN 4988/0/77 on the final tree, zero-cost proof
+unchanged (all fixes are inside the flag).

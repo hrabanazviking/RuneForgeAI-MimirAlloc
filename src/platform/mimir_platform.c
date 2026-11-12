@@ -13,6 +13,10 @@
 /* MAP_ANONYMOUS is POSIX.1-2024; glibc exposes it under the
  * default feature set, so request that alongside POSIX 200809. */
 #define _DEFAULT_SOURCE 1
+#ifdef MIMIR_ARENA_CCD
+/* Z-037: sched_getcpu is a GNU extension on this libc. */
+#define _GNU_SOURCE 1
+#endif
 
 #include "mimir_platform.h"
 
@@ -20,6 +24,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <pthread.h>
+#ifdef MIMIR_ARENA_CCD
+#include <sched.h>
+#endif
 
 int mimir_platform_page_size(size_t *out_page_size)
 {
@@ -154,3 +161,22 @@ int mimir_platform_global_unlock(void)
     }
     return MIMIR_PLATFORM_OK;
 }
+
+#ifdef MIMIR_ARENA_CCD
+/* Z-037: current logical CPU of the calling thread. */
+int mimir_platform_current_cpu(size_t *out_cpu)
+{
+    int cpu;
+
+    if (out_cpu == NULL) {
+        return MIMIR_PLATFORM_ERR_INVALID;
+    }
+    *out_cpu = 0;
+    cpu = sched_getcpu();
+    if (cpu < 0) {
+        return -7; /* prototype-local failure status */
+    }
+    *out_cpu = (size_t)cpu;
+    return MIMIR_PLATFORM_OK;
+}
+#endif /* MIMIR_ARENA_CCD */

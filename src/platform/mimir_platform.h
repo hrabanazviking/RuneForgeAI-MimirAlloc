@@ -101,4 +101,21 @@ int mimir_platform_map_release(void *base, size_t length);
 int mimir_platform_global_lock(void);
 int mimir_platform_global_unlock(void);
 
+#ifdef MIMIR_ARENA_CCD
+/*
+ * Z-037 per-CCD arena prototype (MIMIRALLOC_Z13_ROADMAP.md
+ * Wave 5): the calling thread's current logical CPU index,
+ * discovered from the OS on every call (sched_getcpu on the
+ * Linux/POSIX form). This declaration exists ONLY in a
+ * MIMIR_ARENA_CCD build; a production build of this header
+ * is unchanged. Returns MIMIR_PLATFORM_OK and stores the
+ * index; MIMIR_PLATFORM_ERR_INVALID for a NULL out-param;
+ * a failed OS query returns -7, a prototype-local status
+ * outside the banked enum (the arena caller treats every
+ * non-OK status as CPU-unknown and falls back to arena 0,
+ * so no banked status needed a second meaning).
+ */
+int mimir_platform_current_cpu(size_t *out_cpu);
+#endif /* MIMIR_ARENA_CCD */
+
 #endif /* MIMIR_PLATFORM_H */

@@ -1210,7 +1210,22 @@ static void mimir_dbg_check_or_abort(const void *obj,
  * hint for the span to try first; correctness never rests
  * on it -- the registry walk is authoritative. */
 static struct mimir_span_header *mimir_span_head; /* NULL: empty */
+#ifndef MIMIR_ARENA_CCD
 static struct mimir_span_header *mimir_class_active[MIMIR_SMALL_CLASS_COUNT];
+#else
+/* Z-037: the active-span hint is per arena (see the arena
+ * section below, beside span_release_locked). Every
+ * pre-Z-037 use of mimir_class_active[class] resolves
+ * through this macro to the slot of the arena named by
+ * the lock-held scratch mimir_arena_hint, which the
+ * serving entry points set before touching the hint.
+ * span_release_locked overrides the hint with the span's
+ * owner arena around its own active-slot writes. */
+static struct mimir_span_header
+    *mimir_arena_active[MIMIR_ARENA_COUNT][MIMIR_SMALL_CLASS_COUNT];
+static size_t mimir_arena_hint;
+#define mimir_class_active (mimir_arena_active[mimir_arena_hint])
+#endif
 static size_t mimir_live_spans;
 static size_t mimir_live_span_bytes;
 static size_t mimir_live_small_objects;
@@ -1586,6 +1601,13 @@ static void mimir_stats_peak_update_locked(void)
  * locked section. On any failure nothing is published and
  * the registry and counters are unchanged (G-002 C-7).
  */
+#ifdef MIMIR_ARENA_CCD
+/* Z-037 forward declaration: the arena section proper
+ * sits below, beside span_release_locked; span creation
+ * registers ownership from here. */
+static int arena_register(struct mimir_span_header *span,
+                          size_t arena);
+#endif
 static struct mimir_span_header *span_acquire_locked(size_t class_index)
 {
     size_t page_size;
@@ -1657,6 +1679,16 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
     }
 #endif
 
+#ifdef MIMIR_ARENA_CCD
+    /* Z-037: the new span is owned by the acquiring
+     * thread's arena (the hint the serving entry point
+     * set). Registration failure publishes nothing,
+     * exactly like a backing failure above. */
+    if (!arena_register(span, mimir_arena_hint)) {
+        (void)mimir_platform_map_release(base, mapping_length);
+        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_BACKING);
+    }
+#endif
     span_registry_insert(span);
     mimir_live_spans += 1;
     mimir_live_span_bytes += mapping_length;
@@ -1666,6 +1698,242 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
     mimir_class_active[class_index] = span;
     return span;
 }
+
+/*
+ * Z-037 per-CCD arena prototype (MIMIRALLOC_Z13_ROADMAP.md
+ * Wave 5, slice Z-037 "Arena prototype behind a flag").
+ * Everything in this section exists ONLY under
+ * MIMIR_ARENA_CCD. A production build never defines it: no
+ * code, no data, no symbol, no cost (proof in
+ * tests/perf/recorded_run_z13_z037.txt, the Z-019/Z-034
+ * zero-cost pattern). MIMIR_DEBUG and MIMIR_OOL_META builds
+ * are refused: the debug layout and the OOL trial own their
+ * own serving paths and the prototype does not re-derive
+ * them (combinations are future work, recorded in the
+ * slice's CAMPAIGN_STATE entry).
+ *
+ * Design: TWO arenas, one per CCD, per the Z-012 constants
+ * of record (tests/perf/recorded_run_z012.txt;
+ * docs/Z13_DESIGN_CONSTANTS.md S4): CCD0 = logical CPUs
+ * 0-7 and their SMT siblings 16-23; CCD1 = logical 8-15
+ * and siblings 24-31; cross-CCD shared-line transfer
+ * 103 ns vs 32.5 ns intra-CCD (penalty 3.2x), so a span is
+ * served ONLY to threads running on its owner CCD. A
+ * span's owner arena is fixed at span creation (the
+ * acquiring thread's arena) and recorded in the side table
+ * below -- the span header stays exactly 96 bytes, object
+ * offsets and capacities are unchanged. Serving (the
+ * small_alloc_locked road and the Z-029 TLS refill road
+ * through tls_take_one_locked, i.e. the Wave-4 cache
+ * machinery shares this partition unchanged) selects the
+ * caller's arena from its CURRENT cpu at each central
+ * transaction; blocks already in a thread's TLS bins stay
+ * valid across a migration, and every free routes by the
+ * block's span (never by the freeing thread's arena), so
+ * cross-CCD and cross-thread frees are exactly as correct
+ * as on the banked core. The one global lock is unchanged:
+ * this prototype partitions span OWNERSHIP and SELECTION,
+ * not locking -- the lock question is Z-039's road, and
+ * Z-038 owns the ladder that judges whether the partition
+ * pays. Retention is per arena: an arena's empty spans of
+ * a class are bounded by the G-007 bound SPLIT across
+ * the arenas (per-arena bound = bound / 2, Dossier S4.2
+ * C5: split, not duplicated), so the retained-bytes
+ * total never exceeds the banked global bound.
+ */
+#ifdef MIMIR_ARENA_CCD
+#ifdef MIMIR_DEBUG
+#error "MIMIR_ARENA_CCD prototype is not defined for MIMIR_DEBUG builds (Z-037)"
+#endif
+#ifdef MIMIR_OOL_META
+#error "MIMIR_ARENA_CCD prototype is not defined with MIMIR_OOL_META (Z-037)"
+#endif
+
+/* Owner-table slots: 65536 x 16 B = 1 MiB of BSS in
+ * flag-on builds only. Live spans are demand-unbounded
+ * in principle; at table-full arena_register fails and
+ * span_acquire fails the allocation cleanly (publishes
+ * nothing, the OOL precedent) - a defined ceiling at
+ * 65536 live spans (which needs at least ~196k live
+ * objects of the largest class), never a silent
+ * misroute. */
+#define MIMIR_ARENA_SLOTS ((size_t)65536)
+
+struct mimir_arena_slot {
+    struct mimir_span_header *span; /* NULL empty, (void*)-1 tombstone */
+    uint32_t arena;
+    uint32_t reserved;
+};
+
+static struct mimir_arena_slot mimir_arena_table[MIMIR_ARENA_SLOTS];
+static uint64_t mimir_arena_selections[MIMIR_ARENA_COUNT];
+
+static size_t arena_hash(const struct mimir_span_header *span)
+{
+    return ((uintptr_t)span >> 12) & (MIMIR_ARENA_SLOTS - 1);
+}
+
+static int arena_register(struct mimir_span_header *span,
+                          size_t arena)
+{
+    size_t i;
+    size_t h = arena_hash(span);
+
+    for (i = 0; i < MIMIR_ARENA_SLOTS; i++) {
+        struct mimir_arena_slot *s =
+            &mimir_arena_table[(h + i) & (MIMIR_ARENA_SLOTS - 1)];
+        if (s->span == NULL || s->span == (void *)(uintptr_t)-1) {
+            s->span = span;
+            s->arena = (uint32_t)arena;
+            s->reserved = 0;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Owner arena of a registered span; arena 0 when
+ * unregistered (a span that predates registration cannot
+ * exist in this build -- acquire registers before
+ * publishing -- so the default is a defensive posture). */
+static size_t arena_of(const struct mimir_span_header *span)
+{
+    size_t i;
+    size_t h = arena_hash(span);
+
+    if (span == NULL) {
+        return 0;
+    }
+    for (i = 0; i < MIMIR_ARENA_SLOTS; i++) {
+        struct mimir_arena_slot *s =
+            &mimir_arena_table[(h + i) & (MIMIR_ARENA_SLOTS - 1)];
+        if (s->span == span) {
+            return (size_t)s->arena;
+        }
+        if (s->span == NULL) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+/* 1 when span has a live owner entry (J-006 support). */
+static int arena_registered(const struct mimir_span_header *span)
+{
+    size_t i;
+    size_t h = arena_hash(span);
+
+    for (i = 0; i < MIMIR_ARENA_SLOTS; i++) {
+        struct mimir_arena_slot *s =
+            &mimir_arena_table[(h + i) & (MIMIR_ARENA_SLOTS - 1)];
+        if (s->span == span) {
+            return 1;
+        }
+        if (s->span == NULL) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+/* The G-007 retention bound, split across the arenas
+ * (Dossier S4.2 C5): per-arena bound = bound / 2 (floor),
+ * so at the default bound 2 each arena retains at most
+ * 1 empty span per class (2 spans = 8192 B per class in
+ * total, exactly the banked global figure); at bound 16,
+ * 8 per arena (16 spans = 64 KiB per class in total).
+ * An odd bound rounds DOWN (bound 1 -> 0 per arena):
+ * the split never lets the total exceed the global
+ * bound the operator set. */
+static size_t arena_retention_bound(void)
+{
+    return mimir_retention_bound / MIMIR_ARENA_COUNT;
+}
+
+static void arena_unregister(struct mimir_span_header *span)
+{
+    size_t i;
+    size_t h = arena_hash(span);
+
+    for (i = 0; i < MIMIR_ARENA_SLOTS; i++) {
+        struct mimir_arena_slot *s =
+            &mimir_arena_table[(h + i) & (MIMIR_ARENA_SLOTS - 1)];
+        if (s->span == span) {
+            s->span = (void *)(uintptr_t)-1;
+            s->arena = 0;
+            return;
+        }
+        if (s->span == NULL) {
+            return;
+        }
+    }
+}
+/* The calling thread's arena under the Z-012 CCD map:
+ * physical core = logical % 16 (SMT sibling of n is n+16);
+ * cores 0-7 are CCD0, 8-15 are CCD1. A failed CPU query
+ * falls back to arena 0. Lock-free: one L6 query, no
+ * allocator state touched. */
+static size_t arena_current_raw(void)
+{
+    size_t cpu;
+
+    if (mimir_platform_current_cpu(&cpu) != MIMIR_PLATFORM_OK) {
+        return 0;
+    }
+    return (size_t)(((cpu % 16u) >= 8u) ? 1u : 0u);
+}
+
+/* Set the lock-held serving hint to the caller's arena
+ * and count the selection. Serving entry points only. */
+static size_t arena_select_locked(void)
+{
+    size_t arena = arena_current_raw();
+
+    mimir_arena_hint = arena;
+    mimir_arena_selections[arena] += 1;
+    return arena;
+}
+
+size_t mimir_arena_current(void)
+{
+    return arena_current_raw();
+}
+
+int mimir_arena_snapshot(struct mimir_arena_snapshot *out)
+{
+    struct mimir_span_header *span;
+    size_t steps = 0;
+    size_t a;
+
+    if (out == NULL) {
+        return -1;
+    }
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return -1;
+    }
+    for (a = 0; a < MIMIR_ARENA_COUNT; a++) {
+        out->spans[a] = 0;
+        out->live_objects[a] = 0;
+        out->selections[a] = mimir_arena_selections[a];
+    }
+    span = mimir_span_head;
+    while (span != NULL) {
+        if (++steps > mimir_live_spans) {
+            break;
+        }
+        if (span_header_is_live(span)) {
+            size_t owner = arena_of(span);
+
+            out->spans[owner] += 1;
+            out->live_objects[owner] +=
+                (uint64_t)span->live_count;
+        }
+        span = span->list_next;
+    }
+    (void)mimir_platform_global_unlock();
+    return 0;
+}
+#endif /* MIMIR_ARENA_CCD */
 
 /*
  * Release one LIVE span whole, with the lock held: the
@@ -1683,6 +1951,18 @@ static int span_release_locked(struct mimir_span_header *span)
     size_t mapping_length = span->mapping_length;
     size_t class_index = span->class_index;
     int status;
+#ifdef MIMIR_ARENA_CCD
+    /* Z-037: the active-slot writes in this function name
+     * the span's OWNER arena, never the serving hint: a
+     * release is routinely triggered by a thread of the
+     * other CCD (cross-CCD free, TLS drain). Save and
+     * override the hint for the duration; the caller's
+     * hint is restored on every exit path below. */
+    size_t arena_saved_hint = mimir_arena_hint;
+    size_t arena_owner = arena_of(span);
+
+    mimir_arena_hint = arena_owner;
+#endif
 #ifdef MIMIR_OOL_META
     /* Z-034: the trial side page is captured now and
      * released only after the span release succeeds, so a
@@ -1717,6 +1997,9 @@ static int span_release_locked(struct mimir_span_header *span)
         mimir_class_active[class_index] = span;
         mimir_live_spans += 1;
         mimir_live_span_bytes += mapping_length;
+#ifdef MIMIR_ARENA_CCD
+        mimir_arena_hint = arena_saved_hint;
+#endif
 #ifdef MIMIR_OOL_META
         if (ool_had) {
             (void)ool_register(span, ool_base, ool_len);
@@ -1724,6 +2007,10 @@ static int span_release_locked(struct mimir_span_header *span)
 #endif
         return 0;
     }
+#ifdef MIMIR_ARENA_CCD
+    arena_unregister(span);
+    mimir_arena_hint = arena_saved_hint;
+#endif
     __atomic_fetch_add(&mimir_audit_span_retired, 1UL,
                        __ATOMIC_RELAXED);
     mimir_stats_bytes_released += mapping_length; /* J-002 Q-RELEASED */
@@ -1753,7 +2040,13 @@ static size_t debug_span_quarantine_count_locked(
 static size_t tls_binned_count_locked(
     const struct mimir_span_header *span);
 
-/* Count retained EMPTY spans of one class (lock held). */
+/* Count retained EMPTY spans of one class (lock held).
+ * Z-037: in an arena build the production callers use the
+ * per-arena variant below and the only remaining caller is
+ * the MIMIR_DEBUG free path, a combination the prototype
+ * refuses; the definition is compiled out there rather
+ * than left unused. */
+#if !defined(MIMIR_ARENA_CCD) || defined(MIMIR_DEBUG)
 static size_t empty_spans_of_class_locked(size_t class_index)
 {
     struct mimir_span_header *span = mimir_span_head;
@@ -1776,6 +2069,31 @@ static size_t empty_spans_of_class_locked(size_t class_index)
     }
     return count;
 }
+#endif /* !MIMIR_ARENA_CCD || MIMIR_DEBUG */
+
+#ifdef MIMIR_ARENA_CCD
+/* Z-037: retained EMPTY spans of one class in ONE arena
+ * (lock held). The G-007 retention bound applies per
+ * arena, so one CCD's churn cannot evict the other CCD's
+ * retained spans. */
+static size_t empty_spans_of_class_arena_locked(
+    size_t class_index, size_t arena)
+{
+    struct mimir_span_header *span = mimir_span_head;
+    size_t count = 0;
+
+    while (span != NULL) {
+        if (span->class_index == class_index &&
+            span->live_count == 0 &&
+            tls_binned_count_locked(span) == 0 &&
+            arena_of(span) == arena) {
+            count++;
+        }
+        span = span->list_next;
+    }
+    return count;
+}
+#endif /* MIMIR_ARENA_CCD */
 
 static int span_can_serve(const struct mimir_span_header *span)
 {
@@ -2185,6 +2503,10 @@ static void *small_alloc_locked(size_t size, int zero_user,
 {
     size_t class_index = class_index_for(size);
     size_t class_size = mimir_class_sizes[class_index];
+#ifdef MIMIR_ARENA_CCD
+    /* Z-037: serve from the calling thread's arena only. */
+    size_t arena = arena_select_locked();
+#endif
     struct mimir_span_header *span = mimir_class_active[class_index];
     void *obj;
 
@@ -2193,7 +2515,11 @@ static void *small_alloc_locked(size_t size, int zero_user,
         span = mimir_span_head;
         while (span != NULL) {
             if (span->class_index == class_index &&
-                span_header_is_live(span) && span_can_serve(span)) {
+                span_header_is_live(span) && span_can_serve(span)
+#ifdef MIMIR_ARENA_CCD
+                && arena_of(span) == arena
+#endif
+                ) {
                 break;
             }
             span = span->list_next;
@@ -2346,8 +2672,15 @@ static void small_free_locked(void *ptr)
                        __ATOMIC_RELAXED);
 
     if (span->live_count == 0 &&
+#ifdef MIMIR_ARENA_CCD
+        empty_spans_of_class_arena_locked(span->class_index,
+                                          arena_of(span)) >
+            arena_retention_bound()
+#else
         empty_spans_of_class_locked(span->class_index) >
-            mimir_retention_bound) {
+            mimir_retention_bound
+#endif
+            ) {
         (void)span_release_locked(span);
     }
 #endif
@@ -2896,6 +3229,12 @@ static struct mimir_span_header *tls_find_span_locked(
 static void *tls_take_one_locked(
     size_t class_index, struct mimir_span_header **out_span)
 {
+#ifdef MIMIR_ARENA_CCD
+    /* Z-037: the Wave-4 cache refills from the calling
+     * thread's arena only (the partition is shared with
+     * the direct small path by construction). */
+    size_t arena = arena_select_locked();
+#endif
     struct mimir_span_header *span =
         mimir_class_active[class_index];
     void *obj;
@@ -2905,7 +3244,11 @@ static void *tls_take_one_locked(
         while (span != NULL) {
             if (span->class_index == class_index &&
                 span_header_is_live(span) &&
-                span_can_serve(span)) {
+                span_can_serve(span)
+#ifdef MIMIR_ARENA_CCD
+                && arena_of(span) == arena
+#endif
+                ) {
                 break;
             }
             span = span->list_next;
@@ -3000,8 +3343,15 @@ static void tls_retention_sweep_locked(
         if (span_header_is_live(span) &&
             span->live_count == 0 &&
             tls_binned_count_locked(span) == 0 &&
+#ifdef MIMIR_ARENA_CCD
+            empty_spans_of_class_arena_locked(span->class_index,
+                                              arena_of(span)) >
+                arena_retention_bound()
+#else
             empty_spans_of_class_locked(span->class_index) >
-                mimir_retention_bound) {
+                mimir_retention_bound
+#endif
+                ) {
             (void)span_release_locked(span);
         }
     }
@@ -3888,6 +4238,15 @@ int mimir_core_metadata_check(void)
             break;
         }
         if (span_header_is_live(span)) {
+#ifdef MIMIR_ARENA_CCD
+            /* Z-037: every live span must carry exactly
+             * one owner entry; an unregistered live span
+             * means the arena table drifted from the
+             * registry, which no other check would see. */
+            if (!arena_registered(span)) {
+                violations++;
+            }
+#endif
 #ifdef MIMIR_OOL_META
             /* Z-034: a trial span's free structure is its
              * bitmap: free_head must stay NULL and the set
@@ -3945,6 +4304,34 @@ int mimir_core_metadata_check(void)
         violations++;
     }
     for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
+#ifdef MIMIR_ARENA_CCD
+      /* Z-037: every arena's active hint must name a
+       * registered span of this class OWNED by that arena. */
+      size_t arena_i;
+      for (arena_i = 0; arena_i < MIMIR_ARENA_COUNT; arena_i++) {
+        struct mimir_span_header *want =
+            mimir_arena_active[arena_i][i];
+        struct mimir_span_header *walk = mimir_span_head;
+        size_t steps = 0;
+        int found = 0;
+
+        if (want == NULL) {
+            continue;
+        }
+        while (walk != NULL && ++steps <= mimir_live_spans) {
+            if (walk == want) {
+                found =
+                    (size_t)walk->class_index == i &&
+                    arena_of(walk) == arena_i;
+                break;
+            }
+            walk = walk->list_next;
+        }
+        if (!found) {
+            violations++;
+        }
+      }
+#else
         struct mimir_span_header *want = mimir_class_active[i];
         struct mimir_span_header *walk = mimir_span_head;
         size_t steps = 0;
@@ -3964,6 +4351,7 @@ int mimir_core_metadata_check(void)
         if (!found) {
             violations++;
         }
+#endif
     }
     (void)mimir_platform_global_unlock();
     return violations;
