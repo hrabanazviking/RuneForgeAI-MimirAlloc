@@ -358,6 +358,7 @@ void mimir_core_lock_hist_reset(void)
 #define MIMIR_STATE_UNPUBLISHED 0u
 #define MIMIR_STATE_LIVE        1u
 #define MIMIR_STATE_RETIRED     2u
+#define MIMIR_STATE_POOLED      3u /* Z-048: in the mapping cache */
 
 /* Descriptor magic (B-006 S7.3): a fixed constant identifying
  * a live descriptor of this layout. A sanity check only --
@@ -441,6 +442,48 @@ static _Atomic size_t mimir_live_bytes;              /* 0 at start  */
 static size_t mimir_live_bytes;                      /* 0 at start  */
 #endif
 #endif
+
+/*
+ * Z-048 mapping cache (roadmap Wave 6; retention priced by
+ * Z-046, VMA economics by Z-015): dead LARGE mappings are
+ * retained in a size-exact reuse pool instead of being
+ * returned to the OS at free. A pooled descriptor is on NO
+ * live registry: its state is MIMIR_STATE_POOLED and it is
+ * linked on mimir_pool_head through the descriptor's own
+ * list_next/list_prev fields. The pool is bounded by count
+ * and by total bytes; a retire that would exceed either
+ * bound (or whose mapping alone exceeds the byte bound)
+ * takes the banked munmap path instead, and the full
+ * trim/drain surface releases the whole pool (the trim
+ * trigger the roadmap names). Reuse is exact-length only:
+ * a hit republishes the mapping through the ordinary
+ * publication code in alloc_locked, so every publication
+ * invariant (descriptor rewritten in full, zero-on-
+ * publication fields, J-002 owner record, audit
+ * publication) is identical for fresh and reused mappings.
+ *
+ * Accounting under the pool (Z-048 definitions):
+ * - mimir_live_mappings / mimir_live_bytes count LIVE
+ *   only, exactly as before; pooled mappings are neither.
+ * - mimir_audit_mapping_retired increments when a
+ *   descriptor leaves LIVE (pooled or unmapped), so
+ *   published - retired == live mappings still holds.
+ * - mimir_stats_bytes_released counts bytes ACTUALLY
+ *   returned to the OS: a pooled retire adds nothing; a
+ *   direct unmap at retire and every pool release at
+ *   trim/drain add their mapping_length at the munmap.
+ * - Q-MAPPED (mimir_core_mapped_bytes and the J-002
+ *   snapshot's bytes_mapped) counts live mapping bytes +
+ *   pooled mapping bytes + live span bytes: a pooled
+ *   mapping is still mapped. Q-RETAINED / bytes_cached
+ *   keep their span-only definitions; the pool has its
+ *   own query pair (mimir_core_pool_count/_bytes).
+ */
+#define MIMIR_POOL_MAX_COUNT ((size_t)64)
+#define MIMIR_POOL_MAX_BYTES ((size_t)32 * 1024 * 1024)
+static struct mimir_descriptor *mimir_pool_head; /* NULL: empty */
+static size_t mimir_pool_count;                  /* 0 at start  */
+static size_t mimir_pool_bytes;                  /* 0 at start  */
 
 /*
  * E-005 audit counters (docs/PHASE_5_AUDIT_HOOK_E005.md;
@@ -710,6 +753,83 @@ static void registry_remove(struct mimir_descriptor *desc)
     desc->list_prev = NULL;
 }
 
+/* Z-048 mapping-cache list helpers. Caller holds the lock.
+ * The pool list reuses the descriptor's own list links; a
+ * descriptor is on exactly one of {live registry, pool,
+ * neither} at any instant. */
+static void pool_insert_locked(struct mimir_descriptor *desc)
+{
+    desc->list_prev = NULL;
+    desc->list_next = mimir_pool_head;
+    if (mimir_pool_head != NULL) {
+        mimir_pool_head->list_prev = desc;
+    }
+    mimir_pool_head = desc;
+    mimir_pool_count += 1;
+    mimir_pool_bytes += desc->mapping_length;
+}
+
+static void pool_remove_locked(struct mimir_descriptor *desc)
+{
+    if (desc->list_prev != NULL) {
+        desc->list_prev->list_next = desc->list_next;
+    } else {
+        mimir_pool_head = desc->list_next;
+    }
+    if (desc->list_next != NULL) {
+        desc->list_next->list_prev = desc->list_prev;
+    }
+    desc->list_next = NULL;
+    desc->list_prev = NULL;
+    mimir_pool_count -= 1;
+    mimir_pool_bytes -= desc->mapping_length;
+}
+
+/* Take a pooled mapping of exactly want_length out of the
+ * pool and return its base, or NULL on a miss. The caller
+ * republishes it through alloc_locked's publication code. */
+static void *pool_take_locked(size_t want_length)
+{
+    struct mimir_descriptor *desc = mimir_pool_head;
+    while (desc != NULL) {
+        if (desc->mapping_length == want_length) {
+            void *base = desc->mapping_base;
+            pool_remove_locked(desc);
+            return base;
+        }
+        desc = desc->list_next;
+    }
+    return NULL;
+}
+
+/* Release every pooled mapping to the OS (the Z-048 trim
+ * trigger). Caller holds the lock. Each entry is unlinked
+ * and accounted BEFORE its munmap (after a successful
+ * release its reserve page is gone); a failed release
+ * re-pools the still-mapped entry, so the pool bookkeeping
+ * always describes actual memory. Returns how many
+ * mappings were actually released. */
+static size_t pool_release_all_locked(void)
+{
+    size_t released = 0;
+    struct mimir_descriptor *desc = mimir_pool_head;
+    while (desc != NULL) {
+        struct mimir_descriptor *next = desc->list_next;
+        void *base = desc->mapping_base;
+        size_t length = desc->mapping_length;
+        pool_remove_locked(desc);
+        if (mimir_platform_map_release(base, length) ==
+            MIMIR_PLATFORM_OK) {
+            mimir_stats_bytes_released += length;
+            released += 1;
+        } else {
+            pool_insert_locked(desc);
+        }
+        desc = next;
+    }
+    return released;
+}
+
 /*
  * Owner determination (B-006 S11.2 step 4), shared by free
  * and realloc (C-005): find the descriptor whose recorded
@@ -804,6 +924,26 @@ static int retire_locked(struct mimir_descriptor *desc)
     mimir_live_mappings -= 1;
     mimir_live_bytes -= mapping_length;
 
+    /* Z-048: when the mapping cache admits this mapping
+     * (count and byte bounds, checked overflow-free against
+     * the pool's current bytes), the retirement completes
+     * WITHOUT an munmap: the descriptor stays in its still-
+     * mapped reserve page with state POOLED, off every live
+     * registry, until a same-length allocation republishes
+     * it or trim/drain releases it. The audit retirement
+     * still increments here -- the block has left LIVE --
+     * but Q-RELEASED does not move: nothing was returned
+     * to the OS. Only a retire the pool cannot admit takes
+     * the banked release path below. */
+    if (mimir_pool_count < MIMIR_POOL_MAX_COUNT &&
+        mapping_length <= MIMIR_POOL_MAX_BYTES - mimir_pool_bytes) {
+        desc->state = MIMIR_STATE_POOLED;
+        pool_insert_locked(desc);
+        __atomic_fetch_add(&mimir_audit_mapping_retired, 1UL,
+                           __ATOMIC_RELAXED);
+        return 1;
+    }
+
     status = mimir_platform_map_release(mapping_base,
                                         mapping_length);
     if (status != MIMIR_PLATFORM_OK) {
@@ -845,6 +985,7 @@ static void *alloc_locked(size_t size, int zero_user,
     size_t mapping_length = 0;
     struct mimir_descriptor *desc;
     int status;
+    int from_pool = 0; /* Z-048: base was taken from the pool */
 
     /* L5 layout, via L6 discovery (B-006 S11.1 step 5).
      * Page-size discovery failure is a defined failure with
@@ -869,25 +1010,62 @@ static void *alloc_locked(size_t size, int zero_user,
      * (C-004 / INC-C004-04: the C-003 heading of this comment
      * claimed a pre-acquire check that no code performed.) */
 
-    /* L6 acquire, lock held across the call (S9.4 DECISION).
-     * L6 applies the checked page round-up (B-007 A5/A6) and
-     * is all-or-nothing: on failure nothing is mapped (F-01,
-     * F-03, F-04), no descriptor exists, registry unchanged. */
-    status = mimir_platform_map_acquire(total_unrounded,
-                                        &base, &mapping_length);
-    if (status != MIMIR_PLATFORM_OK) {
-        return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_BACKING);
+    /* Z-048: the mapping cache is consulted first. The
+     * exact length a fresh acquire would return is the
+     * checked page round-up of total_unrounded; a pooled
+     * mapping of exactly that length is taken out of the
+     * pool and republished by the identical publication
+     * code below, so a hit and a fresh mapping differ only
+     * in how base/mapping_length were obtained. A pooled
+     * mapping that fails a publication check is returned
+     * to the pool, never unmapped (see from_pool below). */
+    {
+        size_t want_length;
+        if (total_unrounded <= SIZE_MAX - (page_size - 1)) {
+            want_length = ((total_unrounded + page_size - 1) /
+                           page_size) * page_size;
+            base = pool_take_locked(want_length);
+            if (base != NULL) {
+                mapping_length = want_length;
+                from_pool = 1;
+            }
+        }
+    }
+    if (base == NULL) {
+        /* L6 acquire, lock held across the call (S9.4
+         * DECISION). L6 applies the checked page round-up
+         * (B-007 A5/A6) and is all-or-nothing: on failure
+         * nothing is mapped (F-01, F-03, F-04), no
+         * descriptor exists, registry unchanged. */
+        status = mimir_platform_map_acquire(total_unrounded,
+                                            &base,
+                                            &mapping_length);
+        if (status != MIMIR_PLATFORM_OK) {
+            return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_BACKING);
+        }
     }
 
     /* B-007 A8: subtraction checked before evaluate, and the
      * publication gate usable_size >= requested_size. */
     if (usable_offset > mapping_length) {
-        (void)mimir_platform_map_release(base, mapping_length);
+        if (from_pool) {
+                pool_insert_locked(
+                    (struct mimir_descriptor *)base);
+            } else {
+                (void)mimir_platform_map_release(base,
+                                                  mapping_length);
+            }
         return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
     usable_size = mapping_length - usable_offset;
     if (usable_size < size) {
-        (void)mimir_platform_map_release(base, mapping_length);
+        if (from_pool) {
+                pool_insert_locked(
+                    (struct mimir_descriptor *)base);
+            } else {
+                (void)mimir_platform_map_release(base,
+                                                  mapping_length);
+            }
         return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
 
@@ -899,7 +1077,13 @@ static void *alloc_locked(size_t size, int zero_user,
      * requires, before publication.) On failure the mapping
      * is released and nothing is published (A.3). */
     if (usable_offset > (size_t)(UINTPTR_MAX - (uintptr_t)base)) {
-        (void)mimir_platform_map_release(base, mapping_length);
+        if (from_pool) {
+                pool_insert_locked(
+                    (struct mimir_descriptor *)base);
+            } else {
+                (void)mimir_platform_map_release(base,
+                                                  mapping_length);
+            }
         return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
 
@@ -910,7 +1094,13 @@ static void *alloc_locked(size_t size, int zero_user,
      * C-003 checked only the live_bytes addition.) */
     if (mapping_length > SIZE_MAX - mimir_live_bytes ||
         mimir_live_mappings == SIZE_MAX) {
-        (void)mimir_platform_map_release(base, mapping_length);
+        if (from_pool) {
+                pool_insert_locked(
+                    (struct mimir_descriptor *)base);
+            } else {
+                (void)mimir_platform_map_release(base,
+                                                  mapping_length);
+            }
         return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
     }
 
@@ -1828,7 +2018,9 @@ static void mimir_stats_peak_update_locked(void)
         (uint64_t)(__atomic_load_n(&mimir_live_bytes,
                                    __ATOMIC_RELAXED) +
                    __atomic_load_n(&mimir_live_span_bytes,
-                                   __ATOMIC_RELAXED));
+                                   __ATOMIC_RELAXED) +
+                   __atomic_load_n(&mimir_pool_bytes,
+                                   __ATOMIC_RELAXED)); /* Z-048 */
     uint64_t cur = __atomic_load_n(&mimir_stats_peak_mapped,
                                    __ATOMIC_RELAXED);
     while (mapped > cur &&
@@ -1838,7 +2030,8 @@ static void mimir_stats_peak_update_locked(void)
     }
 #else
     uint64_t mapped =
-        (uint64_t)(mimir_live_bytes + mimir_live_span_bytes);
+        (uint64_t)(mimir_live_bytes + mimir_live_span_bytes +
+                   mimir_pool_bytes); /* Z-048 */
 
     if (mapped > mimir_stats_peak_mapped) {
         mimir_stats_peak_mapped = mapped;
@@ -4725,9 +4918,13 @@ static void retained_snapshot_locked(size_t *out_spans,
  * were, their span stays mapped, and freeing them after
  * the image has unmapped remains undefined behaviour per
  * the public header -- the consumer duty is to free
- * before dlclose. Large mappings are not drained: the
- * mapping path retains nothing after free (the Phase 3
- * baseline), so there is nothing retained for it here.
+ * before dlclose. Live large mappings are not drained
+ * either; since Z-048 the drain DOES release the mapping
+ * cache's pooled (dead) large mappings, through
+ * pool_release_all_locked in this same locked section --
+ * they are retained memory exactly like the empty spans,
+ * and leaving them mapped would orphan them at dlclose
+ * the way INC-G008-02 orphaned spans.
  *
  * The drain is NON-TERMINAL and IDEMPOTENT (the
  * INC-G006-03 safety property, re-examined in the H-001
@@ -4783,6 +4980,7 @@ size_t mimir_core_drain_retained(void)
      * registry order), which cannot change how many bytes
      * a full release returns (I-002 S5.2 preamble). */
     released = trim_some_locked(SIZE_MAX);
+    (void)pool_release_all_locked(); /* Z-048 trim trigger */
     (void)mimir_platform_global_unlock();
     return released;
 }
@@ -4833,6 +5031,7 @@ size_t mimir_core_trim_retained(void)
     (void)tls_drain_all_locked(1);
 #endif
     released = trim_some_locked(SIZE_MAX);
+    (void)pool_release_all_locked(); /* Z-048 trim trigger */
     (void)mimir_platform_global_unlock();
     return released;
 }
@@ -4887,9 +5086,40 @@ size_t mimir_core_mapped_bytes(void)
         return (size_t)-1;
     }
     tls_flush_locked(); /* Z-029 */
-    mapped = mimir_live_bytes + mimir_live_span_bytes;
+    mapped = mimir_live_bytes + mimir_live_span_bytes +
+             mimir_pool_bytes; /* Z-048: pooled is still mapped */
     (void)mimir_platform_global_unlock();
     return mapped;
+}
+
+/* Z-048 mapping-cache queries: the pool's occupancy as a
+ * single locked snapshot, G-007 getter posture ((size_t)-1
+ * on lock failure). Internal only, INC-E001-07 shape (b)
+ * exactly like the trim queries: declared in
+ * src/core/mimir_core.h, bound local in the shared
+ * library, nm -D stays exactly 4. */
+size_t mimir_core_pool_count(void)
+{
+    size_t n;
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    tls_flush_locked(); /* Z-029 */
+    n = mimir_pool_count;
+    (void)mimir_platform_global_unlock();
+    return n;
+}
+
+size_t mimir_core_pool_bytes(void)
+{
+    size_t n;
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    tls_flush_locked(); /* Z-029 */
+    n = mimir_pool_bytes;
+    (void)mimir_platform_global_unlock();
+    return n;
 }
 
 /*
@@ -4943,7 +5173,8 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
     out->live_mapping_bytes = (uint64_t)mimir_live_bytes;
     out->live_span_bytes = (uint64_t)mimir_live_span_bytes;
     out->bytes_mapped = (uint64_t)(mimir_live_bytes +
-                                   mimir_live_span_bytes);
+                                   mimir_live_span_bytes +
+                                   mimir_pool_bytes);
     out->page_size_bytes = (uint64_t)page_size;
     for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
         out->span_class_size[i] = (uint64_t)mimir_class_sizes[i];
@@ -5065,6 +5296,55 @@ int mimir_core_metadata_check(void)
     }
     if (bytes != mimir_live_bytes) {
         violations++;
+    }
+    /* Z-048: the mapping pool is a third list. Every entry
+     * must be POOLED, self-based (descriptor at its mapping
+     * base), zero-fielded exactly as publication wrote it,
+     * with list_prev agreeing with the walk order; the
+     * walked count and byte sum must equal the pool
+     * counters. */
+    {
+        struct mimir_descriptor *pd = mimir_pool_head;
+        struct mimir_descriptor *pprev = NULL;
+        size_t pcount = 0;
+        size_t pbytes = 0;
+        while (pd != NULL) {
+            pcount++;
+            if (pcount > mimir_pool_count) {
+                violations++; /* cycling pool list */
+                break;
+            }
+            if (pd->magic == MIMIR_DESCRIPTOR_MAGIC &&
+                pd->state == MIMIR_STATE_POOLED &&
+                pd->mapping_base == (void *)pd &&
+                pd->mapping_length != 0 &&
+                pd->usable_offset != 0 &&
+                pd->usable_offset <= pd->mapping_length) {
+                pbytes += pd->mapping_length;
+            } else {
+                violations++;
+            }
+            if (pd->list_prev != pprev) {
+                violations++;
+            }
+            if (pd->flags != 0) {
+                violations++;
+            }
+            for (i = 0; i < sizeof pd->reserved; i++) {
+                if (pd->reserved[i] != 0) {
+                    violations++;
+                    break;
+                }
+            }
+            pprev = pd;
+            pd = pd->list_next;
+        }
+        if (pcount != mimir_pool_count) {
+            violations++;
+        }
+        if (pbytes != mimir_pool_bytes) {
+            violations++;
+        }
     }
 #ifndef MIMIR_LOCK_SHARD
     span = mimir_span_head;

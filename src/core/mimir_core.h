@@ -91,6 +91,14 @@ size_t mimir_core_trim_retained_some(size_t max_spans);
 size_t mimir_core_retained_spans(void);
 size_t mimir_core_retained_bytes(void);
 size_t mimir_core_mapped_bytes(void);
+/* Z-048 mapping-cache queries (internal only, shape (b)
+ * like the trim queries above): pooled dead large mappings
+ * now / their total bytes; (size_t)-1 on lock failure. The
+ * full trim and drain entry points above also release the
+ * whole pool; trim_retained_some is span-budget only and
+ * never touches it. */
+size_t mimir_core_pool_count(void);
+size_t mimir_core_pool_bytes(void);
 
 /* G-007 tuning pair (docs/PHASE_7_TUNING_PARAMETERS_G007.md):
  * the per-class empty-span retention bound setter/getter,
@@ -139,8 +147,8 @@ size_t mimir_tune_get_retention_bound(void);
  *   Monotone.
  * - bytes_cached: bytes of retained EMPTY spans now
  *   (Q-RETAINED, registry walk under the lock).
- * - bytes_mapped: Q-MAPPED now (live mapping bytes + live
- *   span bytes).
+ * - bytes_mapped: Q-MAPPED now (live mapping bytes +
+ *   pooled mapping-cache bytes (Z-048) + live span bytes).
  * - bytes_released: Q-RELEASED, cumulative successfully
  *   released mapping_length over published mappings and
  *   spans (retire_locked / span_release_locked successes).

@@ -949,6 +949,24 @@ test-z043: $(BUILD)/test_z043_free_storm
 
 .PHONY: test-z043
 
+# Z-048: mapping-cache churn cases - the churn suite
+# under tests/core/ (test_z048_pool.c), built against the
+# production LIBOBJS (test-only static link, like
+# test-z043). Standalone via make test-z048; NOT part of
+# make test (standing gate counts untouched). Recorded
+# run: tests/perf/recorded_run_z13_z048.txt.
+$(BUILD)/test_z048_pool.o: tests/core/test_z048_pool.c tests/core/mimir_pool_z048.h tests/core/mimir_stats_j002.h tests/core/mimir_trim_i003.h tests/core/mimir_drain_h001.h tests/core/mimir_integrity_j006.h tests/abi/mimir_audit_e005.h include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z048_pool.c -o $@
+
+$(BUILD)/test_z048_pool: $(LIBOBJS) $(BUILD)/test_z048_pool.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z048_pool.o -o $@
+
+test-z048: $(BUILD)/test_z048_pool
+	./$(BUILD)/test_z048_pool
+
+.PHONY: test-z048
+
+
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies
 # cross-thread frees on the span and mapping paths,
