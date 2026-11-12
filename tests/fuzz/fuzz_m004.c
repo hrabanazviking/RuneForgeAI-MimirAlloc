@@ -64,7 +64,7 @@ static int cmp_ptr(const void *a,const void *b){
 /* Full batch check: patterns, overlap, stats live count. */
 static void batch_check(void){
   int i,n=model_live_count(); void *ptrs[MAXLIVE]; size_t szs[MAXLIVE];
-  int m=0; struct mimir_stats st; uint64_t alloc_live;
+  int m=0; struct mimir_stats st = { 0 }; uint64_t alloc_live;
   for(i=0;i<MAXLIVE;i++) if(g_model[i].live){
     CHECK(verify_blk(&g_model[i]),"pattern","live block corrupt");
     ptrs[m]=g_model[i].p; szs[m]=g_model[i].sz; m++; }

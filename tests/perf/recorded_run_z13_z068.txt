@@ -1,0 +1,228 @@
+MimirAlloc Z13 recorded run - Z-068: Integrity standings
+Thu 2026-11-12 EST (runs 18:06-18:11 UTC / 13:06-13:11 EST)
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64, page 4096, 128 GB UMA)
+Base: seat main 457a739 (banked Z-001..Z-062), merged into
+  yrsa/mimiralloc-team-06 as 11dcd93 (clean, no conflicts) on top of
+  7042a5e (Z-062, banked). This slice BUILDS AHEAD: it banks only
+  after Z-063..Z-067 in roadmap order. Its tree therefore does NOT
+  contain the Z-064/Z-065 tallies or the Z-066/Z-067 detection
+  wiring; every standing below is stated against that fact.
+Load state: shared host throughout. Aesir forge mojo suite was
+  running at merge time (loadavg 2.98); the graded runs ran at
+  loadavg ~1.0-3.35 with a Lifthrasir QEMU guest active. Every
+  graded quantity below is an exact counter or a refused/accepted
+  outcome, never a wall time. Fuzz legs pinned to core 5
+  (taskset -c 5).
+
+S1. Roadmap gate
+Gate (docs/MIMIRALLOC_Z13_ROADMAP.md Z-068): remaining silent
+classes treated likewise; the full 25-probe suite re-run on this
+host; fuzz refresh (D-09): failure-shaped realloc and multithread
+legs at M-004's harness, longer budget. Detection count verdict
+vs the banked 16/25; fuzz report.
+Result: MET, as a standings slice. The two remaining classes
+(INC-J006-03 owner-scratch, INC-J006-05 class-consistency) are
+closed by proven undetectable-by-design records (S3), NOT by
+detection wiring -- the same honesty standard as Z-066 S6 and
+the Z-067 gate's "flip or record the reason" form. The suite
+re-run is S2; the fuzz refresh is S4. This slice adds NO core
+code and NO stats fields (the Z-064..Z-067 tally appends at the
+end of struct mimir_stats are untouched and un-ordered by this
+slice).
+
+S2. The full 25-probe suite re-run on this host (test_j006)
+Command: make test-j006 (log hidden_files/z068_j006_final.log).
+Outcome: checks=25 failed=13 (12 ok / 13 FAIL) -- IDENTICAL, probe
+for probe, to the baseline Z-066 recorded on the unmodified seat
+tree (its S5). This slice changes no core code, so the run IS
+the seat-tree standing; every FAIL below is pre-existing, proven
+by that identity, and is recorded by name, never absorbed.
+Per-probe standings (suite order; expected class in brackets):
+  00 baseline-valid      ok    exit=0   [valid]
+  01 desc-magic          ok    exit=10  [DETECTED]
+  02 desc-state          ok    exit=10  [DETECTED]
+  03 desc-base           ok    exit=10  [DETECTED]
+  04 desc-len-incons     ok    exit=10  [DETECTED]
+  05 desc-len-consist    FAIL  exit=90  [SILENT] stale J-006-era
+        host fact (asserts mapping_length == 3 pages before
+        corrupting); Z-066 rewrote this probe on its branch and
+        flipped it to DETECTED there -- not in this tree.
+  06 desc-requested      ok    exit=10  [DETECTED]
+  07 desc-uoff           ok    exit=10  [DETECTED]
+  08 desc-next-cycle     ok    exit=10  [DETECTED]
+  09 desc-next-wild      ok    SIGSEGV  [CRASH-expected]
+  10 desc-flags-reserved ok    exit=10  [DETECTED by walk]
+  11 desc-owner-scratch  ok    exit=42  [SILENT] -- Z-068 class,
+        proven silent again here; treated in S3.
+  12 span-magic          FAIL  exit=90  [DETECTED] REQ-FAIL at
+        the snapshot assertion (live_small_objects): the
+        TLS-era accounting family, see below.
+  13 span-class-mismatch FAIL  exit=90  [DETECTED] same family.
+  14 span-class-consist  FAIL  exit=90  [SILENT] -- Z-068 class.
+        Its first silent leg PASSED (block freed under the
+        false class, live==1); it fails at the SECOND snapshot
+        assertion (line 295), the same TLS-accounting family
+        as probes 12-18/20-23. Its operational standing is
+        proven directly by test_z068 leg B (S3).
+  15 span-live-zero      FAIL  exit=90  [SILENT] Z-067 class,
+        in flight on team-01; recorded here as "per Z-067,
+        in flight", no standing claimed by this slice.
+  16 span-carve-reduced  FAIL  exit=90  [DETECTED] same family.
+  17 span-carve-inflated FAIL  exit=90  [DETECTED] same family.
+  18 span-len-incons     FAIL  exit=90  [DETECTED] same family.
+  19 span-len-consist    ok    exit=42  [SILENT on this tree];
+        Z-066 flipped it to DETECTED on its branch (span
+        mapping_length relation) -- not in this tree.
+  20 span-freehead-live  FAIL  exit=90  [SILENT] Z-067 class,
+        in flight; no standing claimed here.
+  21 span-freehead-wild  FAIL  exit=90  [DETECTED] same family.
+  22 span-freelist-cycle FAIL  exit=90  [DETECTED] fails at
+        the metadata_check assertion (walk posture under TLS).
+  23 span-next-cycle     FAIL  exit=90  [DETECTED] same family.
+  24 span-next-wild      FAIL  exit=90  [CRASH-expected] the
+        child SURVIVED: the walk no longer dereferences the
+        wild link on this path (TLS binning serves the free
+        first) -- recorded as observed, not relabelled.
+The 11 span FAILs (12-18, 20-23) plus 05 and 24 share one
+proven shape: the J-006-era span expectations predate the
+Z-029 TLS cache (same-thread frees bin without central
+validation; snapshot accounting settles at flush) and the
+Z-048 mapping pool -- the family Z-066 S5 and team-03 (Z-064)
+already recorded. Reconciling the suite's span expectations
+with the TLS posture is named next work for the keeper's
+queue (a suite-modernisation slice), not silently left and
+not this slice's to absorb.
+Standalone neighbours on this tree (not in the standing gate,
+recorded, not absorbed): make test-j002 FAIL (550 checks /
+113 failures), make test-i004 FAIL (248 checks / 116
+failures) -- the pool-era family recorded at Z-064.
+
+S3. Treatment of the remaining silent classes (test_z068)
+Standalone proof: tests/core/test_z068.c (compiled directly,
+the test-z066 precedent; NOT in make test), run on this host:
+test_z068: fails=0 (log hidden_files/z068_treatment.log).
+Leg A - desc-owner-scratch (INC-J006-03): STAYS SILENT,
+  undetectable by design. Proven: with the reserve-page
+  scratch (offset 96, NOT part of the descriptor) flipped,
+  the integrity walk reports 0 violations, the same-thread
+  free succeeds and retires the mapping normally, the
+  allocator stays healthy, memory is unaffected, and the
+  SOLE effect is cross_thread_frees falsely +1. Reason: the
+  scratch is a diagnostics-grade record that no allocator
+  decision reads (J-006 Invariant 8; PHASE_10 S2.1). There
+  is nothing operational to wire detection INTO: any check
+  would be a second unverified copy of a statistics-only
+  value. Compensating control (accepted posture, J-006's
+  own remedy line): the counter is recorded as
+  diagnostics-grade trust -- it must never be cited as
+  evidence about memory safety. INC-J006-03 closed as
+  BY-DESIGN SILENT by this record.
+Leg B - span-class-consist (INC-J006-05): STAYS operationally
+  SILENT, undetectable by design on the operational paths.
+  Proven: class_index 1->3 with class_size 32->64 (consistent
+  pair) -- the integrity walk DOES flag it (>0 violations,
+  via the class_active cross-check), and the free of the
+  offset-0 block is then ACCEPTED under the false class with
+  no operational refusal (live 2 -> 1); restore + final free
+  clean, walk back to 0. Reason: the free/alloc validators
+  can only check the header against ITSELF (index/size
+  agreement), and a consistent pair passes by construction;
+  the true class exists nowhere outside the header.
+  Compensating controls: (1) the walk's class_active
+  cross-check -- the one detection surface, exercised above;
+  (2) the named successor design (J-006's own smallest
+  remedy): a static side record of each span's true class
+  outside the 96-byte header -- a design slice, not this
+  one; promoting the walk cross-check into the free path
+  was already rejected on cost in J-006 S6 (a registry walk
+  per free). INC-J006-05 closed as BY-DESIGN SILENT
+  (operational) / WALK-DETECTED by this record.
+Carried forward unchanged from Z-066 S6: compensating
+  multi-descriptor corruption NOT DETECTED; pooled-descriptor
+  corruption NOT COVERED by the live-registry audit; TLS-bin
+  stock is served without re-validation for every header
+  class. INC-J006 remains OPEN as a family.
+
+S4. Fuzz refresh (D-09) at M-004's harness, longer budget
+Harness: tests/fuzz/fuzz_m004.c (trace version 1), built via
+make test-fuzz-m004 after the one-line fix in S5. Budget:
+10x M-004's per-seed ops on the banked seeds, plus two fresh
+seeds; multithread leg repeated 3x. All legs taskset -c 5.
+  Default run (make test-fuzz-m004): RESULT: PASS.
+  seed 4001 ops=20000 realloc=3129 checks=623156 fails=0
+  seed 4002 ops=20000 realloc=3189 checks=633162 fails=0
+  seed 4003 ops=20000 realloc=3226 checks=633471 fails=0
+  seed 5001 ops=20000 realloc=3137 checks=637545 fails=0 (new)
+  seed 5002 ops=20000 realloc=3241 checks=628403 fails=0 (new)
+  Single-thread totals: 100,000 ops, 15,922 realloc ops
+  (failure-shaped at the harness's 1-in-10 draw: realloc to
+  SIZE_MAX must return NULL with the original intact),
+  10,114 calloc ops (overflow-shaped at 1-in-10), checks
+  3,155,737, fails=0, every seed live_end=0.
+  Multithread leg (seed 4004, 3 threads): 3/3 runs PASS,
+  checks=214 fails=0 handed=70 each, byte-identical lines.
+  Reproducibility: seed 4001 at 20000 ops re-run -- output
+  diff identical (REPRODUCIBLE).
+D-09 standing: INC-M004-01/-02 remain as recorded -- OS-level
+backing failure (mmap refusal) is still not injected (no
+fault-injection leg was added to the harness by this slice);
+what this refresh extends is depth: failure-shaped realloc
+and the MT handoff/transfer legs at 10x budget on this host,
+all clean. No FINDING line was emitted by any seed, so there
+is no failing prefix to minimise.
+
+S5. Bug found and fixed in scope
+make test-fuzz-m004 did not build on this host: at LTO link,
+gcc -Werror=maybe-uninitialized fired on batch_check's
+`struct mimir_stats st` -- mimir_core_stats_snapshot writes
+nothing on its failure return, and the harness's CHECK macro
+records the failure and CONTINUES into reading st (the
+allocator itself memsets the struct on every success path;
+verified in src/core/mimir_core.c). A latent harness wart
+since M-004, invisible to the Pi's gcc, blocking the D-09
+refresh on this host. Fix (1 line, tests/fuzz/fuzz_m004.c):
+initialise `st = { 0 }` at declaration. Success-path
+behaviour unchanged; a failed snapshot now reads zeros and
+still fails its CHECK. No other bugs discovered.
+
+S6. Standing gate and neighbours (counts read from log files)
+  scripts/z13/run_gate.sh on the final tree:
+    GATE COUNTS: checks=4988 failed=0 skips=77 -- GREEN,
+    identical to baseline (log hidden_files/z068_gate_final.log;
+    the gate was also GREEN on the merged pre-slice tree).
+  nm -D --defined-only build/libmimiralloc.so: exactly 4
+    (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free).
+
+S7. Detection count verdict (vs the banked 16/25)
+Banked J-006 count: 16 DETECTED / 6 SILENT / 2 CRASH / 1 valid
+of 25. This slice moves the count by ZERO, by design: its
+deliverable is the standings record, not wiring. After this
+slice every one of the 6 silent classes has a named,
+evidenced treatment: INC-J006-02 (probes 05, 19) wired
+DETECTED by Z-066 (in the banking queue ahead of this
+slice); INC-J006-04 + INC-J006-06 (probes 20, 15) with
+Z-067, in flight on team-01 at this writing; INC-J006-03
+(probe 11) and INC-J006-05 (probe 14) closed BY-DESIGN
+SILENT by S3 of this run. When Z-066 and Z-067 bank, the
+expected standing is 18-20 DETECTED of 25 with the only
+remaining silences being the two by-design records above
+(plus the 2 crash-expected wild-pointer classes no
+in-process check can validate without dereferencing them).
+
+S8. Review record
+Lead ran the six Mythic Engineering roles SEQUENTIALLY
+itself (inspect, design/judgement, build, measure, verify,
+record) -- no sub-agents were spawned for this slice; all
+device-side work was executed by the lead alone in this
+worktree. (The keeper brief's spawn-first preference yields
+to the single-worktree serial-evidence shape of this slice;
+recorded plainly per campaign law.)
+
+S9. Files in this slice
+  tests/core/test_z068.c        (new; S3 treatment proof,
+                                 standalone, not in make test)
+  tests/fuzz/fuzz_m004.c        (1 line: S5 harness fix)
+  tests/perf/recorded_run_z13_z068.txt (this file)
+CAMPAIGN_STATE.md updated on disk only, never committed.
+Not pushed: banking is the keeper's job at the seat, in
+roadmap order behind Z-063..Z-067.
