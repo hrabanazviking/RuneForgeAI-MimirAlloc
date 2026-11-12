@@ -932,6 +932,23 @@ test-z030: $(BUILD)/test_z030_remote_queue
 
 .PHONY: test-z030
 
+# Z-043: producer/consumer free storm - the storm suite
+# under tests/concurrency/ (test_z043_free_storm.c),
+# built against the production LIBOBJS (test-only static
+# link, like run_z030.sh). Standalone via make test-z043;
+# NOT part of make test (standing gate counts untouched).
+# Recorded run: tests/perf/recorded_run_z13_z043.txt.
+$(BUILD)/test_z043_free_storm.o: tests/concurrency/test_z043_free_storm.c tests/concurrency/mimir_remote_queue_z030.h include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/concurrency -c tests/concurrency/test_z043_free_storm.c -o $@
+
+$(BUILD)/test_z043_free_storm: $(LIBOBJS) $(BUILD)/test_z043_free_storm.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z043_free_storm.o -o $@
+
+test-z043: $(BUILD)/test_z043_free_storm
+	./$(BUILD)/test_z043_free_storm
+
+.PHONY: test-z043
+
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies
 # cross-thread frees on the span and mapping paths,

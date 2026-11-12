@@ -1712,6 +1712,48 @@ static int span_header_is_live(const struct mimir_span_header *span)
     return 1;
 }
 
+/*
+ * Z-043: the same relations minus the live_count bound,
+ * for the free path only. A small block published from a
+ * bin hit is accounted by a PENDING +1 in the allocating
+ * thread (Z-029 implementation doc section 3), applied
+ * to live_count only at that thread's next flush; a
+ * cross-thread free of such a block reaches
+ * small_free_locked first and applies its -1 immediately.
+ * Between the two, live_count reads as a small negative
+ * number in size_t wrap, and the strict relation above
+ * refuses the span: the Z-043 storm measured 41-92 of
+ * ~391k cross frees silently doing nothing that way -
+ * the block stayed live forever and the span could never
+ * drain. The free path does not need the bound: ownership
+ * of the exact block is proven by the containment,
+ * stride, carve and free-list checks in the finder below,
+ * which are all kept; and the counter arithmetic is
+ * exact in the mod-2^64 ring once every transition is
+ * applied exactly once, which refusing the free broke.
+ * Allocation-side callers keep the strict form.
+ */
+static int span_header_is_live_for_free(
+    const struct mimir_span_header *span)
+{
+    if (!(span->magic == MIMIR_SPAN_MAGIC &&
+          span->state == MIMIR_STATE_LIVE &&
+          span->mapping_base == (const void *)span &&
+          span->usable_offset == MIMIR_SPAN_HEADER_SIZE &&
+          span->class_index < MIMIR_SMALL_CLASS_COUNT &&
+          span->class_size == mimir_class_sizes[span->class_index])) {
+        return 0;
+    }
+    if (span->mapping_length <
+            MIMIR_SPAN_HEADER_SIZE + span->class_size ||
+        span->usable_size !=
+            span->mapping_length - MIMIR_SPAN_HEADER_SIZE ||
+        span->carve_count > span_capacity(span)) {
+        return 0;
+    }
+    return 1;
+}
+
 /* J-006: shape validation for one free-list node of a span,
  * using only the (already validated) header's own fields:
  * a free node is a carved object start inside this span's
@@ -2601,7 +2643,8 @@ int mimir_debug_quarantine_verify(void)
  * sharpest case, which lands outside the object area by
  * construction and is refused here).
  */
-static struct mimir_span_header *find_span_live_locked(void *ptr)
+static struct mimir_span_header *find_span_mode_locked(
+    void *ptr, int for_free)
 {
     struct mimir_span_header *span = mimir_span_head;
     uintptr_t target = (uintptr_t)ptr;
@@ -2630,7 +2673,9 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
         uintptr_t base = (uintptr_t)span->mapping_base;
         uintptr_t first = base + MIMIR_SPAN_HEADER_SIZE;
 
-        if (span_header_is_live(span) && target >= first &&
+        if ((for_free ? span_header_is_live_for_free(span)
+                      : span_header_is_live(span)) &&
+            target >= first &&
             target < base + span->mapping_length) {
             size_t offset = (size_t)(target - first);
             size_t index;
@@ -2711,6 +2756,18 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
     return NULL;
 }
 
+static struct mimir_span_header *find_span_live_locked(void *ptr)
+{
+    return find_span_mode_locked(ptr, 0);
+}
+
+/* Z-043: free-path finder; see span_header_is_live_for_free. */
+static struct mimir_span_header *find_span_for_free_locked(void *ptr)
+{
+    return find_span_mode_locked(ptr, 1);
+}
+
+
 #ifdef MIMIR_LOCK_SHARD
 /* Z-039: find_span_live_locked walks ONE shard list (the
  * hint's). This variant finds a live span across all lists:
@@ -2734,6 +2791,32 @@ static struct mimir_span_header *find_span_live_any_locked(void *ptr)
         }
         mimir_shard_hint = s;
         span = find_span_live_locked(ptr);
+        if (span != NULL) {
+            return span;
+        }
+    }
+    mimir_shard_hint = first;
+    return NULL;
+}
+/* Keeper banking composition (Z-043 banked onto the Z-039
+ * tree): the free-path twin of find_span_live_any_locked
+ * above -- same walk, strict free-path predicate. */
+static struct mimir_span_header *find_span_for_free_any_locked(void *ptr)
+{
+    size_t first = mimir_shard_hint;
+    size_t s;
+    struct mimir_span_header *span;
+
+    span = find_span_for_free_locked(ptr);
+    if (span != NULL) {
+        return span;
+    }
+    for (s = 0; s < MIMIR_SHARD_COUNT; s++) {
+        if (s == first) {
+            continue;
+        }
+        mimir_shard_hint = s;
+        span = find_span_for_free_locked(ptr);
         if (span != NULL) {
             return span;
         }
@@ -2879,9 +2962,9 @@ static void *small_alloc_locked(size_t size, int zero_user,
 static void small_free_locked(void *ptr)
 {
 #ifdef MIMIR_LOCK_SHARD
-    struct mimir_span_header *span = find_span_live_any_locked(ptr);
+    struct mimir_span_header *span = find_span_for_free_any_locked(ptr);
 #else
-    struct mimir_span_header *span = find_span_live_locked(ptr);
+    struct mimir_span_header *span = find_span_for_free_locked(ptr);
 #endif
 
     if (span == NULL) {
@@ -2937,6 +3020,27 @@ static void small_free_locked(void *ptr)
     __atomic_fetch_add(&mimir_audit_small_free, 1UL,
                        __ATOMIC_RELAXED);
 
+    /* Z-043: the release trigger must also require that no
+     * bin holds a block of THIS span. The tally counts both
+     * bin-resident blocks and blocks published from a bin
+     * whose live transition is still pending in the
+     * allocating thread (the tally unit converts to a live
+     * unit only at that thread's flush, tls_flush_locked),
+     * so while the tally is non-zero this span can hold
+     * blocks that are live in callers' hands with
+     * live_count not yet reflecting them - and the
+     * live_count == 0 above can be reached by this free
+     * while such blocks exist. Releasing here unlinked and
+     * unmapped the span out from under those blocks: their
+     * later cross-thread frees found an owner record but no
+     * registered span and silently did nothing (the Z-043
+     * storm: 76 of 391,232 cross frees lost, plus a crash
+     * in a bin drain touching the unmapped span). The
+     * retention sweep (tls_retention_sweep_locked) and the
+     * trim path already carry this exact guard; the
+     * empty-span count alone does not imply it, because it
+     * counts only tally-free spans and can be satisfied by
+     * OTHER spans of the class. */
     if (span->live_count == 0 &&
 #ifdef MIMIR_ARENA_CCD
         empty_spans_of_class_arena_locked(span->class_index,
@@ -5594,7 +5698,7 @@ void mimir_core_free(void *ptr)
             if (mimir_platform_global_lock() ==
                 MIMIR_PLATFORM_OK) {
                 tls_flush_locked();
-                if (find_span_live_locked(ptr) != NULL) {
+                if (find_span_for_free_locked(ptr) != NULL) {
                     if (tls_owner_is_handed(ptr)) {
                         small_free_tally_locked(ptr);
                     } else {
@@ -5676,7 +5780,7 @@ void mimir_core_free(void *ptr)
          * its span's free list (small_free_locked); any
          * other pointer keeps the S8.3 posture below. */
 #ifndef MIMIR_LOCK_SHARD
-        if (find_span_live_locked(ptr) != NULL) {
+        if (find_span_for_free_locked(ptr) != NULL) {
             small_free_locked(ptr);
 #ifndef MIMIR_DEBUG
             /* Z-029 fallback accounting: a small block
@@ -5696,7 +5800,7 @@ void mimir_core_free(void *ptr)
             for (sh = 0; sh < MIMIR_SHARD_COUNT && !found;
                  sh++) {
                 mimir_shard_hint = sh;
-                if (find_span_live_locked(ptr) != NULL) {
+                if (find_span_for_free_locked(ptr) != NULL) {
                     small_free_locked(ptr);
                     tls.remote_frees_out += 1;
                     found = 1;

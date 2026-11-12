@@ -1,0 +1,168 @@
+Z-043 - Producer/consumer free storm - recorded run
+Wave 5 (thread-scaling hunt). Roadmap gate: "storm green;
+worst-case remote-free latency recorded."
+Team-04 worktree (yrsa/mimiralloc-team-04) on seat main
+35f7f55 (banked Z-001..Z-035) merged as 5c18608 before work.
+
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12 (runs 10:54-11:03Z)
+kernel: Linux 7.3.0-10-generic x86_64 (Ubuntu 26.10)
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32 (16 cores x SMT)
+Build: seat -flto build (banked with Z-035), cc -O2 -flto.
+
+LOAD STATE (host is shared; discipline fixed before runs):
+canonical attempts require 1-min loadavg < 1.0 at launch and
+no sibling suite/gate running. Attempt 1 launched at 0.62;
+5 s load sampler during the attempt peaked at 0.99.
+Attempt 2 launched at 0.20; sampler peaked at 0.94.
+Sampler logs: hidden_files/z043_load_samples.log (per attempt,
+overwritten by the runner; peaks quoted from the live reads).
+
+METHOD
+Correctness: tests/concurrency/test_z043_free_storm.c,
+5 phases, 42 checks. S1 ring32: 32 threads each cross-free
+the NEXT thread's 2048 x 64B batch x 3 rounds (196,608
+remote frees; summed TLS remote_frees_out must equal the
+offered count exactly). S2 split16: 16 producers -> SPSC
+rings -> 16 consumers (65,536). S3: Z-030 MPSC queue flood,
+31 producers x 2048 into ONE 256-deep queue, owner drains
+in batches of 8, producer bypass (own free) on FULL;
+exactly-once bitmap over (producer, seq). S4: 32 queues
+cross-flooded, 1024 each, pushers-done drain discipline.
+S5: ring32 with mixed classes 32/64/128/512B. Every block
+carries the Z-030 (producer, seq) pattern, verified by the
+freer before the free; every phase ends with live_small at
+its baseline and mimir_core_metadata_check() == 0.
+Red paths (both MUST fail; runner enforces nonzero exit):
+-DMRQ_MUTANT_LOSSY (Z-030 lossy queue) -> FAIL, 8 checks.
+-DZ043_MUTANT_DROP_FREE (round-0 leak of every 1024th
+free) -> FAIL, 6 checks, freed short by exactly 32.
+Perf: tests/perf/probe_z043.c under the Z-004 protocol
+(3 warmups discarded + 7 measured, one phase per process;
+tests/perf/run_z043.sh, tests/perf/summarize_z043.py).
+Per-process distributions reported as min/median/max of
+the 7 processes; never pooled-only. Latency legs time every
+free with CLOCK_MONOTONIC. glibc comparator legs built with
+-DLEG_GLIBC (same source, mimir_malloc/free mapped to
+glibc malloc/free) for ring32_lat and pc16x16_lat only.
+Live sets: 64B blocks; ring/pc 131,072 live per round;
+queue legs offer 63,488 (31 x 2048).
+
+PRE-REGISTERED VERDICT CRITERIA (fixed before canonical
+runs, from the team's six-reviewer muster):
+- queue bypass fraction > 90% = saturation regime.
+- freer-side tail WIN iff queue31_enq per-process max
+  median < ring32_lat per-process max median.
+- attempt VOID/unstable: wall-leg split-half drift > 10%,
+  latency-median drift > 25%, or max spread > 10x.
+
+DEFECTS FOUND BY THE STORM (both fixed in this slice, in
+src/core/mimir_core.c; the storm failed until they were):
+D1 - span released from under live bin-published blocks.
+  small_free_locked's retention-release trigger required
+  only live_count == 0 plus other empty spans over the
+  bound; it did not require THIS span's binned tally to be
+  0, unlike the retention sweep and the trim path, which
+  both carry that guard. The tally also counts blocks a
+  bin has published whose live transition is still pending
+  in the allocating thread, so a span with live,
+  not-yet-accounted blocks could be unlinked and unmapped;
+  their later cross frees found an owner record but no
+  registered span and silently did nothing, and a bin
+  drain touching the unmapped span crashed one early run.
+  Fix: the trigger now also requires
+  tls_binned_count_locked(span) == 0.
+D2 - pending-accounting wrap refuses live spans on the
+  free path. A bin-hit publication's +1 is pending in the
+  allocating thread until its next flush; a cross-thread
+  free applies its -1 immediately (small_free_locked), so
+  live_count transiently wraps (measured live_count =
+  2^64-1, carve_count = 62, class 64B) and the J-006
+  relation live_count <= carve_count in
+  span_header_is_live() refused the span: instrumented
+  runs showed 41-92 of ~391k cross frees taking the
+  owner-remote route, finding the span in the registry,
+  failing only that one relation, and silently leaking
+  the block (shortfall == live excess in every case).
+  Fix: the free path (small_free_locked and the two
+  mimir_core_free pre-checks) now uses
+  find_span_for_free_locked / span_header_is_live_for_free:
+  every J-006 relation except the live_count bound -
+  ownership of the exact block is still proven by the
+  containment, stride, carve and free-list checks, and
+  the counter arithmetic is exact in the mod-2^64 ring
+  once every transition lands exactly once. Allocation-
+  side callers keep the strict form.
+  Named residual (not exercised by this storm): the
+  realloc retire lookup at the old-block span check keeps
+  the strict finder; in the same transient window it
+  returns NULL with the original block preserved - a
+  visible, retryable failure, not a silent leak. Recorded
+  for the seat / Z-045 verdict.
+Regression evidence post-fix: storm suite 42/42 on three
+consecutive runs and inside both recorded attempts;
+Z-028 TLS contract 119/119; Z-030 queue suite 86/86;
+standing gate below.
+
+RESULTS (medians of 7 processes unless stated; two
+attempts, raw: hidden_files/z043_raw1.csv, z043_raw2.csv,
+z043_raw_glibc.csv)
+phase          attempt1        attempt2        notes
+local32_wall   3361.6 ns/op    3354.4 ns/op    control, own frees
+ring32_wall    9691.6 ns/op    9874.7 ns/op    32-way cross-free
+ring32_lat     med 8136 ns     med 9248 ns     p99 34.8/72.2 us
+               max_med 0.99 s  max_med 1.07 s  per-process max
+pc16x16_lat    med 2034 ns     med 2304 ns     p99 734/484 us
+               max_med 5.8 ms  max_med 3.1 ms
+queue31_enq    push med 72 ns  push med 59 ns  p99 3.7/4.2 us
+               max_med 19.7 us max_med 22.2 us
+               bypassed 95.1%  bypassed 95.4%  saturation regime
+queue31_total  77.6 ns/op      62.0 ns/op      wall UNSTABLE
+               e2e p99 1.75 ms e2e p99 1.30 ms (cross-attempt
+               e2e max_med     e2e max_med     wall delta 22%
+               1.79 ms         1.34 ms         > 10% band)
+glibc ring32_lat   med 30 ns, p99 50 ns, max_med 38-64 us
+glibc pc16x16_lat  med 40 ns, max_med 41-844 us
+
+VERDICTS
+- Roadmap gate: storm GREEN (42/42, both red paths fail
+  as designed); worst-case remote-free latency RECORDED:
+  1,074,081,376 ns (~1.07 s, attempt 2 per-process max
+  median; per-process maxima across attempts 0.86-1.25 s)
+  for a single cross-thread mimir_free in the 32-thread
+  ring, against a median of 8.1-9.2 us and p99 of 35-72 us.
+  The tail is the one-global-lock convoy of the banked
+  core (Z-024 anatomy) at storm scale, amplified by
+  descheduling inside the timed call; it is reported as
+  measured, not explained away.
+- Cross-free vs local on this core: ring32 wall is 2.9x
+  the local32 control. Against glibc the direct remote
+  free LOSES at every percentile (median ~300x glibc's
+  30 ns tcache free; worst case ~4 orders). Proven loss,
+  banked as such.
+- Queue under flood (pre-registered): bypass 95.1-95.4%
+  confirms the saturation regime. Freer-side tail: queue
+  enqueue per-process max ~20 us vs direct free max ~1 s
+  -> freer-side tail WIN, by ~45,000x. End-to-end tail:
+  queue e2e max_med 1.3-1.8 ms also beats the direct
+  max (owner batch-drain amortises the lock); the queue
+  flood's system wall per offered block (62-78 ns,
+  labelled unstable) is a different geometry from the
+  32-way ring and is NOT a like-for-like allocator win.
+  The Z-030 pair-geometry total-cost LOSS (+35.9%/+60.9%)
+  stands uncontradicted: the queue remains test-only
+  harness (NOT wired into mimir_free); production remote
+  frees still take the locked central path ring32 measures.
+- Standing gate: scripts/z13/run_gate.sh GREEN,
+  4988 checks / 0 failed / 77 by-design skips
+  (hidden_files/z043_gate.log), baseline held exactly,
+  with both defect fixes in the tree.
+
+REPRO
+  make test-z043
+  bash tests/perf/run_z043.sh hidden_files/z043_rawN.csv
+  python3 tests/perf/summarize_z043.py \
+      hidden_files/z043_rawN.csv hidden_files/z043_raw_glibc.csv
+  bash scripts/z13/run_gate.sh hidden_files/z043_gate.log
