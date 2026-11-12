@@ -28,6 +28,8 @@
 #include "mimir_stats_j002.h"
 #include "mimir_drain_h001.h"
 #include "mimir_integrity_j006.h"
+#include "mimir_diag_j007.h"
+#include <pthread.h>
 
 #define DETECTED 10
 #define SILENT   42
@@ -139,17 +141,31 @@ static int p_desc_len_consist(void)
 {
     struct mimir_stats s0, s1;
     void *b = mimir_malloc(20000); void *d;
+    uint64_t L, U, e0;
     REQ(b); d = desc_of(b);
-    REQ(rd64(d, 16) == 3 * (uint64_t)PAGE); /* host fact */
-    wr64(d, 16, 4 * (uint64_t)PAGE);        /* length grown */
-    wr64(d, 40, 3 * (uint64_t)PAGE);        /* usable, consistent */
-    REQ(mimir_core_metadata_check() > 0);   /* byte-sum catches it */
+    L = rd64(d, 16); U = rd64(d, 40);
+    /* This host's publication shape, read from the live
+     * header (the J-006-era fixed 3-page expectation is
+     * stale on this tree): offset is one page and usable
+     * is exactly the mapping past it. */
+    REQ(L >= 2 * (uint64_t)PAGE &&
+        rd64(d, 24) == (uint64_t)PAGE && U == L - (uint64_t)PAGE);
     REQ(snap(&s0) == 0);
-    mimir_free(b); /* releases a 4-page length never mapped */
+    (void)setenv("MIMIRALLOC_DIAG", "1", 1);
+    e0 = mimir_core_diag_emitted();
+    wr64(d, 16, L + (uint64_t)PAGE);        /* length grown */
+    wr64(d, 40, U + (uint64_t)PAGE);        /* usable, consistent */
+    REQ(mimir_core_metadata_check() > 0);   /* byte-sum catches it */
+    mimir_free(b); /* Z-066: the retire audit refuses this */
+    REQ(snap(&s1) == 0 && s1.live_mappings == 1);
+    REQ(s1.bytes_released == s0.bytes_released);
+    REQ(s1.metadata_detections == s0.metadata_detections + 1);
+    REQ(mimir_core_diag_emitted() == e0 + 1);
+    wr64(d, 16, L); wr64(d, 40, U);
+    mimir_free(b);
     REQ(snap(&s1) == 0 && s1.live_mappings == 0);
-    REQ(s1.bytes_released - s0.bytes_released == 4 * (uint64_t)PAGE);
-    printf("    desc length+usable consistently grown: free 'succeeded' and Q-RELEASED credited 4 pages for a 3-page mapping -- allocator silent, checker byte-sum flagged it first\n");
-    return SILENT;
+    printf("    desc length+usable consistently grown: Z-066 retire audit DETECTED it -- free refused (no Q-RELEASED credit for a never-mapped page), tally +1, diag emitted +1, restore+free ok\n");
+    return DETECTED;
 }
 
 static int p_desc_requested(void)
@@ -362,25 +378,69 @@ static int p_span_len_incons(void)
     return DETECTED;
 }
 
+struct z066_free_arg { void *ptr; };
+static void *z066_free_thread(void *arg)
+{
+    mimir_free(((struct z066_free_arg *)arg)->ptr);
+    return NULL;
+}
+
 static int p_span_len_consist(void)
 {
-    void *arr[1200]; (void)arr;
+    void *arr[400];
     void *a = mimir_malloc(16); void *S; void *p;
-    int i, found = 0;
+    struct mimir_stats s0, s1;
+    struct z066_free_arg arg;
+    pthread_t th;
+    uint64_t e0;
+    int i, from_s = 0;
     REQ(a); S = span_of(a);
+    REQ(snap(&s0) == 0 && s0.live_small_objects == 1);
+    (void)setenv("MIMIRALLOC_DIAG", "1", 1);
+    e0 = mimir_core_diag_emitted();
     wr64(S, 16, 2 * (uint64_t)PAGE);       /* length doubled */
     wr64(S, 40, 2 * (uint64_t)PAGE - 96);  /* usable, consistent */
-    printf("    checker on consistently-doubled span length: %d violation(s) (byte-sum)\n",
-           mimir_core_metadata_check());
-    for (i = 0; i < 1199; i++) {
+    REQ(mimir_core_metadata_check() > 0);  /* byte-sum flags it */
+    /* Free axis: a CROSS-thread free reaches the central
+     * finder, which now refuses the span on the Z-066
+     * length relation. (A same-thread free would bin the
+     * block under Z-029 without consulting the finder --
+     * the banked posture for every corruption class.) */
+    arg.ptr = a;
+    REQ(pthread_create(&th, NULL, z066_free_thread, &arg) == 0);
+    REQ(pthread_join(th, NULL) == 0);
+    REQ(snap(&s1) == 0 && s1.live_small_objects == 1);
+    REQ(s1.metadata_detections == s0.metadata_detections + 1);
+    REQ(mimir_core_diag_emitted() == e0 + 1);
+    /* Carve axis: 400 further objects are NEVER served
+     * from the corrupt span (it is bypassed like a
+     * magic-corrupt span; a fresh span serves), so
+     * nothing is carved at or past the real page end. */
+    for (i = 0; i < 400; i++) {
         p = mimir_malloc(16);
         REQ(p);
         arr[i] = p;
-        if ((uintptr_t)p >= (uintptr_t)S + PAGE) { found = 1; break; }
+        if (span_of(p) == S) {
+            from_s++;
+            REQ((uintptr_t)p < (uintptr_t)S + PAGE);
+        }
     }
-    REQ(found);
-    printf("    span length+usable consistently doubled: allocator carved object %d at/past the real page end -- out-of-mapping handout, no write attempted\n", i);
-    return SILENT;
+    /* As in test_z066_length leg 2: serves from S after
+     * corruption are the pre-corruption TLS bin stock
+     * only (capacity 16, Z-028), all in-page (REQ'd per
+     * pointer above); a count above capacity would prove
+     * a refill or a fresh carve from the corrupt span. */
+    REQ(from_s >= 1 && from_s <= 16);
+    wr64(S, 16, (uint64_t)PAGE);
+    wr64(S, 40, (uint64_t)PAGE - 96);
+    mimir_free(a);
+    for (i = 0; i < 400; i++) {
+        mimir_free(arr[i]);
+    }
+    REQ(snap(&s1) == 0 && s1.live_small_objects == 0);
+    REQ(mimir_core_metadata_check() == 0);
+    printf("    span length+usable consistently doubled: Z-066 DETECTED it -- cross-thread free refused (tally +1, diag emitted +1), no carve or refill from the corrupt span (%d of 400 served from it, all pre-corruption bin stock in-page, none past the real page end), restore+free ok\n", from_s);
+    return DETECTED;
 }
 
 static int p_span_freehead_live(void)
@@ -480,7 +540,7 @@ static const struct probe PROBES[] = {
     { "desc-state",          p_desc_state,         DETECTED, 0 },
     { "desc-base",           p_desc_base,          DETECTED, 0 },
     { "desc-len-incons",     p_desc_len_incons,    DETECTED, 0 },
-    { "desc-len-consist",    p_desc_len_consist,   SILENT,   0 },
+    { "desc-len-consist",    p_desc_len_consist,   DETECTED, 0 },
     { "desc-requested",      p_desc_requested,     DETECTED, 0 },
     { "desc-uoff",           p_desc_uoff,          DETECTED, 0 },
     { "desc-next-cycle",     p_desc_next_cycle,    DETECTED, 0 },
@@ -494,7 +554,7 @@ static const struct probe PROBES[] = {
     { "span-carve-reduced",  p_span_carve_reduced, DETECTED, 0 },
     { "span-carve-inflated", p_span_carve_inflated,DETECTED, 0 },
     { "span-len-incons",     p_span_len_incons,    DETECTED, 0 },
-    { "span-len-consist",    p_span_len_consist,   SILENT,   0 },
+    { "span-len-consist",    p_span_len_consist,   DETECTED, 0 },
     { "span-freehead-live",  p_span_freehead_live, SILENT,   0 },
     { "span-freehead-wild",  p_span_freehead_wild, DETECTED, 0 },
     { "span-freelist-cycle", p_span_freelist_cycle,DETECTED, 0 },

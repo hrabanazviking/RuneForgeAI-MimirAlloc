@@ -1481,7 +1481,7 @@ lib-debug: $(DBUILD)/libmimiralloc.so
 # composition is unchanged. Recorded run:
 # tests/core/recorded_run_j006.txt; slice record:
 # docs/PHASE_10_METADATA_INTEGRITY.md.
-$(BUILD)/test_j006.o: tests/core/test_j006.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_drain_h001.h tests/core/mimir_integrity_j006.h | $(BUILD)
+$(BUILD)/test_j006.o: tests/core/test_j006.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_drain_h001.h tests/core/mimir_integrity_j006.h tests/core/mimir_diag_j007.h | $(BUILD)
 	$(CC) $(CFLAGS) -c tests/core/test_j006.c -o $@
 
 $(BUILD)/test_j006: $(LIBOBJS) $(BUILD)/test_j006.o
@@ -1491,6 +1491,23 @@ test-j006: $(BUILD)/test_j006
 	./$(BUILD)/test_j006
 
 .PHONY: test-j006
+
+# Z-066: INC-J006-02 consistent-length detection evidence
+# (tests/core/test_z066_length.c), built against the
+# internal stats / diag / integrity surfaces (shape (b)
+# headers under tests/core/). Standalone target
+# `make test-z066`; NOT part of `make test`.
+
+$(BUILD)/test_z066_length.o: tests/core/test_z066_length.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_diag_j007.h tests/core/mimir_integrity_j006.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z066_length.c -o $@
+
+$(BUILD)/test_z066_length: $(LIBOBJS) $(BUILD)/test_z066_length.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z066_length.o -o $@
+
+test-z066: $(BUILD)/test_z066_length
+	./$(BUILD)/test_z066_length
+
+.PHONY: test-z066
 
 # J-007: Phase 10 allocation-free diagnostics evidence
 # test - the test under tests/core/ (test_j007.c) verifies

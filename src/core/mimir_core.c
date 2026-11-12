@@ -586,11 +586,11 @@ static void mimir_stats_note_unlock_failure(void)
  * failing thread; it is a cause LABEL for the report, never
  * a decision input (Invariant 8 posture). */
 static const char *const mimir_diag_op_names[] = {
-    "malloc", "calloc", "realloc"
+    "malloc", "calloc", "realloc", "free"
 };
 static const char *const mimir_diag_cause_names[] = {
     "none", "backing", "arithmetic", "lock", "page-size",
-    "internal"
+    "internal", "metadata"
 };
 #ifdef MIMIR_LOCK_SHARD
 static _Thread_local int mimir_diag_last_cause;
@@ -605,6 +605,48 @@ static int mimir_diag_guard; /* 0 idle, 1 reporting */
 static uint64_t mimir_diag_emitted_count;
 static uint64_t mimir_diag_suppressed_count;
 static uint64_t mimir_diag_max_depth_seen;
+
+/* ---- Z-066 (D-12): INC-J006-02 consistent-length detection ----
+ * State for the detection wiring documented at
+ * descriptor_lengths_audit_locked and span_length_is_true
+ * below. The tallies are atomic (read lock-free by the
+ * getters and the stats snapshot). mimir_z066_last_bad_sum
+ * is touched only under the central lock: it remembers the
+ * walked byte sum of the currently open descriptor
+ * detection episode so repeat refusals of one episode
+ * count as collateral, not as new detections (0 = no open
+ * episode; a real walked sum is never 0 while any mapping
+ * is live). mimir_z066_detected is the J-007 label pattern
+ * carried to the free path: a locked detection site sets
+ * it, and mimir_core_free consumes it AFTER unlocking and
+ * reports through the diag channel (op free, cause
+ * metadata); it is thread-local because the setter and the
+ * consumer are the same call on the same thread. */
+static _Atomic uint64_t mimir_metadata_detections;
+static _Atomic uint64_t mimir_metadata_collateral_refusals;
+static size_t mimir_z066_last_bad_sum;
+static _Thread_local int mimir_z066_detected;
+
+/* Consume the detection label on the free path, after the
+ * caller has unlocked. A span detection is tallied here,
+ * once per refused central free (the descriptor audit
+ * tallies itself, at its site, with episode semantics --
+ * span_event is 0 for that course so it never counts
+ * twice). The diag report is the channel's own: env-gated,
+ * allocation-free, a plain no-op when the gate is closed. */
+static void z066_free_report(int span_event)
+{
+    if (!mimir_z066_detected) {
+        return;
+    }
+    mimir_z066_detected = 0;
+    if (span_event) {
+        __atomic_fetch_add(&mimir_metadata_detections, 1ULL,
+                           __ATOMIC_RELAXED);
+    }
+    mimir_core_diag_report(MIMIR_DIAG_OP_FREE,
+                           MIMIR_DIAG_CAUSE_METADATA, 0);
+}
 
 /* Record the cause and return NULL from a pointer-returning
  * locked construction path (alloc_locked /
@@ -741,6 +783,18 @@ uint64_t mimir_core_diag_suppressed(void)
 uint64_t mimir_core_diag_max_depth(void)
 {
     return __atomic_load_n(&mimir_diag_max_depth_seen,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_metadata_detections(void)
+{
+    return __atomic_load_n(&mimir_metadata_detections,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_metadata_collateral_refusals(void)
+{
+    return __atomic_load_n(&mimir_metadata_collateral_refusals,
                            __ATOMIC_RELAXED);
 }
 
@@ -932,8 +986,90 @@ static int descriptor_is_live(struct mimir_descriptor *desc)
  * actual memory (Invariant 2). Returns 1 on success, 0 on
  * rolled-back failure.
  */
+/*
+ * Z-066 (D-12): the descriptor half of INC-J006-02 --
+ * detection of CONSISTENT length corruption on the
+ * release path. J-006 proved the integrity walk's
+ * byte-sum catches this class (walked live lengths no
+ * longer equal mimir_live_bytes) while every operational
+ * path stayed silent: retire_locked released whatever
+ * length the corrupted header claimed and Q-RELEASED
+ * credited it. This audit is that same byte-sum,
+ * promoted to the one choke point every descriptor
+ * release passes through (free, realloc transfer,
+ * realloc rollback): walk the live registry with the
+ * J-006 step bound, sum mapping_length over the
+ * descriptors that pass descriptor_is_live, and require
+ * the walked count and byte sum to equal the static
+ * counters exactly -- the invariant
+ * mimir_core_metadata_check already proves of every
+ * valid tree, so no defined behaviour changes.
+ *
+ * On mismatch the retirement is REFUSED before any
+ * state moves: the caller reads it exactly like a
+ * release failure (F-06 posture -- the block stays
+ * LIVE, counters untouched, nothing unmapped on a
+ * length nobody can trust). The refusal is fail-closed
+ * and registry-wide by construction: the sum cannot
+ * say WHICH descriptor is corrupt, so while any one
+ * episode is open every retirement refuses; the first
+ * refusal of an episode (a walked sum not seen before)
+ * tallies one detection, later refusals of the same
+ * episode tally as collateral, and any passing audit
+ * closes the episode. Detection is reported on the
+ * J-007 diag channel by the entry point (cause
+ * metadata). Scope, stated plainly: compensating
+ * corruption of two descriptors (+1 page / -1 page)
+ * keeps the sum equal and is NOT detected here; a
+ * descriptor corrupted while POOLED is off this
+ * registry and outside this audit (the pool's own
+ * byte-sum in the walk still flags it when a checker
+ * runs). Caller holds the lock.
+ */
+static int descriptor_lengths_audit_locked(void)
+{
+    struct mimir_descriptor *desc = mimir_registry_head;
+    size_t steps = 0;
+    size_t bytes = 0;
+
+    while (desc != NULL) {
+        if (++steps > mimir_live_mappings) {
+            return 0; /* cycling registry (INC-J006-07 kin) */
+        }
+        if (descriptor_is_live(desc)) {
+            bytes += desc->mapping_length;
+        }
+        desc = desc->list_next;
+    }
+    if (steps != mimir_live_mappings ||
+        bytes != mimir_live_bytes) {
+        if (bytes != mimir_z066_last_bad_sum) {
+            __atomic_fetch_add(&mimir_metadata_detections,
+                               1ULL, __ATOMIC_RELAXED);
+            mimir_z066_last_bad_sum = bytes;
+        } else {
+            __atomic_fetch_add(
+                &mimir_metadata_collateral_refusals, 1ULL,
+                __ATOMIC_RELAXED);
+        }
+        mimir_z066_detected = 1;
+        return 0;
+    }
+    mimir_z066_last_bad_sum = 0;
+    return 1;
+}
+
 static int retire_locked(struct mimir_descriptor *desc)
 {
+    /* Z-066: no retirement on unproven length accounting.
+     * A refusal here precedes every mutation below, so
+     * the F-06 rollback contract (block stays LIVE,
+     * counters restored) holds trivially -- nothing was
+     * ever moved. */
+    if (!descriptor_lengths_audit_locked()) {
+        mimir_diag_last_cause = MIMIR_DIAG_CAUSE_METADATA;
+        return 0;
+    }
     void *mapping_base = desc->mapping_base;
     size_t mapping_length = desc->mapping_length;
     int status;
@@ -1931,6 +2067,32 @@ static void span_registry_remove(struct mimir_span_header *span)
     span->list_prev = NULL;
 }
 
+/* Z-066 (D-12): the span half of INC-J006-02. A span's
+ * mapping is ALWAYS exactly one system page:
+ * span_acquire_locked acquires page_size and refuses
+ * (mapping_length != page_size) before publication, and
+ * no valid code ever writes a span's mapping_length
+ * afterwards. The acquired page size is therefore an
+ * independent record of every live span's true length,
+ * kept here (written once, at the first span
+ * publication) so the validators can hold the header to
+ * it: a mapping_length/usable_size pair corrupted
+ * CONSISTENTLY (the J-006 span-len-consist probe doubled
+ * both and every J-006 relation still passed) now fails
+ * validation, and the span is bypassed for allocation
+ * and refused for free exactly like a magic-corrupt
+ * span. A zero cache means no span has been published
+ * yet in this process, in which case no live span
+ * exists to validate and the check is permissive. */
+static _Atomic size_t mimir_span_page_size;
+
+static int span_length_is_true(const struct mimir_span_header *span)
+{
+    size_t page_size = __atomic_load_n(&mimir_span_page_size,
+                                       __ATOMIC_RELAXED);
+    return page_size == 0 || span->mapping_length == page_size;
+}
+
 static int span_header_is_live(const struct mimir_span_header *span)
 {
     if (!(span->magic == MIMIR_SPAN_MAGIC &&
@@ -1954,7 +2116,8 @@ static int span_header_is_live(const struct mimir_span_header *span)
      * is refused or bypassed, instead of serving, freeing
      * or releasing on false counts. Consistent corruption
      * still passes (INC-J006-05, INC-J006-06). */
-    if (span->mapping_length <
+    if (!span_length_is_true(span) ||
+        span->mapping_length <
             MIMIR_SPAN_HEADER_SIZE + span->class_size ||
         span->usable_size !=
             span->mapping_length - MIMIR_SPAN_HEADER_SIZE ||
@@ -1997,7 +2160,8 @@ static int span_header_is_live_for_free(
           span->class_size == mimir_class_sizes[span->class_index])) {
         return 0;
     }
-    if (span->mapping_length <
+    if (!span_length_is_true(span) ||
+        span->mapping_length <
             MIMIR_SPAN_HEADER_SIZE + span->class_size ||
         span->usable_size !=
             span->mapping_length - MIMIR_SPAN_HEADER_SIZE ||
@@ -2164,6 +2328,11 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
     span->magic = MIMIR_SPAN_MAGIC;
     span->mapping_base = base;
     span->mapping_length = mapping_length;
+    /* Z-066: record the one true span length (see
+     * span_length_is_true). mapping_length == page_size
+     * was proven immediately above. */
+    __atomic_store_n(&mimir_span_page_size, page_size,
+                     __ATOMIC_RELAXED);
     span->usable_offset = MIMIR_SPAN_HEADER_SIZE;
     span->class_size = mimir_class_sizes[class_index];
     span->usable_size = mapping_length - MIMIR_SPAN_HEADER_SIZE;
@@ -2928,6 +3097,24 @@ static struct mimir_span_header *find_span_mode_locked(
         }
         uintptr_t base = (uintptr_t)span->mapping_base;
         uintptr_t first = base + MIMIR_SPAN_HEADER_SIZE;
+
+        /* Z-066: on the free path, a span that is ours
+         * (magic / state / self-base all valid) whose
+         * mapping_length disagrees with the one true span
+         * length, and whose REAL page holds the target, is
+         * a detection: label it for the entry point's diag
+         * report. The validator below refuses the span
+         * regardless; this only names the cause. */
+        if (for_free && !span_length_is_true(span) &&
+            span->magic == MIMIR_SPAN_MAGIC &&
+            span->state == MIMIR_STATE_LIVE &&
+            span->mapping_base == (const void *)span &&
+            target >= first &&
+            target < base + __atomic_load_n(
+                                &mimir_span_page_size,
+                                __ATOMIC_RELAXED)) {
+            mimir_z066_detected = 1;
+        }
 
         if ((for_free ? span_header_is_live_for_free(span)
                       : span_header_is_live(span)) &&
@@ -5599,6 +5786,10 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
                                    mimir_live_span_bytes +
                                    mimir_pool_bytes);
     out->page_size_bytes = (uint64_t)page_size;
+    out->metadata_detections = __atomic_load_n(
+        &mimir_metadata_detections, __ATOMIC_RELAXED);
+    out->metadata_collateral_refusals = __atomic_load_n(
+        &mimir_metadata_collateral_refusals, __ATOMIC_RELAXED);
     for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
         out->span_class_size[i] = (uint64_t)mimir_class_sizes[i];
     }
@@ -6436,10 +6627,17 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
             retire_any_locked(new_ptr, new_desc);
             (void)core_global_unlock();
             /* J-007: the transfer step's L6 release failed:
-             * cause class backing (an OS release refusal). */
+             * cause class backing (an OS release refusal) --
+             * or, Z-066, the length audit refused the
+             * retirement on detected corruption: cause
+             * class metadata, and the label is consumed
+             * here so no later free can inherit it. */
             mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
-                                   MIMIR_DIAG_CAUSE_BACKING,
+                                   mimir_z066_detected
+                                       ? MIMIR_DIAG_CAUSE_METADATA
+                                       : MIMIR_DIAG_CAUSE_BACKING,
                                    (uint64_t)new_size);
+            mimir_z066_detected = 0;
             return NULL;
         }
         (void)core_global_unlock();
@@ -6569,6 +6767,10 @@ void mimir_core_free(void *ptr)
     if (ptr == NULL) {
         return;
     }
+    /* Z-066: the detection label is per-call; a stale label
+     * left by a realloc course on this thread must never be
+     * reported as this call's detection. */
+    mimir_z066_detected = 0;
 
 #ifndef MIMIR_DEBUG
     /* Z-029: the owner record routes the free first: the
@@ -6697,6 +6899,9 @@ void mimir_core_free(void *ptr)
 #endif
         }
         (void)core_global_unlock();
+        /* Z-066: a central free refused on a length-corrupt
+         * span reports here (tallied once, diag emitted). */
+        z066_free_report(1);
         return;
 #else /* MIMIR_LOCK_SHARD */
         {
@@ -6714,6 +6919,8 @@ void mimir_core_free(void *ptr)
             }
         }
         (void)core_global_unlock();
+        /* Z-066: as the non-shard branch above. */
+        z066_free_report(1);
         return;
 #endif /* MIMIR_LOCK_SHARD */
     }
@@ -6747,6 +6954,11 @@ void mimir_core_free(void *ptr)
     }
     if (!retire_locked(desc)) {
         (void)core_global_unlock();
+        /* Z-066: a Z-066 audit refusal reports through the
+         * diag channel (cause metadata); an ordinary F-06
+         * release failure set no label and reports nothing,
+         * exactly as before. */
+        z066_free_report(0);
         return;
     }
 

@@ -306,6 +306,24 @@ struct mimir_stats {
     uint64_t drain_lock_failures;
     uint64_t trim_lock_failures;
     uint64_t free_lock_failures;
+    /* Z-066 (D-12): INC-J006-02 consistent-length detection
+     * tallies, appended at the END so every earlier field
+     * keeps its offset (the Z-064 append discipline).
+     * metadata_detections counts detection EPISODES: a
+     * descriptor-registry length-accounting mismatch is one
+     * episode per distinct walked byte sum (repeat refusals
+     * of the same episode count as collateral, below); a
+     * span whose mapping_length disagrees with the one true
+     * span length counts one detection per refused central
+     * free of one of its objects. Monotone.
+     * metadata_collateral_refusals counts retire refusals
+     * caused by an already-counted descriptor episode --
+     * while any live descriptor's length accounting is
+     * corrupt, EVERY retirement is refused (fail-closed),
+     * so valid blocks' frees refuse too; those refusals are
+     * collateral of the one episode, never new detections. */
+    uint64_t metadata_detections;
+    uint64_t metadata_collateral_refusals;
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
 
@@ -329,6 +347,15 @@ uint64_t mimir_core_unlock_failures(void);
 uint64_t mimir_core_drain_lock_failures(void);
 uint64_t mimir_core_trim_lock_failures(void);
 uint64_t mimir_core_free_lock_failures(void);
+
+/* Z-066 (D-12): lock-free reads of the two detection
+ * tallies above (single atomic loads, the Z-064 getter
+ * pattern): the tallies stay readable even on a tree whose
+ * metadata is corrupt. Internal only, INC-E001-07 shape
+ * (b) exactly like the snapshot; bound local in the shared
+ * library (nm -D stays exactly 4). */
+uint64_t mimir_core_metadata_detections(void);
+uint64_t mimir_core_metadata_collateral_refusals(void);
 
 #ifdef MIMIR_DEBUG
 /* J-004 on-demand red-zone verification (debug builds only;
@@ -419,7 +446,9 @@ int mimir_core_metadata_check(void);
 enum mimir_diag_op {
     MIMIR_DIAG_OP_MALLOC  = 0,
     MIMIR_DIAG_OP_CALLOC  = 1,
-    MIMIR_DIAG_OP_REALLOC = 2
+    MIMIR_DIAG_OP_REALLOC = 2,
+    MIMIR_DIAG_OP_FREE    = 3 /* Z-066: a free refused on detected
+                               * metadata corruption (INC-J006-02) */
 };
 enum mimir_diag_cause {
     MIMIR_DIAG_CAUSE_NONE       = 0,
@@ -427,7 +456,9 @@ enum mimir_diag_cause {
     MIMIR_DIAG_CAUSE_ARITHMETIC = 2, /* checked arithmetic refused */
     MIMIR_DIAG_CAUSE_LOCK       = 3, /* global lock failure */
     MIMIR_DIAG_CAUSE_PAGESIZE   = 4, /* page-size discovery failed */
-    MIMIR_DIAG_CAUSE_INTERNAL   = 5  /* layout/publication gate */
+    MIMIR_DIAG_CAUSE_INTERNAL   = 5, /* layout/publication gate */
+    MIMIR_DIAG_CAUSE_METADATA   = 6  /* Z-066: INC-J006-02 length
+                                      * corruption detected */
 };
 void mimir_core_diag_report(int op, int cause, uint64_t requested);
 uint64_t mimir_core_diag_emitted(void);

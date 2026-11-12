@@ -1,0 +1,266 @@
+MimirAlloc Z13 recorded run - Z-066: Silent corruption classes, round 1 (D-12)
+Thu 2026-11-12 EST (host clock 17:2x-17:5x UTC during the runs)
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64, page 4096, 128 GB UMA)
+Base: seat main c0e19cd (banked Z-001..Z-060), merged into
+  yrsa/mimiralloc-team-05 as 6808ad8 (clean, no conflicts) on top of
+  14bbea0 (Z-060, banked). This slice BUILDS AHEAD: it banks only
+  after Z-061..Z-065 in roadmap order.
+Load state: shared host throughout. Baseline gate ran at loadavg
+  ~0.5-2.4 with the Z-061 soak finishing on cores 2/3; the A/B cost
+  bench ran pinned to core 5 in a quiet window (loadavg 0.81 ->
+  0.52, soak complete). Every graded quantity below is an exact
+  counter or a refused/accepted outcome, never a wall time, except
+  S7, which is a same-machine A/B and says so.
+
+S1. Roadmap gate
+Gate (docs/MIMIRALLOC_Z13_ROADMAP.md Z-066): the INC-J006 silent
+classes 1-2 probes flip from SILENT to DETECTED in the 25-probe
+suite on this host.
+Class map (the roadmap names classes by round, not by INC number;
+this reading is forced by Z-067's own parenthetical):
+  class 1 = desc-len-consist (descriptor mapping_length +
+    usable_size corrupted consistently; INC-J006-02)
+  class 2 = span-len-consist (span mapping_length + usable_size
+    corrupted consistently; INC-J006-02, span form)
+  classes 3-4 (Z-067) = span-freehead-live (INC-J006-04),
+    span-live-zero (INC-J006-06)
+  remaining (Z-068) = span-class-consist (INC-J006-05),
+    desc-owner-scratch (INC-J006-03)
+Result: BOTH probes flip. In tests/core/test_j006.c on this tree:
+  [ok] probe 05 desc-len-consist  exit=10 (expected exit=10 DETECTED)
+  [ok] probe 19 span-len-consist  exit=10 (expected exit=10 DETECTED)
+At baseline on the same merged tree, probe 05 failed outright
+(exit=90: its J-006-era host fact, mapping_length == 3 pages for
+malloc(20000), is stale on this tree -- the rewritten probe reads
+the live header's own length/offset/usable and corrupts relative
+to them) and probe 19 passed AS SILENT (exit=42: "allocator carved
+object 249 at/past the real page end"). Full-suite delta,
+baseline -> final: 12 ok / 13 FAIL -> 13 ok / 12 FAIL, and a
+per-probe diff shows the ONLY changed lines are the two Z-066
+probes. The 12 remaining failures are pre-existing on the
+unmodified seat tree (proven in S5) and are not this slice's to
+absorb silently; they are recorded there by name.
+
+S2. Mechanism (all in src/core/mimir_core.c/.h)
+Descriptor form -- descriptor_lengths_audit_locked(), consulted
+at the head of retire_locked, the single choke point every
+descriptor release passes through (mimir_core_free,
+mimir_realloc transfer retire, retire_any_locked rollback):
+walk the live registry with the J-006 step bound, sum
+mapping_length over descriptors passing descriptor_is_live,
+require walked count == mimir_live_mappings and walked sum ==
+mimir_live_bytes -- exactly the byte-sum invariant
+mimir_core_metadata_check already proves of every valid tree
+(docs/PHASE_10_METADATA_INTEGRITY.md S3 item 6). On mismatch the
+retirement is refused BEFORE any state moves: the caller reads
+it as an F-06 release failure (block stays LIVE, counters
+untouched, nothing unmapped on an untrusted length). The audit
+cannot say WHICH descriptor is corrupt, so refusal is
+registry-wide while an episode is open (fail-closed, S6); the
+first refusal of an episode (a walked sum not seen before)
+tallies one detection, later refusals of the same walked sum
+tally as collateral, and a passing audit closes the episode.
+Span form -- span_length_is_true() added to span_header_is_live
+and span_header_is_live_for_free: a span's mapping is always
+exactly one system page (span_acquire_locked acquires page_size
+and refuses mapping_length != page_size before publication; no
+valid code writes a span's mapping_length afterwards). The page
+size is cached in a file-scope atomic at first span publication
+and the validators hold the header to it, so the consistently
+doubled pair now fails validation: the span is bypassed for
+allocation and refused for central free, exactly like a
+magic-corrupt span.
+Diag wiring -- the J-007 channel gains op FREE (3, appended) and
+cause METADATA (6, appended); no existing enumerator, name, or
+offset changes anywhere. Locked detection sites set a
+thread-local label; mimir_core_free consumes it AFTER unlocking
+and calls mimir_core_diag_report(OP_FREE, CAUSE_METADATA, 0)
+(the channel's own contract: allocation-free, env-gated by
+MIMIRALLOC_DIAG=1, closed gate = no output and no emission
+counter movement). A Z-066 refusal on the realloc transfer path
+reports op=realloc cause=metadata instead of the historical
+backing label. Detection tallies are a stats surface, appended
+at the END of struct mimir_stats (Z-064 append discipline):
+metadata_detections and metadata_collateral_refusals, copied by
+mimir_core_stats_snapshot and readable lock-free through
+mimir_core_metadata_detections() /
+mimir_core_metadata_collateral_refusals() (shape (b), bound
+local; nm -D on libmimiralloc.so stays exactly 4, verified).
+
+S3. Injection proof (tests/core/test_z066_length.c, make test-z066,
+standalone, NOT in make test -- the Z-064 precedent)
+test_z066_length: legs=5 failed=0 (parent checks=10 failures=0)
+  control:      valid large/small churn with the diag gate open:
+                detections=0 collateral=0 emitted=0.
+  descriptor:   consistent +1 page growth on a live mapping:
+                free refused (live_mappings stays 2,
+                bytes_released unmoved), detections=1,
+                collateral=0, emitted=1; a free of a DIFFERENT
+                valid block in the same episode refused as
+                collateral (detections still 1, collateral=1,
+                emitted=2); restore -> both free cleanly, walk 0.
+                Diag lines on stderr, verbatim form:
+                "mimiralloc: error op=free cause=metadata req=0
+                 failures=0 posture=0"
+  span:         consistent doubling of a live class-16 span:
+                cross-thread free refused (a same-thread free
+                would bin under Z-029 without consulting the
+                central finder -- the banked posture for every
+                corruption class), detections=1, emitted=1;
+                across 400 further malloc(16), serves from the
+                corrupt span were 7 -- exactly its
+                pre-corruption TLS bin stock (batch 8 refill
+                minus the block under test), every one in-page;
+                no carve and no refill came from it; restore +
+                free clean, walk 0.
+  compensating: the recorded boundary, proven as a leg (S6):
+                +1P / -1P pair (shrink side also lowering
+                requested_size) -> frees succeed, tally 0.
+  gate-off:     MIMIRALLOC_DIAG unset: the same descriptor
+                refusal tallies detections=1 with emitted=0 --
+                the tally is a stats surface; emission is the
+                gated channel.
+The two flipped j006 probes assert the same facts inside the
+25-probe harness (tally +1 and emitted +1 each, restore+free
+clean), so the flip is a detection with a report, not a
+relabelled expectation.
+
+S4. Standing gate and neighbours (counts read from log files)
+  scripts/z13/run_gate.sh on the final tree:
+    GATE COUNTS: checks=4988 failed=0 skips=77 -- GREEN,
+    identical to the merged-baseline run taken before any edit.
+  make test-z048 PASS, test-z050 PASS, test-z052 PASS.
+  Variant compiles of src/core/mimir_core.c, -Werror clean:
+    MIMIR_LOCK_SHARD, MIMIR_LOCK_HIST, MIMIR_DEBUG,
+    MIMIR_ARENA_CCD, MIMIR_OOL_META, MIMIR_PLACEMENT_BESTFIT,
+    MIMIR_PLACEMENT_FIRSTFIT.
+  nm -D --defined-only build/libmimiralloc.so: exactly 4
+    (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free).
+
+S5. Pre-existing suite state on this tree (recorded, not absorbed)
+The 25-probe suite is NOT part of the standing gate, and on the
+seat tree it is already red for reasons that predate Z-066:
+  - Baseline on seat c0e19cd (merge tree, before Z-066 edits):
+    12 ok / 13 FAIL. Failing: desc-len-consist (stale 3-page
+    host fact, S1), span-magic, span-class-mismatch,
+    span-class-consist, span-live-zero, span-carve-reduced,
+    span-carve-inflated, span-len-incons, span-freehead-live,
+    span-freehead-wild, span-freelist-cycle, span-next-cycle,
+    span-next-wild. Shape: the J-006-era span expectations
+    predate the Z-029 TLS cache (same-thread frees bin without
+    central validation; snapshot accounting settles at flush)
+    and the Z-048 mapping pool -- the same family team-03
+    recorded for test-j002 / test-i004 at Z-064. Z-066 changes
+    exactly two of the thirteen (its own probes, both now ok)
+    and leaves the other eleven byte-identical in outcome;
+    reconciling them belongs to the Z-068 full-suite re-run or
+    its own slice, and is named here as immediate next work
+    for the keeper's queue, not silently left.
+  - make test-j007 on a pristine seat c0e19cd archive:
+    59 checks / 10 failures; on the Z-066 tree: 59 checks / 10
+    failures, and the sorted FAIL lines are IDENTICAL
+    (I-004 acquire/lock/page-size injections no longer land
+    since the Z-048 pool). My diag enum appends change no
+    j007 outcome. (Verify archive was deleted after the run.)
+
+S6. Scope of the DETECTED claim (verbatim, per red-team review)
+INC-J006-02 classes 1-2 DETECTED: descriptor registry sum +
+  span mapping_length, single non-compensating corruption on
+  a live block only.
+INC-J006 remains OPEN.
+Owner-scratch: SILENT / NOT DETECTED.
+Class-consistency: SILENT / NOT DETECTED.
+Compensating multi-descriptor corruption: NOT DETECTED
+  (proven as the compensating leg of test-z066: a +1 page /
+  -1 page pair whose shrink side also lowers requested_size
+  keeps the walked sum equal; without the requested_size
+  lowering, descriptor_is_live catches the shrink side alone).
+Pooled-descriptor corruption: NOT COVERED (a descriptor
+  corrupted while POOLED is off the live registry and outside
+  the audit; the walk's pool byte-sum still flags it when a
+  checker runs).
+Descriptor refusal is registry-wide and fail-closed: while
+  one episode is open, valid blocks' retirements also refuse
+  (tallied as collateral, one diag line per refused retire).
+  It ends the moment the corruption is repaired (the probes
+  restore and free cleanly) -- the same non-destructive
+  refusal posture as J-006's own detections, widened from
+  one block to the registry because a byte sum cannot
+  localise. Detection is NOT localisation: the audit proves
+  some live descriptor's length accounting is corrupt,
+  never which one.
+Span/TLS posture: objects already sitting in a thread's TLS
+  bin when a span is corrupted are served from the bin
+  without re-validation (Z-029's posture for every header
+  corruption class); detection fires at the next central
+  touch (carve selection, refill, central free). A
+  same-thread free of a corrupt span's block bins it; the
+  refusal surface for spans is the central (cross-thread)
+  free, the carve/refill selection, and the walk.
+
+S7. Cost (same-machine A/B, base = pristine seat c0e19cd objects,
+patched = this tree; bench links the core objects directly,
+20000 reps x 5 rounds, median ns/op, taskset -c 5, quiet window;
+the Z-048 pool serves the large legs, so these are pool-hit
+prices, not mmap prices)
+  large alloc/free pair (20000 B):
+    1 live mapping held:   base 31 ns/op, patched 32 ns/op
+    65 live mappings held: base 31 ns/op, patched 166 ns/op
+  large realloc transfer (20000 -> 100000, then free):
+    1 live mapping held:   base 161 ns/op, patched 161 ns/op
+    65 live mappings held: base 170 ns/op, patched 479 ns/op
+  small alloc/free pair (32 B): 20 ns/op both, at both holds.
+Reading: the descriptor audit costs ~2 ns per live registry
+entry per retirement (the transfer leg pays it twice: transfer
+retire + final free), immeasurable at desktop live-mapping
+counts and linear in them; the span relation and the free-path
+label cost nothing measurable on the small path. This is the
+honest price of the walk-promotion design, recorded for the
+Z-069/Z-070 economics slices: if a future workload holds many
+large mappings hot, the O(1) alternatives named by INC-J006-02
+itself (a static side record of true lengths, or a checksum --
+the latter blocked on the C1.4 reserved-byte duty) are the
+named successors. No perf gate is named by the Z-066 roadmap
+entry; the standing correctness gate is green.
+
+S8. Review record
+Lead + 6 Mythic Engineering sub-agents spawned as reviewers
+(traceability, correctness/invariant safety, diag-channel
+contract, test/injection proof, performance, honesty/red
+team) -- no 429; all six returned before commit. Folded:
+episode-vs-collateral tally split (red team #4, S2/S6);
+verbatim scope block (red team #7, S6); pooled + TLS-bin
+exclusions (red team #5/#6, S6); class->probe->INC map and
+no-boundary-leak check -- the audit reads ONLY descriptor
+length accounting, so Z-067's live_count (a span counter)
+and Z-068's classes cannot trip it (traceability #1/#2, S1);
+A/B cost table (performance #1/#2, S7); gate-off leg
+(traceability #7, S3); compensating-pair leg constructed
+correctly (requested_size lowering, S3/S6). Answered without
+change: tally stays ungated while emission is gated (the
+Z-064 stats-tally precedent; the diag reviewer's contrary
+ask would make the stats surface env-dependent); the walk
+bound is the live counter, as in every J-006 walk (a cycling
+registry ends in refusal, and the sum uses the walked nodes
+only); rollback retires audit safely because publication
+commits registry + counters inside the same locked section
+before any retire can run (gate + 4988 checks exercise
+realloc rollback paths throughout).
+
+S9. Files in this slice
+  src/core/mimir_core.c   (audit, span relation, diag wiring,
+                           tallies, snapshot copies, realloc
+                           cause label)
+  src/core/mimir_core.h   (diag op/cause appends, stats field
+                           appends, tally getters)
+  Makefile                (test-j006 diag-header dependency;
+                           test-z066 standalone block)
+  tests/core/test_j006.c  (desc-len-consist and span-len-consist
+                           probes rewritten to DETECTED with
+                           tally + emission assertions; the
+                           other 23 probes untouched)
+  tests/core/test_z066_length.c (new; 5-leg injection proof)
+  tests/perf/recorded_run_z13_z066.txt (this file)
+CAMPAIGN_STATE.md updated on disk only, never committed.
+Not pushed: banking is the keeper's job at the seat, in
+roadmap order behind Z-061..Z-065.
