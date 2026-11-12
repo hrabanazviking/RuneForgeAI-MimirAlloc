@@ -1,0 +1,262 @@
+MimirAlloc Z13 slice Z-038 - recorded run of tests/perf/probe_z038.c (COMPLETION RUN - run of record)
+slice: Z-038 - Arena ladder: the Z-020/Z-021 ladders re-run for the arena variant; roadmap gate = three-way ladder table (banked / arena / glibc) recorded
+date: 2026-11-12T06:00:21..06:02:54-05:00 (completion run of record; America/New_York)
+base: 33fad05 (branch yrsa/mimiralloc-team-06: merge of seat main d0185ab - banked Z-001..Z-037 plus the Z-029 TLS fix as banked at the seat - into this branch at 234ff53. The single merge conflict, src/core/mimir_core.c, was resolved to the seat version byte-for-byte: the seat core is the same Z-029 fix 3-way-merged against the Z-037 arena code plus the keeper repair giving small_free_tally_locked its arena variant branch. Verified after the merge: worktree src/core/mimir_core.c is byte-identical to d0185ab:src/core/mimir_core.c, as are mimir_core.h, mimir_platform.c, the Z-029 implementation doc and its recorded run.)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, 16 cores / 32 threads, 2 CCDs
+
+environment header (scripts/z13/host_truth.sh, Z-002, verbatim in runner output):
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T11:00:21Z
+kernel: Linux 7.3.0-10-generic x86_64
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 65%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.27 0.72 1.09 (at runner start; see load state below)
+
+topology (sysfs, printed by the runner):
+cpu0 core_id=0 siblings=0,16 L3=32768K L3_shared=0-7,16-23
+cpu8 core_id=8 siblings=8,24 L3=32768K L3_shared=8-15,24-31
+cpu16 core_id=0 siblings=0,16 L3=32768K L3_shared=0-7,16-23
+cpu24 core_id=8 siblings=8,24 L3=32768K L3_shared=8-15,24-31
+governor cpu0: performance
+
+compiler: cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 (all three legs built fresh under build/z38/ in this session; arena leg = core+platform built with -DMIMIR_ARENA_CCD=1 and the shared API object, the landed Z-037 contract per tests/perf/run_z037.sh; glibc leg needs no allocator objects)
+sha256 (completion run of record, printed by the runner at build time):
+472ec674f4f64b8c9278cae989bd5988f9c5e3ac63a124f3401f5066e132bc53  tests/perf/probe_z038.c
+0d7106f76d70ca366af2085776da75ce649ef1828b20b25c10ee3becefe24645  tests/perf/run_z038.sh
+1e363db3ec1661008c43ff0ea49f03ec22947bb141b79d0b210dfef92907e738  tests/perf/summarize_z038.py
+efa9f7db9602333689e40081b0acc99c7ad4315772750eec208884e7f9ecd132  build/z38/probe_z038_banked
+27c09d34e7a0a2ad5824785a59943e6298495cf4d852a709ec2e249f6183dc02  build/z38/probe_z038_glibc
+adf9ce42f20a017b1bfd9a537fc1d030bf8412ff702b55d861540c4e15c89900  build/z38/probe_z038_arena
+
+=== WHY THIS RUN SUPERSEDES THE FIRST Z-038 SESSION (re-run judgement, recorded in full) ===
+The first Z-038 session (2026-11-12T05:24:57..05:26:48-05:00, base a22ca68, banked Z-001..Z-035) measured the banked and glibc legs and recorded the arena leg OWED, because Z-037 had not landed. Its staged artifacts were left uncommitted, deliberately, when stress probes from that same work exposed serious defects in the banked Z-029 TLS cache and the fix (branch 234ff53, banked at the seat as d0185ab) took precedence. The completing lead was ordered to judge whether the first session's numbers could stand. Judgement: THE BANKED LEG COULD NOT BE CERTIFIED UNAFFECTED, and the proof is in this run's own tables:
+  (1) Exposure in principle: the ladder workloads churn the TLS cache continuously. Of the three proven defects, defect 2 (a settled free-to-bin's pending -1 double-spent when the block was re-hit before the flush) is a SAME-THREAD interleaving - exactly the alloc/free/re-alloc pattern small_churn and mixed_batch generate - and defects 1 and 3 (hit-handout accounting vs cross-thread frees; owner-record duplication) sit in the same cache paths the multi-threaded rungs exercise. A core proven to drift its live/tally accounting and to segfault under neighbouring stress geometries cannot have its throughput numbers certified clean by inspection: corrupted tally state changes span-release and flush behaviour, which is timing behaviour.
+  (2) Proof in fact: on the fixed tree the banked mixed_batch leg moved by ~4.4x at 1 thread (37.266 vs 8.416 Mops/s) and its 32-thread shape changed from a monotone collapse to 0.36x into a dip-and-recovery to 0.88x. Whatever mixture of the accounting fix and session load produced that delta, the staged banked numbers demonstrably did not describe the fixed allocator. (The small_churn banked leg, by contrast, reproduced closely - 35.464 vs 33.665 at 1 thread, same flat shape - which is consistent with small_churn's tighter single-class churn hitting the defective interleavings less; it was re-run anyway, for one-session comparability.)
+  (3) The glibc leg was PROVABLY unaffected by the defects (built -DLEG_GLIBC, no mimir object linked; the numbers are the host glibc's), and it was still re-run: the slice's discipline is one session, all legs back to back under one load window, and a two-session three-way table would not be an honest table.
+  (4) The arena leg is measured here for the first time: Z-037 has landed (seat 25322cd, inside base d0185ab), so the OWED third of the gate is now payable. The probe's guard was inverted, not removed: an arena-labelled build WITHOUT -DMIMIR_ARENA_CCD now fails with #error, so the banked core still can never be measured under the arena name. The runner builds the arena leg only when MIMIR_ARENA markers are present, under the landed run_z037.sh contract.
+The first session's recorded run is therefore SUPERSEDED as the run of record by this file. Its raws and log are preserved in hidden_files (z038_attempt1_*.raw, z038_run_attempt1.log, z038_attempt1_summary.txt) and its session remains useful history - in particular its rep-separation proof direction (glibc ahead at every rung) is confirmed by this run - but none of its numbers are carried into the tables below.
+
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004; the frozen Z-020/Z-021 ladder shape, rung for rung): unchanged from the first session - one probe source for every leg; bench_k002.c included UNMODIFIED (main renamed away); workloads small_churn (50000 iterations per thread) and mixed_batch (200 batches = 51200 ops per thread); rungs 1 2 3 4 6 8 12 16 20 24 28 32 threads; repetitions are separate PROCESSES, 5 per ladder point, headline = median of processes; one discarded warm-up process per point at 1/10 scale plus the probe in-process 1/10 warm-up pass; 2 s pauses between points; worker t pins itself to CPU t (identity order, verified per worker with sched_getcpu()); runner wraps each process in taskset -c 0-31. Timing window: PER-THREAD (the Z-021 window) on all legs. mixed_batch thread-local replica discipline identical, selfcheck MATCH on all three legs in this run (checksum 1228352, 9472 ops at 37 batches). Checksum discipline: every rung's checksums read OK on all three legs; the selfcheck references agreed across legs (small_churn 6371544, mixed_batch 6627200 - the same values as Z-020/Z-021 and the first Z-038 session, same bench). Leg order in this session: banked, glibc, arena.
+
+load state (SHARED HOST - recorded honestly):
+  The lead checked the host before launching and waited until it was quiet: the sibling Z-043 probe and an Aesir mojo test seen at 05:57 had exited by launch. Runner start loadavg 0.27/0.72/1.09 - the quietest start this campaign's ladders have recorded - per-point loadavg in the leg raws stays in the 0.3..2.4 range (the rise at the end is the ladders' own load), runner end 2.34/1.12/1.16. No co-tenant above 1% of one core appears in the runner's start snapshot. Verdict on load: a quiet shared-host window; still a shared machine, so these numbers are this-session comparisons between legs, not quiet-machine baselines, and must not be quoted as baselines.
+correctness gate: scripts/z13/run_gate.sh GREEN in this worktree on the merged tree (33fad05) after the run - 4988 checks / 0 failed / 77 by-design skips, make exit 0 (log hidden_files/z038_gate_fixed.log). Identical counts to the Z-001..Z-035 baseline; the slice adds no make tests. (An earlier RED line in the keeper-visible stdout was the lead's own launch error - the bash gate script invoked under sh - not a tree result; the gate was re-run under bash and its own log is the evidence.)
+
+=== SUMMARISER OUTPUT (summarize_z038.py on the three leg raws, verbatim from hidden_files/z038_run_fixed.log) ===
+=== small_churn (banked) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1             35.464   35.298   35.972     1.00x     100.0%             35.464    0.73  OK
+      2             25.228   24.935   25.359     0.71x      35.6%             12.614    0.84  OK
+      3             28.411   28.384   28.427     0.80x      26.7%              9.470    0.04  OK
+      4             29.155   29.111   29.216     0.82x      20.6%              7.289    0.07  OK
+      6             29.517   29.461   29.575     0.83x      13.9%              4.919    0.26  OK
+      8             30.263   30.098   30.397     0.85x      10.7%              3.783    0.79  OK
+     12             17.911   17.893   17.933     0.51x       4.2%              1.493    0.11  OK
+     16             19.998   19.948   20.011     0.56x       3.5%              1.250    0.09  OK
+     20             24.094   23.986   24.261     0.68x       3.4%              1.205    0.76  OK
+     24             28.933   28.731   28.989     0.82x       3.4%              1.206    0.41  OK
+     28             33.318   33.279   33.354     0.94x       3.4%              1.190    0.14  OK
+     32             37.206   37.109   37.301     1.05x       3.3%              1.163    0.37  OK
+INVERSION small_churn (banked): peak aggregate throughput at 32 threads (37.206 Mops/s)
+INVERSION small_churn (banked): scaling inverts between 1 and 2 threads (first drop beyond the 5.0% noise bound)
+=== mixed_batch (banked) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1             37.266   33.108   37.458     1.00x     100.0%             37.266    0.69  OK
+      2             23.181   23.068   23.308     0.62x      31.1%             11.590    0.50  OK
+      3             28.180   27.198   28.499     0.76x      25.2%              9.393    3.55  OK
+      4             28.965   28.594   29.055     0.78x      19.4%              7.241    0.82  OK
+      6             28.765   27.656   29.521     0.77x      12.9%              4.794    0.77  OK
+      8             29.841   28.606   30.628     0.80x      10.0%              3.730    0.98  OK
+     12             16.439   16.074   16.971     0.44x       3.7%              1.370    1.33  OK
+     16             20.437   18.691   21.113     0.55x       3.4%              1.277    1.83  OK
+     20             23.136   21.754   23.691     0.62x       3.1%              1.157    0.77  OK
+     24             26.804   25.858   27.615     0.72x       3.0%              1.117    3.60  OK
+     28             30.115   28.491   30.480     0.81x       2.9%              1.076    3.38  OK
+     32             32.956   32.461   33.179     0.88x       2.8%              1.030    0.41  OK
+INVERSION mixed_batch (banked): peak aggregate throughput at 1 threads (37.266 Mops/s)
+INVERSION mixed_batch (banked): scaling inverts between 1 and 2 threads (first drop beyond the 5.0% noise bound)
+=== small_churn (glibc) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1            296.939  293.171  298.734     1.00x     100.0%            296.939    0.81  OK
+      2            358.962  353.433  363.631     1.21x      60.4%            179.481    0.69  OK
+      3            884.132  879.306  888.173     2.98x      99.2%            294.711    0.67  OK
+      4           1148.066  1126.621  1176.346     3.87x      96.7%            287.017    0.41  OK
+      6           1684.125  1666.056  1732.462     5.67x      94.5%            280.688    0.50  OK
+      8           1500.887  1252.007  2175.048     5.05x      63.2%            187.611   58.85  OK
+  DRIFT-REJECT leg=glibc threads=8: drift 58.85% > bound 8.0% - median indicative only
+     12           2486.315  1869.619  3370.162     8.37x      69.8%            207.193   34.92  OK
+  DRIFT-REJECT leg=glibc threads=12: drift 34.92% > bound 8.0% - median indicative only
+     16           2664.961  2496.731  4484.959     8.97x      56.1%            166.560   39.33  OK
+  DRIFT-REJECT leg=glibc threads=16: drift 39.33% > bound 8.0% - median indicative only
+     20           3171.080  2035.586  3291.444    10.68x      53.4%            158.554   21.56  OK
+  DRIFT-REJECT leg=glibc threads=20: drift 21.56% > bound 8.0% - median indicative only
+     24           4114.309  404.663  4196.171    13.86x      57.7%            171.430   90.18  OK
+  DRIFT-REJECT leg=glibc threads=24: drift 90.18% > bound 8.0% - median indicative only
+     28           2792.026  2396.345  3360.134     9.40x      33.6%             99.715   15.66  OK
+  DRIFT-REJECT leg=glibc threads=28: drift 15.66% > bound 8.0% - median indicative only
+     32           2989.252  2033.032  4004.936    10.07x      31.5%             93.414   27.83  OK
+  DRIFT-REJECT leg=glibc threads=32: drift 27.83% > bound 8.0% - median indicative only
+INVERSION small_churn (glibc): peak aggregate throughput at 24 threads (4114.309 Mops/s)
+INVERSION small_churn (glibc): scaling inverts between 6 and 8 threads (first drop beyond the 5.0% noise bound)
+=== mixed_batch (glibc) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1            295.708  172.109  296.688     1.00x     100.0%            295.708   20.73  OK
+  DRIFT-REJECT leg=glibc threads=1: drift 20.73% > bound 8.0% - median indicative only
+      2            574.432  346.975  598.026     1.94x      97.1%            287.216   34.85  OK
+  DRIFT-REJECT leg=glibc threads=2: drift 34.85% > bound 8.0% - median indicative only
+      3            861.793  485.121  873.725     2.91x      97.1%            287.264   41.52  OK
+  DRIFT-REJECT leg=glibc threads=3: drift 41.52% > bound 8.0% - median indicative only
+      4           1122.739  654.301  1162.579     3.80x      94.9%            280.685   22.35  OK
+  DRIFT-REJECT leg=glibc threads=4: drift 22.35% > bound 8.0% - median indicative only
+      6           1741.102  956.828  1760.095     5.89x      98.1%            290.184   22.21  OK
+  DRIFT-REJECT leg=glibc threads=6: drift 22.21% > bound 8.0% - median indicative only
+      8           2150.854  1261.717  2269.529     7.27x      90.9%            268.857   38.93  OK
+  DRIFT-REJECT leg=glibc threads=8: drift 38.93% > bound 8.0% - median indicative only
+     12           3021.540  1946.706  3134.438    10.22x      85.1%            251.795   15.92  OK
+  DRIFT-REJECT leg=glibc threads=12: drift 15.92% > bound 8.0% - median indicative only
+     16           3820.521  2556.006  4026.918    12.92x      80.7%            238.783   22.59  OK
+  DRIFT-REJECT leg=glibc threads=16: drift 22.59% > bound 8.0% - median indicative only
+     20           2896.567  1704.755  2994.073     9.80x      49.0%            144.828   21.32  OK
+  DRIFT-REJECT leg=glibc threads=20: drift 21.32% > bound 8.0% - median indicative only
+     24           3552.913  2364.659  3598.570    12.01x      50.1%            148.038   16.08  OK
+  DRIFT-REJECT leg=glibc threads=24: drift 16.08% > bound 8.0% - median indicative only
+     28           2543.580  2423.435  3473.440     8.60x      30.7%             90.842    6.96  OK
+     32           4265.012  2714.160  4338.569    14.42x      45.1%            133.282   17.32  OK
+  DRIFT-REJECT leg=glibc threads=32: drift 17.32% > bound 8.0% - median indicative only
+INVERSION mixed_batch (glibc): peak aggregate throughput at 32 threads (4265.012 Mops/s)
+INVERSION mixed_batch (glibc): scaling inverts between 16 and 20 threads (first drop beyond the 5.0% noise bound)
+=== small_churn (arena) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1             35.494   27.566   35.907     1.00x     100.0%             35.494   12.82  OK
+  DRIFT-REJECT leg=arena threads=1: drift 12.82% > bound 8.0% - median indicative only
+      2             24.634   24.502   24.800     0.69x      34.7%             12.317    0.57  OK
+      3             28.504   28.480   28.553     0.80x      26.8%              9.501    0.11  OK
+      4             29.135   29.113   29.163     0.82x      20.5%              7.284    0.11  OK
+      6             29.637   29.573   29.658     0.84x      13.9%              4.940    0.03  OK
+      8             30.529   30.488   30.575     0.86x      10.8%              3.816    0.14  OK
+     12             17.940   17.915   17.994     0.51x       4.2%              1.495    0.15  OK
+     16             19.752   19.736   19.773     0.56x       3.5%              1.235    0.14  OK
+     20             23.681   23.630   23.739     0.67x       3.3%              1.184    0.00  OK
+     24             28.554   28.476   28.640     0.80x       3.4%              1.190    0.56  OK
+     28             32.901   32.482   33.009     0.93x       3.3%              1.175    0.14  OK
+     32             36.699   36.494   36.889     1.03x       3.2%              1.147    0.42  OK
+INVERSION small_churn (arena): peak aggregate throughput at 32 threads (36.699 Mops/s)
+INVERSION small_churn (arena): scaling inverts between 1 and 2 threads (first drop beyond the 5.0% noise bound)
+=== mixed_batch (arena) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1             37.879   36.962   37.950     1.00x     100.0%             37.879    1.55  OK
+      2             23.088   22.941   23.248     0.61x      30.5%             11.544    0.03  OK
+      3             28.203   27.056   28.479     0.74x      24.8%              9.401    2.99  OK
+      4             28.756   28.494   29.030     0.76x      19.0%              7.189    0.02  OK
+      6             28.700   28.516   29.393     0.76x      12.6%              4.783    2.51  OK
+      8             28.917   28.800   30.423     0.76x       9.5%              3.615    1.53  OK
+     12             17.657   17.486   17.809     0.47x       3.9%              1.471    0.77  OK
+     16             20.208   20.015   20.349     0.53x       3.3%              1.263    0.20  OK
+     20             23.374   22.598   24.032     0.62x       3.1%              1.169    4.02  OK
+     24             30.323   25.962   30.708     0.80x       3.3%              1.263    2.60  OK
+     28             34.978   34.889   35.277     0.92x       3.3%              1.249    0.20  OK
+     32             35.617   35.053   35.832     0.94x       2.9%              1.113    0.52  OK
+INVERSION mixed_batch (arena): peak aggregate throughput at 1 threads (37.879 Mops/s)
+INVERSION mixed_batch (arena): scaling inverts between 1 and 2 threads (first drop beyond the 5.0% noise bound)
+=== THREE-WAY small_churn (median agg Mops/s) ===
+threads        banked         glibc         arena  glibc/banked
+      1       35.464       296.939        35.494R          8.4x
+      2       25.228       358.962        24.634          14.2x
+      3       28.411       884.132        28.504          31.1x
+      4       29.155      1148.066        29.135          39.4x
+      6       29.517      1684.125        29.637          57.1x
+      8       30.263      1500.887R       30.529          49.6x
+     12       17.911      2486.315R       17.940         138.8x
+     16       19.998      2664.961R       19.752         133.3x
+     20       24.094      3171.080R       23.681         131.6x
+     24       28.933      4114.309R       28.554         142.2x
+     28       33.318      2792.026R       32.901          83.8x
+     32       37.206      2989.252R       36.699          80.3x
+(R = DRIFT-REJECT on that leg's rung: median indicative only; OWED = leg not landed, not measured)
+=== THREE-WAY mixed_batch (median agg Mops/s) ===
+threads        banked         glibc         arena  glibc/banked
+      1       37.266       295.708R       37.879           7.9x
+      2       23.181       574.432R       23.088          24.8x
+      3       28.180       861.793R       28.203          30.6x
+      4       28.965      1122.739R       28.756          38.8x
+      6       28.765      1741.102R       28.700          60.5x
+      8       29.841      2150.854R       28.917          72.1x
+     12       16.439      3021.540R       17.657         183.8x
+     16       20.437      3820.521R       20.208         186.9x
+     20       23.136      2896.567R       23.374         125.2x
+     24       26.804      3552.913R       30.323         132.5x
+     28       30.115      2543.580        34.978          84.5x
+     32       32.956      4265.012R       35.617         129.4x
+(R = DRIFT-REJECT on that leg's rung: median indicative only; OWED = leg not landed, not measured)
+SUMMARY DONE Z-038
+
+=== REP-LEVEL SEPARATION (no median involved; recomputed by the completing lead from the preserved leg raws, hidden_files/z038_fixed_rep_separation.txt) ===
+For each rung: the SLOWEST glibc rep process against the FASTEST rep of each mimir leg (5 reps each). Every rung on both workloads is fully separated against BOTH mimir legs: no glibc rep in this session was ever as slow as any banked or arena rep at the same rung.
+--- small_churn: rep separation glibc_min/banked_max, glibc_min/arena_max; arena/banked median ratio ---
+t= 1 sep_vs_banked=   8.15x sep_vs_arena=   8.16x arena/banked_median=1.001
+t= 2 sep_vs_banked=  13.94x sep_vs_arena=  14.25x arena/banked_median=0.976
+t= 3 sep_vs_banked=  30.93x sep_vs_arena=  30.80x arena/banked_median=1.003
+t= 4 sep_vs_banked=  38.56x sep_vs_arena=  38.63x arena/banked_median=0.999
+t= 6 sep_vs_banked=  56.33x sep_vs_arena=  56.18x arena/banked_median=1.004
+t= 8 sep_vs_banked=  41.19x sep_vs_arena=  40.95x arena/banked_median=1.009
+t=12 sep_vs_banked= 104.26x sep_vs_arena= 103.90x arena/banked_median=1.002
+t=16 sep_vs_banked= 124.77x sep_vs_arena= 126.27x arena/banked_median=0.988
+t=20 sep_vs_banked=  83.90x sep_vs_arena=  85.75x arena/banked_median=0.983
+t=24 sep_vs_banked=  13.96x sep_vs_arena=  14.13x arena/banked_median=0.987
+t=28 sep_vs_banked=  71.85x sep_vs_arena=  72.60x arena/banked_median=0.987
+t=32 sep_vs_banked=  54.50x sep_vs_arena=  55.11x arena/banked_median=0.986
+ALL RUNGS FULLY SEPARATED (glibc slowest rep > both mimir legs fastest rep): True
+--- mixed_batch: rep separation glibc_min/banked_max, glibc_min/arena_max; arena/banked median ratio ---
+t= 1 sep_vs_banked=   4.59x sep_vs_arena=   4.54x arena/banked_median=1.016
+t= 2 sep_vs_banked=  14.89x sep_vs_arena=  14.93x arena/banked_median=0.996
+t= 3 sep_vs_banked=  17.02x sep_vs_arena=  17.03x arena/banked_median=1.001
+t= 4 sep_vs_banked=  22.52x sep_vs_arena=  22.54x arena/banked_median=0.993
+t= 6 sep_vs_banked=  32.41x sep_vs_arena=  32.55x arena/banked_median=0.998
+t= 8 sep_vs_banked=  41.20x sep_vs_arena=  41.47x arena/banked_median=0.969
+t=12 sep_vs_banked= 114.71x sep_vs_arena= 109.31x arena/banked_median=1.074
+t=16 sep_vs_banked= 121.06x sep_vs_arena= 125.61x arena/banked_median=0.989
+t=20 sep_vs_banked=  71.96x sep_vs_arena=  70.94x arena/banked_median=1.010
+t=24 sep_vs_banked=  85.63x sep_vs_arena=  77.00x arena/banked_median=1.131
+t=28 sep_vs_banked=  79.51x sep_vs_arena=  68.70x arena/banked_median=1.161
+t=32 sep_vs_banked=  81.80x sep_vs_arena=  75.75x arena/banked_median=1.081
+ALL RUNGS FULLY SEPARATED (glibc slowest rep > both mimir legs fastest rep): True
+
+=== DRIFT DISCIPLINE (Z-004 protocol section 8, applied, not waived) ===
+  banked leg: 0 of 24 rungs drift-rejected. The reps are tight (min/max spreads of a few percent at most) - the cleanest banked ladder this campaign has recorded, on the quietest load window.
+  arena leg: 1 of 24 rungs drift-rejected (small_churn 1 thread, 12.82%).
+  glibc leg: 18 of 24 rungs drift-rejected (the rep-splitting behaviour Z-021 also recorded on this host: slow and fast rep clusters inside many points). All 360 raw LADDER lines are preserved (120 per leg) in hidden_files/z038_fixed_banked.raw, z038_fixed_glibc.raw and z038_fixed_arena.raw. Every median ratio involving a drift-rejected glibc rung is INDICATIVE ONLY; the verdict vs glibc below rests on the rep-level separation, which no drift of the observed kind can manufacture.
+
+=== LADDER SHAPES AND INVERSION POINTS (this session) ===
+banked, small_churn: aggregate nearly FLAT - 35.464 Mops/s at 1 thread, dip to 17.911 at 12 threads, recovery to the ladder peak 37.206 at 32 threads (scaling 1.05x); inversion flag at 1->2 threads. Per-thread efficiency still falls to 3.3% at 32 threads: the aggregate survives because more threads each do proportionally less, not because contention vanished. Shape matches the first session's small_churn reading closely.
+banked, mixed_batch: peak at 1 thread (37.266 Mops/s, ~4.4x the first session's broken-core reading), dip to 16.439 at 12 threads, recovery to 32.956 at 32 threads (scaling 0.88x). The first session's monotone collapse to 0.36x DID NOT REPRODUCE on the fixed core - that shape was a property of the broken TLS accounting (or of its interaction with that session), not of the allocator as banked now. This is the single largest correction this completion run makes to the record.
+arena, small_churn: the banked shape rung for rung (35.494 at 1 thread, dip 17.940 at 12, peak 36.699 at 32, 1.03x).
+arena, mixed_batch: the banked shape with a stronger top end (37.879 at 1 thread, dip 17.657 at 12, 35.617 at 32, 0.94x; at 24/28/32 threads the arena medians exceed banked by +13.1%/+16.1%/+8.1%).
+glibc, both workloads: scales steeply (small_churn peak 4114.309 at 24 threads indicative; mixed_batch peak 4265.012 at 32 threads indicative), no sustained inversion inside 1..32 - the same posture as Z-021 and the first session.
+
+=== ARENA vs BANKED (the comparison this slice exists to make) ===
+Median ratio arena/banked per rung - small_churn: 0.976..1.009 across all 12 rungs (every rung within +/-2.4%). mixed_batch: 0.969..1.016 at 1..20 threads, then 1.131 / 1.161 / 1.081 at 24 / 28 / 32 threads. Grade, in the roadmap's words: arena vs banked = TIE at 21 of 24 rungs; arena WIN at mixed_batch 24, 28 and 32 threads (top-end only, +8..+16% on medians with tight reps on both legs - drift-clean on both sides at those rungs). The per-CCD arena split does NOT relieve the ladder's central contention shape: the 12-thread dip and the ~3% per-thread efficiency at 32 threads are present in both variants almost identically. What the arena buys on this evidence is a modest top-end gain on the mixed workload once SMT siblings engage, nothing more.
+
+=== VERDICT - Z-038 ===
+Roadmap gate ("three-way ladder table (banked / arena / glibc) recorded"): MET IN FULL - all three legs measured fresh in one session, on the merged fixed tree, under the one frozen protocol; the table is recorded above and the arena column is measured, no longer OWED.
+Verdict vs glibc, in the roadmap's grades: banked core LOSS at every tested rung (1,2,3,4,6,8,12,16,20,24,28,32) on both workloads, and arena variant LOSS at every tested rung on both workloads - direction PROVEN at rep level (full separation at all 24 rungs against both mimir legs; worst separation 4.54x, mixed_batch 1 thread vs arena; up to 126.27x at the top rungs). Median factors are indicative wherever the glibc rung is drift-rejected (18 of 24).
+Arena verdict: TIE vs the banked core overall, with a top-end WIN on mixed_batch at 24-32 threads (+8..+16%).
+Input to Z-039 (recorded, not decided here): Z-039 chooses per-thread arenas if Z-038 argues for them, else lock-sharding of the central core. What this session adds: (a) the arena geometry as prototyped in Z-037 does not move the ladder shape - the surviving contention cost is NOT primarily cross-CCD span ownership, since splitting spans per CCD changed almost nothing at <=20 threads; (b) the one place arena helps is mixed_batch at SMT scale (+8..+16%); (c) the broken-core mixed_batch collapse recorded in the first session is RETRACTED - on the fixed core mixed_batch dips and recovers like small_churn - so any Z-039 argument built on a monotone mixed collapse must be rebuilt on this run's shape.
+
+provenance limits (recorded, not hidden): the runner header records cc flags but not the cc version; the built probes lived under build/z38/ in the worktree (sha256 above, hashed by the runner at build time before the ladders ran; the gate's make run afterwards cleaned build/z38, so the binaries themselves are gone - the raws and hashes are the preserved evidence). The glibc under test is the host's Ubuntu GLIBC 2.44 (host truth header). The checksum discipline proves the checksum invariant held per rung on all legs; it is not a proof of op-by-op sequence identity beyond what the bench checksum covers. Cross-slice comparisons to Z-020/Z-021 remain directional only. Comparisons to the first Z-038 session are labelled where made: same probe/protocol, different core (broken vs fixed TLS accounting) and different load window (1.1..2.4 decaying from a burst vs 0.27 at start) - the mixed_batch delta is therefore recorded as "did not reproduce on the fixed core", not as a measured fix factor.
+-Z-038 recorded run ends. Sources: hidden_files/z038_run_fixed.log (completion run of record), hidden_files/z038_fixed_banked.raw, hidden_files/z038_fixed_glibc.raw, hidden_files/z038_fixed_arena.raw, hidden_files/z038_fixed_rep_separation.txt, hidden_files/z038_gate_fixed.log (correctness gate on the merged tree). Superseded first session: hidden_files/z038_run_attempt1.log, z038_attempt1_banked.raw, z038_attempt1_glibc.raw, z038_attempt1_arena.raw, z038_attempt1_summary.txt, z038_attempt1_rep_separation.txt.
