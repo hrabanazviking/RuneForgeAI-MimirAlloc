@@ -1252,6 +1252,199 @@ static size_t span_capacity(const struct mimir_span_header *span)
 #endif
 }
 
+/*
+ * Z-034 out-of-line metadata trial (MIMIRALLOC_Z13_ROADMAP.md
+ * Wave 4, slice Z-034 "Metadata diet"). Everything in this
+ * section exists ONLY under MIMIR_OOL_META. A production
+ * build never defines it: no code, no data, no symbol, no
+ * cost (proof in tests/perf/recorded_run_z13_z034.txt, the
+ * Z-019 zero-cost pattern). MIMIR_DEBUG builds are refused:
+ * the debug red-zone/quarantine layout owns its own free
+ * path and the trial does not re-derive it.
+ *
+ * Trial design: for the four smallest classes (indices
+ * 0..3: 16/32/48/64 bytes) the free list leaves the freed
+ * blocks entirely. Liveness moves to a bitmap in ONE side
+ * page acquired per span at span creation (bit set = live;
+ * words = ceil(capacity/64), at the side page base). Free
+ * writes NO byte of the block; alloc reads NO byte of any
+ * block -- the in-band link read/write pair is replaced by
+ * a bitmap scan in the side page. The span header stays
+ * exactly 96 bytes, object offsets and capacities are
+ * unchanged, free_head stays NULL for trial spans, and all
+ * other classes keep the banked in-band path untouched.
+ * The side page is the trial's own metadata bill: one
+ * extra page per trial-class span, recorded in the slice's
+ * header-cost table, never hidden.
+ */
+#ifdef MIMIR_OOL_META
+#ifdef MIMIR_DEBUG
+#error "MIMIR_OOL_META trial is not defined for MIMIR_DEBUG builds (Z-034)"
+#endif
+
+#define MIMIR_OOL_MAX_CLASS_INDEX ((size_t)3) /* 16/32/48/64 B */
+#define MIMIR_OOL_SLOTS ((size_t)512)
+
+struct mimir_ool_slot {
+    struct mimir_span_header *span; /* NULL empty, (void*)-1 tombstone */
+    void *page_base;
+    size_t page_len;
+};
+
+static struct mimir_ool_slot mimir_ool_table[MIMIR_OOL_SLOTS];
+
+static int ool_class_is(size_t class_index)
+{
+    return class_index <= MIMIR_OOL_MAX_CLASS_INDEX;
+}
+
+static int ool_span_is(const struct mimir_span_header *span)
+{
+    return span != NULL && ool_class_is(span->class_index);
+}
+
+static size_t ool_hash(const struct mimir_span_header *span)
+{
+    return ((uintptr_t)span >> 12) & (MIMIR_OOL_SLOTS - 1);
+}
+
+/* Side-page bitmap for span, or NULL when unregistered. */
+static uint64_t *ool_bits(const struct mimir_span_header *span)
+{
+    size_t i;
+    size_t h = ool_hash(span);
+
+    for (i = 0; i < MIMIR_OOL_SLOTS; i++) {
+        struct mimir_ool_slot *s =
+            &mimir_ool_table[(h + i) & (MIMIR_OOL_SLOTS - 1)];
+        if (s->span == span) {
+            return (uint64_t *)s->page_base;
+        }
+        if (s->span == NULL) {
+            return NULL;
+        }
+    }
+    return NULL;
+}
+
+static int ool_register(struct mimir_span_header *span,
+                        void *page_base, size_t page_len)
+{
+    size_t i;
+    size_t h = ool_hash(span);
+
+    for (i = 0; i < MIMIR_OOL_SLOTS; i++) {
+        struct mimir_ool_slot *s =
+            &mimir_ool_table[(h + i) & (MIMIR_OOL_SLOTS - 1)];
+        if (s->span == NULL || s->span == (void *)(uintptr_t)-1) {
+            s->span = span;
+            s->page_base = page_base;
+            s->page_len = page_len;
+            memset(page_base, 0, page_len);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Remove span's registration; returns the side page pair
+ * (NULL base when unregistered). */
+static void ool_unregister(struct mimir_span_header *span,
+                           void **out_base, size_t *out_len)
+{
+    size_t i;
+    size_t h = ool_hash(span);
+
+    *out_base = NULL;
+    *out_len = 0;
+    for (i = 0; i < MIMIR_OOL_SLOTS; i++) {
+        struct mimir_ool_slot *s =
+            &mimir_ool_table[(h + i) & (MIMIR_OOL_SLOTS - 1)];
+        if (s->span == span) {
+            *out_base = s->page_base;
+            *out_len = s->page_len;
+            s->span = (void *)(uintptr_t)-1;
+            s->page_base = NULL;
+            s->page_len = 0;
+            return;
+        }
+        if (s->span == NULL) {
+            return;
+        }
+    }
+}
+
+static int ool_bit_test(const struct mimir_span_header *span,
+                        size_t idx)
+{
+    uint64_t *bits = ool_bits(span);
+
+    if (bits == NULL) {
+        return 0;
+    }
+    return (int)((bits[idx >> 6] >> (idx & 63)) & UINT64_C(1));
+}
+
+/* Take one object index of a trial span (lock held): the
+ * lowest free carved index, else a fresh carve. Sets the
+ * bit (and advances carve_count on the carve road).
+ * Returns (size_t)-1 when the span cannot serve. */
+static size_t ool_take_locked(struct mimir_span_header *span)
+{
+    uint64_t *bits = ool_bits(span);
+    size_t idx;
+
+    if (bits == NULL) {
+        return (size_t)-1;
+    }
+    for (idx = 0; idx < span->carve_count; idx++) {
+        if (!((bits[idx >> 6] >> (idx & 63)) & UINT64_C(1))) {
+            bits[idx >> 6] |= UINT64_C(1) << (idx & 63);
+            return idx;
+        }
+    }
+    if (span->carve_count < span_capacity(span)) {
+        idx = span->carve_count;
+        span->carve_count += 1;
+        bits[idx >> 6] |= UINT64_C(1) << (idx & 63);
+        return idx;
+    }
+    return (size_t)-1;
+}
+
+static void ool_clear_locked(struct mimir_span_header *span,
+                             const void *ptr)
+{
+    uint64_t *bits = ool_bits(span);
+    size_t idx;
+
+    if (bits == NULL) {
+        return;
+    }
+    idx = (size_t)((const unsigned char *)ptr -
+                   (const unsigned char *)span->mapping_base -
+                   MIMIR_SPAN_HEADER_SIZE) /
+          span->class_size;
+    bits[idx >> 6] &= ~(UINT64_C(1) << (idx & 63));
+}
+
+static size_t ool_popcount_locked(
+    const struct mimir_span_header *span)
+{
+    uint64_t *bits = ool_bits(span);
+    size_t idx;
+    size_t n = 0;
+
+    if (bits == NULL) {
+        return 0;
+    }
+    for (idx = 0; idx < span->carve_count; idx++) {
+        n += (size_t)((bits[idx >> 6] >> (idx & 63)) & UINT64_C(1));
+    }
+    return n;
+}
+#endif /* MIMIR_OOL_META */
+
 static void span_registry_insert(struct mimir_span_header *span)
 {
     span->list_prev = NULL;
@@ -1442,6 +1635,27 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
     span->free_head = NULL;
     span->live_count = 0;
     span->carve_count = 0;
+#ifdef MIMIR_OOL_META
+    /* Z-034: trial classes acquire their out-of-line
+     * metadata page beside the span. Failure publishes
+     * nothing, exactly like a backing failure above. */
+    if (ool_class_is(class_index)) {
+        void *side = NULL;
+        size_t side_len = 0;
+
+        status = mimir_platform_map_acquire(page_size, &side,
+                                            &side_len);
+        if (status != MIMIR_PLATFORM_OK ||
+            !ool_register(span, side, side_len)) {
+            if (side != NULL) {
+                (void)mimir_platform_map_release(side, side_len);
+            }
+            (void)mimir_platform_map_release(base,
+                                             mapping_length);
+            return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_BACKING);
+        }
+    }
+#endif
 
     span_registry_insert(span);
     mimir_live_spans += 1;
@@ -1469,6 +1683,23 @@ static int span_release_locked(struct mimir_span_header *span)
     size_t mapping_length = span->mapping_length;
     size_t class_index = span->class_index;
     int status;
+#ifdef MIMIR_OOL_META
+    /* Z-034: the trial side page is captured now and
+     * released only after the span release succeeds, so a
+     * rolled-back retirement keeps its metadata. */
+    void *ool_base = NULL;
+    size_t ool_len = 0;
+    int ool_had = 0;
+
+    if (ool_span_is(span)) {
+        ool_unregister(span, &ool_base, &ool_len);
+        ool_had = ool_base != NULL;
+        if (ool_had) {
+            /* Registration returns at rollback below. */
+            (void)0;
+        }
+    }
+#endif
 
     span->state = MIMIR_STATE_RETIRED;
     span_registry_remove(span);
@@ -1486,11 +1717,22 @@ static int span_release_locked(struct mimir_span_header *span)
         mimir_class_active[class_index] = span;
         mimir_live_spans += 1;
         mimir_live_span_bytes += mapping_length;
+#ifdef MIMIR_OOL_META
+        if (ool_had) {
+            (void)ool_register(span, ool_base, ool_len);
+        }
+#endif
         return 0;
     }
     __atomic_fetch_add(&mimir_audit_span_retired, 1UL,
                        __ATOMIC_RELAXED);
     mimir_stats_bytes_released += mapping_length; /* J-002 Q-RELEASED */
+#ifdef MIMIR_OOL_META
+    if (ool_had) {
+        (void)mimir_platform_map_release(ool_base, ool_len);
+        mimir_stats_bytes_released += ool_len; /* Z-034 side page */
+    }
+#endif
     return 1;
 }
 
@@ -1542,6 +1784,13 @@ static int span_can_serve(const struct mimir_span_header *span)
      * span servable and is never followed; the span may
      * still serve by carving, which hands out only memory
      * the header's own validated fields describe. */
+#ifdef MIMIR_OOL_META
+    /* Z-034: a trial span serves iff some slot is not live
+     * (a cleared bit below carve_count, or carve room). */
+    if (ool_span_is(span)) {
+        return span->live_count < span_capacity(span);
+    }
+#endif
     return (span->free_head != NULL &&
             span_free_node_valid(span, span->free_head)) ||
            span->carve_count < span_capacity(span);
@@ -1862,6 +2111,13 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
             if (index >= span->carve_count) {
                 return NULL; /* uncarved tail area */
             }
+#ifdef MIMIR_OOL_META
+            /* Z-034: trial-span liveness IS the bitmap bit;
+             * no free-list walk exists for these spans. */
+            if (ool_span_is(span)) {
+                return ool_bit_test(span, index) ? span : NULL;
+            }
+#endif
             node = span->free_head;
             {
                 /* J-006: the free-list walk range-checks
@@ -1951,6 +2207,20 @@ static void *small_alloc_locked(size_t size, int zero_user,
         mimir_class_active[class_index] = span;
     }
 
+#ifdef MIMIR_OOL_META
+    if (ool_span_is(span)) {
+        /* Z-034: serve from the bitmap; no block byte is
+         * read or written on this road. */
+        size_t ool_idx = ool_take_locked(span);
+
+        if (ool_idx == (size_t)-1) {
+            return NULL;
+        }
+        obj = (void *)((unsigned char *)span->mapping_base +
+                       MIMIR_SPAN_HEADER_SIZE +
+                       ool_idx * class_size);
+    } else
+#endif
     if (span->free_head != NULL &&
         span_free_node_valid(span, span->free_head)) {
         obj = span->free_head;
@@ -2057,8 +2327,19 @@ static void small_free_locked(void *ptr)
         (void)span_release_locked(span);
     }
 #else
+#ifdef MIMIR_OOL_META
+    if (ool_span_is(span)) {
+        /* Z-034: clear the bit; the block keeps every byte
+         * the caller left in it. */
+        ool_clear_locked(span, ptr);
+    } else {
+        *(void **)ptr = span->free_head;
+        span->free_head = ptr;
+    }
+#else
     *(void **)ptr = span->free_head;
     span->free_head = ptr;
+#endif
     span->live_count -= 1;
     mimir_live_small_objects -= 1;
     __atomic_fetch_add(&mimir_audit_small_free, 1UL,
@@ -3607,6 +3888,20 @@ int mimir_core_metadata_check(void)
             break;
         }
         if (span_header_is_live(span)) {
+#ifdef MIMIR_OOL_META
+            /* Z-034: a trial span's free structure is its
+             * bitmap: free_head must stay NULL and the set
+             * bits must recount live_count exactly. */
+            if (ool_span_is(span)) {
+                bytes += span->mapping_length;
+                live_sum += span->live_count;
+                if (span->free_head != NULL ||
+                    ool_popcount_locked(span) !=
+                        span->live_count) {
+                    violations++;
+                }
+            } else {
+#endif
             void *node = span->free_head;
             size_t nodes = 0;
             int list_ok = 1;
@@ -3628,6 +3923,9 @@ int mimir_core_metadata_check(void)
                     span->carve_count) {
                 violations++;
             }
+#ifdef MIMIR_OOL_META
+            }
+#endif
         } else {
             violations++;
         }

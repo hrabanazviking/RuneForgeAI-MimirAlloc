@@ -1,0 +1,187 @@
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T09:31:15Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2850114
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 63%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.29 0.37 0.94
+
+=== Z-034 Metadata diet - recorded run ===
+slice: Z-034 (roadmap: Per-block header cost audit; trial
+  out-of-line metadata for the smallest classes behind a
+  build flag; measure both ways. Gate: header cost table
+  + adopt/reject verdict per class group.)
+branch: yrsa/mimiralloc-team-03 (seat main c84f021, banked
+  Z-001..Z-020, merged clean before the build)
+load_state: QUIET machine - loadavg 0.21-0.31 (1-min, 32
+  threads) across the gate and measurement windows; no
+  Aesir/Lifthrasir/Tensile heavy run observed. Numbers are
+  quiet-machine numbers.
+method: Z-019 pattern - tests/perf/run_z034.sh builds the
+  production core and the trial core (-DMIMIR_OOL_META=1)
+  into build/z34/ (production build/ objects untouched),
+  runs tests/perf/probe_z034.c in both legs: table mode
+  (capacity verified empirically via the J-002 stats
+  surface), pattern mode (out-of-line behavioural proof),
+  churn modes pinned taskset -c 2, 3 warm-up processes
+  discarded, 7 measured processes per leg alternating,
+  headline = median of processes (summarize_z034.py).
+  Checksums EQUAL across legs in every workload (workload
+  equivalence proven).
+adoption_bar (pre-registered before measuring): adopt a
+  class group only if the trial wins >=5% throughput AND
+  regresses no measured workload for that group.
+=== ZERO-COST PROOF (production object, no MIMIR_OOL_META) ===
+prod core object bytes: 21192
+ool  core object bytes: 23008
+prod ool symbols (expect 0): 0
+ool  ool symbols (expect >0): 2
+prod nm: no ool symbols
+
+=== HEADER COST TABLE leg=prod (identical in leg=ool; table_result OK both) ===
+=== TABLE leg=prod ===
+class cap_emp cap_formula hdr_per_blk_B tail_waste_B span_eff_pct
+16 250 250 0.384 0 97.66
+32 125 125 0.768 0 97.66
+48 83 83 1.157 16 97.27
+64 62 62 1.548 32 96.88
+80 50 50 1.920 0 97.66
+96 41 41 2.341 64 96.09
+112 35 35 2.743 80 95.70
+128 31 31 3.097 32 96.88
+160 25 25 3.840 0 97.66
+192 20 20 4.800 160 93.75
+224 17 17 5.647 192 92.97
+256 15 15 6.400 160 93.75
+320 12 12 8.000 160 93.75
+384 10 10 9.600 160 93.75
+448 8 8 12.000 416 87.50
+512 7 7 13.714 416 87.50
+640 6 6 16.000 160 93.75
+768 5 5 19.200 160 93.75
+896 4 4 24.000 416 87.50
+1024 3 3 32.000 928 75.00
+table_result: OK
+
+=== PATTERN (out-of-line behavioural proof) ===
+=== PATTERN leg=prod ===
+pattern class=16 first8_OVERWRITTEN
+pattern class=32 first8_OVERWRITTEN
+pattern class=48 first8_OVERWRITTEN
+pattern class=64 first8_OVERWRITTEN
+pattern class=128 first8_OVERWRITTEN
+=== PATTERN leg=ool ===
+pattern class=16 first8_PRESERVED
+pattern class=32 first8_PRESERVED
+pattern class=48 first8_PRESERVED
+pattern class=64 first8_PRESERVED
+pattern class=128 first8_OVERWRITTEN
+=== CHURN class=16 leg=prod rep=0 ===
+
+=== CHURN MEDIANS (ns/op, median of 7 processes per leg) ===
+workload  class  prod_med   ool_med  delta%  checksums
+churn1       16     26.78     29.13   +8.78  EQUAL (50582176)
+churn256     16    232.94     79.49  -65.88  EQUAL (65280000)
+churn1       32     26.67     29.32   +9.94  EQUAL (50582176)
+churn256     32    131.55     66.87  -49.17  EQUAL (65280000)
+churn1       48     26.98     29.35   +8.78  EQUAL (50582176)
+churn256     48     99.27     71.60  -27.87  EQUAL (65280000)
+churn1       64     26.95     29.54   +9.61  EQUAL (50582176)
+churn256     64     83.31     79.37   -4.73  EQUAL (65280000)
+churn1      128     27.41     28.44   +3.76  EQUAL (50582176)
+churn256    128     84.17     85.31   +1.35  EQUAL (65280000)
+
+=== HEADER COST AUDIT (the diet question, answered) ===
+Production small path: per-block header = 0 bytes for
+  EVERY class. There is no per-block header to diet.
+  Live blocks carry no metadata at all; freed blocks
+  thread the span free list in-band in their own first
+  8 bytes (a cost paid only by dead memory).
+Span header: 96 bytes per 4096-byte span page, amortised
+  per block in the table above: 0.384 B/block at 16 B
+  (cap 250) rising to 32.000 B/block at 1024 B (cap 3).
+  Span efficiency (object bytes / page): 97.66% at
+  16/32/80/160 B, worst 75.00% at 1024 B (tail waste
+  928 B - a capacity effect, not a header effect).
+Debug builds only (MIMIR_DEBUG, never production):
+  +32 B/block red zones (16 B pre + 16 B post, J-004).
+Large/mapping path: one 96-byte descriptor per mapping,
+  in the mapping's own reserve page (not per block).
+Trial's own metadata bill (flag on only): +1 side page
+  per trial-class span (span footprint 1 -> 2 pages),
+  bitmap 32 B used of that page; core object +1816 B
+  (23008 vs 21192); production object: +0 B, 0 symbols.
+
+=== FLAG-ON CORRECTNESS (full standing suite, trial build) ===
+All eight make-test binaries rebuilt against the trial
+core and run individually: smoke 18/18; test_core 29/0;
+test_b007 69/0; test_c005 95/0; test_c006 23/0;
+test_c007 122 run / 0 failed / 70 by-design skips;
+test_c008 42 run / 0 failed / 7 skipped-not-yet;
+test_d004 4590/0. Summed: 4988 checks / 0 failed / 77
+skips - IDENTICAL to the production baseline.
+
+=== VERDICTS PER CLASS GROUP (roadmap gate) ===
+Group 16/32 B: REJECT out-of-line as the default.
+  churn1 +8.78% / +9.94% (trial SLOWER) breaches the
+  no-regression bar, despite churn256 -65.88% / -49.17%.
+Group 48/64 B: REJECT out-of-line as the default.
+  churn1 +8.78% / +9.61% (trial SLOWER); churn256
+  -27.87% / -4.73% does not clear the bar either.
+Group 80..1024 B: NOT TRIALLED (by the roadmap's own
+  scope: smallest classes only). In-band retained;
+  per-block header already 0 B. Verdict: NO CHANGE.
+Disposition: MIMIR_OOL_META stays OFF by default; the
+  trial code is banked behind the flag on the Z-019
+  precedent (zero production cost, proven above). The
+  production allocator is byte-for-byte the banked one:
+  the only production-source delta in this slice is a
+  token-identical restructure of the J-006 check's
+  trial branch; the standing gate on the final tree is
+  GREEN 4988/0/77 (hidden_files/z034_gate_final.log).
+
+=== THE REAL FINDING (named follow-up, not adopted here) ===
+The churn256 win is NOT a metadata-space effect. It is
+the free path: production find_span_live_locked proves
+liveness by WALKING the span's free list - O(carve_count)
+per free, up to 250 nodes at 16 B - while the trial's
+bitmap answers in O(1). Batch free/realloc patterns pay
+the walk on every free (prod churn256 232.94 ns/op at
+16 B vs churn1 26.78). The promising hybrid - a per-span
+liveness BITMAP as an index only, keeping the in-band
+LIFO free list for reuse order - is named here as
+follow-up evidence for Z-030's remote-free work and any
+future free-path slice. It is NOT built in Z-034:
+adopting it needs its own slice, its own gate run, and
+its own verdict. The churn1 regression (+9-10%) is the
+bitmap scan + side-page touch on the single-block road;
+the control class (128 B, untrialled) moved only
++3.76% / +1.35%, inside the noise band.
+
+=== GATE ===
+Standing gate (flag off, final tree): GREEN
+  checks=4988 failed=0 skips=77
+  (scripts/z13/run_gate.sh, log
+  hidden_files/z034_gate_final.log)
+Roadmap gate: header cost table recorded above +
+  adopt/reject verdict per class group recorded above.
+  GATE MET (a measured REJECT is a bankable verdict).
