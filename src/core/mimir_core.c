@@ -542,6 +542,7 @@ static uint64_t mimir_stats_bytes_released;
 static uint64_t mimir_stats_peak_mapped;
 _Alignas(64) static uint64_t mimir_stats_alloc_failures; /* Z-040: own 64 B line - pre-lock atomic (Z-016 rule) */
 _Alignas(64) static uint64_t mimir_stats_alloc_posture_nulls; /* Z-040: own 64 B line - pre-lock atomic (Z-016 rule) */
+_Alignas(64) static uint64_t mimir_stats_unlock_failures; /* Z-064: own 64 B line - post-unlock atomic (Z-016 rule) */
 static uint64_t mimir_stats_cross_thread_frees;
 
 static void mimir_stats_peak_update_locked(void);
@@ -555,6 +556,17 @@ static void mimir_stats_note_failure(void)
 static void mimir_stats_note_posture(void)
 {
     __atomic_fetch_add(&mimir_stats_alloc_posture_nulls, 1ULL,
+                       __ATOMIC_RELAXED);
+}
+
+/* Z-064 (D-01): record one failed central unlock. Called
+ * from the unlock wrappers below at the unlock site, where
+ * the lock state is by definition unknown (the unlock just
+ * failed), so the recording path is a single atomic add and
+ * takes no lock (Z-016 / Z-040 pre-lock atomic posture). */
+static void mimir_stats_note_unlock_failure(void)
+{
+    __atomic_fetch_add(&mimir_stats_unlock_failures, 1ULL,
                        __ATOMIC_RELAXED);
 }
 
@@ -1515,6 +1527,21 @@ int mimir_shard_snapshot(struct mimir_shard_snapshot *out)
     return 0;
 }
 
+/* Z-064 (D-01): the counted per-shard unlock. Every
+ * per-shard unlock in this file goes through here, so a
+ * failed shard unlock moves the same tally as a failed
+ * global unlock. Defined before shard_lock_all, whose
+ * rollback path is one of its call sites. */
+static int core_shard_unlock(size_t shard)
+{
+    int rc = (mimir_platform_shard_unlock)(shard);
+
+    if (rc != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_unlock_failure();
+    }
+    return rc;
+}
+
 static int shard_lock_all(void)
 {
     size_t s;
@@ -1523,7 +1550,7 @@ static int shard_lock_all(void)
         if (mimir_platform_shard_lock(s) != MIMIR_PLATFORM_OK) {
             while (s > 0) {
                 s--;
-                (void)mimir_platform_shard_unlock(s);
+                (void)core_shard_unlock(s);
             }
             return -1;
         }
@@ -1537,7 +1564,7 @@ static void shard_unlock_all(void)
 
     while (s > 0) {
         s--;
-        (void)mimir_platform_shard_unlock(s);
+        (void)core_shard_unlock(s);
     }
 }
 
@@ -1568,6 +1595,35 @@ static int shard_unlock_global_all(void)
 #define mimir_platform_global_lock shard_lock_global_all
 #define mimir_platform_global_unlock shard_unlock_global_all
 #endif /* MIMIR_LOCK_SHARD */
+
+/* ---- Z-064 lock-failure observability (D-01) ------------
+ * Every central global unlock in this file goes through
+ * core_global_unlock: it returns the L6 status to callers
+ * that want it and, on failure, increments the Z-064 tally
+ * at the unlock site, before any other action. Call sites
+ * keep their (void) posture -- counting is the
+ * observability D-01 owed (INC-M002-01: every unlock
+ * discarded its status), not a new failure mode; no caller
+ * gains a wedge it did not already have. The name it calls
+ * is the file's current macro meaning of the global unlock:
+ * the real L6 entry in a production build,
+ * shard_unlock_global_all in a MIMIR_LOCK_SHARD build (the
+ * composite's own body still names the real primitives and
+ * leaves counting to its callers, so a composite failure is
+ * counted exactly once, here), and z19_unlock in a
+ * MIMIR_LOCK_HIST build (which forwards to the real entry
+ * and returns its status, so a failure is likewise counted
+ * exactly once, here). Defined after the shard section and
+ * before every ordinary call site. */
+static int core_global_unlock(void)
+{
+    int rc = mimir_platform_global_unlock();
+
+    if (rc != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_unlock_failure();
+    }
+    return rc;
+}
 
 /* Span registry anchors and counters: fixed static storage
  * below L1, exactly as the mapping registry's are (B-006
@@ -2386,7 +2442,7 @@ int mimir_arena_snapshot(struct mimir_arena_snapshot *out)
         }
         span = span->list_next;
     }
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return 0;
 }
 #endif /* MIMIR_ARENA_CCD */
@@ -2791,7 +2847,7 @@ size_t mimir_debug_quarantine_count(void)
         return (size_t)-1;
     }
     n = mimir_debug_quarantine_len;
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return n;
 }
 
@@ -2806,7 +2862,7 @@ size_t mimir_debug_quarantined_bytes(void)
     for (i = 0; i < mimir_debug_quarantine_len; i++) {
         bytes += mimir_debug_quarantine[i].span->class_size;
     }
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return bytes;
 }
 
@@ -2818,7 +2874,7 @@ int mimir_debug_quarantine_verify(void)
         return -1;
     }
     bad = debug_quarantine_verify_locked();
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return (int)bad;
 }
 
@@ -3416,7 +3472,7 @@ int mimir_core_debug_verify_all(void)
         }
         span = span->list_next;
     }
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return bad;
 }
 #endif /* MIMIR_DEBUG */
@@ -4063,7 +4119,7 @@ static void shard_flush_phase(void)
         return;
     }
     tls_flush_locked();
-    (void)shard_unlock_global_all();
+    (void)core_global_unlock();
 }
 
 /* Z-039: search the shard lists in ascending order for a
@@ -4092,7 +4148,7 @@ static struct mimir_span_header *shard_find_span_live(
             *out_shard = s;
             return span;
         }
-        (void)mimir_platform_shard_unlock(s);
+        (void)core_shard_unlock(s);
     }
     return NULL;
 }
@@ -4103,14 +4159,14 @@ static struct mimir_span_header *shard_find_span_live(
  * production build compiles, and vice versa). */
 static void core_central_unlock(size_t class_index)
 {
-    (void)mimir_platform_shard_unlock(
+    (void)core_shard_unlock(
         shard_of_class(class_index));
 }
 #else
 static void core_central_unlock(size_t class_index)
 {
     (void)class_index;
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
 }
 #endif /* MIMIR_LOCK_SHARD */
 /* ---- locked core helpers --------------------------------
@@ -4548,7 +4604,7 @@ static void tls_tss_destructor(void *value)
     returned = tls_drain_all_locked(0);
     tls_exit_drains_count += 1;
     tls_exit_drain_blocks_count += returned;
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
 }
 
 /* The image destructor's TLS step: the calling (main)
@@ -4635,7 +4691,7 @@ static void *tls_alloc(size_t size, int zero_user,
                 mimir_stats_bytes_allocated +=
                     (uint64_t)class_size;
             }
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
         }
         __atomic_fetch_add(&mimir_audit_small_alloc, 1UL,
                            __ATOMIC_RELAXED);
@@ -4750,7 +4806,7 @@ static void tls_free_local(void *ptr,
         }
         tls_flush_locked();
         tls_drain_batch_locked(class_index);
-        (void)mimir_platform_global_unlock();
+        (void)core_global_unlock();
         tls.local_frees_to_core += 1;
     }
 #else /* MIMIR_LOCK_SHARD */
@@ -4764,7 +4820,7 @@ static void tls_free_local(void *ptr,
         mimir_shard_hint = shard_of_class(class_index);
         tls_flush_locked();
         tls_drain_batch_locked(class_index);
-        (void)mimir_platform_shard_unlock(
+        (void)core_shard_unlock(
             shard_of_class(class_index));
         tls.local_frees_to_core += 1;
     }
@@ -4783,7 +4839,7 @@ static void tls_free_local(void *ptr,
                 span->live_count -= 1;
                 mimir_live_small_objects -= 1;
                 tally_add(span, 1);
-                (void)mimir_platform_global_unlock();
+                (void)core_global_unlock();
             }
 #else /* MIMIR_LOCK_SHARD */
             } else {
@@ -4797,7 +4853,7 @@ static void tls_free_local(void *ptr,
                     span->live_count -= 1;
                     mimir_live_small_objects -= 1;
                     tally_add(span, 1);
-                    (void)mimir_platform_shard_unlock(
+                    (void)core_shard_unlock(
                         shard_of_class(class_index));
                 }
             }
@@ -4857,7 +4913,7 @@ void mimir_tls_cache_drain_thread(void)
     }
     tls_flush_locked();
     (void)tls_drain_all_locked(1);
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
 }
 #endif /* !MIMIR_DEBUG */
 
@@ -4885,7 +4941,7 @@ int mimir_tune_set_retention_bound(size_t value)
     }
     tls_flush_locked(); /* Z-029 */
     mimir_retention_bound = value;
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return 0;
 }
 
@@ -4898,7 +4954,7 @@ size_t mimir_tune_get_retention_bound(void)
     }
     tls_flush_locked(); /* Z-029 */
     value = mimir_retention_bound;
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return value;
 }
 
@@ -5099,7 +5155,7 @@ size_t mimir_core_drain_retained(void)
      * a full release returns (I-002 S5.2 preamble). */
     released = trim_some_locked(SIZE_MAX);
     (void)pool_release_all_locked(); /* Z-048 trim trigger */
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return released;
 }
 
@@ -5150,7 +5206,7 @@ size_t mimir_core_trim_retained(void)
 #endif
     released = trim_some_locked(SIZE_MAX);
     (void)pool_release_all_locked(); /* Z-048 trim trigger */
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return released;
 }
 
@@ -5166,7 +5222,7 @@ size_t mimir_core_trim_retained_some(size_t max_spans)
     (void)tls_drain_all_locked(1);
 #endif
     released = trim_some_locked(max_spans);
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return released;
 }
 
@@ -5179,7 +5235,7 @@ size_t mimir_core_retained_spans(void)
     }
     tls_flush_locked(); /* Z-029 */
     retained_snapshot_locked(&spans, NULL);
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return spans;
 }
 
@@ -5192,7 +5248,7 @@ size_t mimir_core_retained_bytes(void)
     }
     tls_flush_locked(); /* Z-029 */
     retained_snapshot_locked(NULL, &bytes);
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return bytes;
 }
 
@@ -5206,7 +5262,7 @@ size_t mimir_core_mapped_bytes(void)
     tls_flush_locked(); /* Z-029 */
     mapped = mimir_live_bytes + mimir_live_span_bytes +
              mimir_pool_bytes; /* Z-048: pooled is still mapped */
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return mapped;
 }
 
@@ -5224,7 +5280,7 @@ size_t mimir_core_pool_count(void)
     }
     tls_flush_locked(); /* Z-029 */
     n = mimir_pool_count;
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return n;
 }
 
@@ -5236,7 +5292,7 @@ size_t mimir_core_pool_bytes(void)
     }
     tls_flush_locked(); /* Z-029 */
     n = mimir_pool_bytes;
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return n;
 }
 /* ---- Z-050 trim policy under pressure --------------------
@@ -5455,6 +5511,17 @@ int mimir_core_trim_policy_tick(struct mimir_trim_policy_report *report)
  * (INC-J002-02): the fields are the constant pair 0 / 0,
  * never a fabricated measure.
  */
+/* Z-064 (D-01): the tally's lock-free read (declared in
+ * mimir_core.h). One atomic load; takes no lock, so it
+ * stays usable in exactly the state D-01 feared -- after a
+ * genuinely failed unlock has wedged the mutex, where the
+ * locked snapshot can no longer be taken. */
+uint64_t mimir_core_unlock_failures(void)
+{
+    return __atomic_load_n(&mimir_stats_unlock_failures,
+                           __ATOMIC_RELAXED);
+}
+
 _Static_assert(MIMIR_STATS_CLASS_COUNT == MIMIR_SMALL_CLASS_COUNT,
                "stats class count must match the core class table (J-002)");
 
@@ -5482,6 +5549,8 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
     out->alloc_posture_nulls = __atomic_load_n(
         &mimir_stats_alloc_posture_nulls, __ATOMIC_RELAXED);
     out->cross_thread_frees = mimir_stats_cross_thread_frees;
+    out->unlock_failures = __atomic_load_n(
+        &mimir_stats_unlock_failures, __ATOMIC_RELAXED);
     out->lock_contention = 0;          /* ABSENT: INC-J002-02 */
     out->lock_contention_measured = 0; /* ABSENT: INC-J002-02 */
     out->live_mappings = (uint64_t)mimir_live_mappings;
@@ -5526,7 +5595,7 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
 #ifdef MIMIR_LOCK_SHARD
     } }
 #endif
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return 0;
 }
 
@@ -5801,7 +5870,7 @@ int mimir_core_metadata_check(void)
         }
 #endif
     }
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     return violations;
 }
 
@@ -5912,7 +5981,7 @@ void *mimir_core_alloc(size_t size)
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
     }
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     if (result == NULL) {
         /* J-007: emitted after unlock, from the cause the
          * failing construction path recorded. */
@@ -5995,7 +6064,7 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
     }
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
     if (result == NULL) {
         mimir_core_diag_report(MIMIR_DIAG_OP_CALLOC,
                                mimir_diag_last_cause,
@@ -6258,12 +6327,12 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         old_size = desc->requested_size;
 
         if (new_size == old_size) {
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
             return ptr;
         }
         if (new_size < old_size) {
             desc->requested_size = new_size;
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
             return ptr;
         }
 
@@ -6277,7 +6346,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         {
             void *grown = grow_mremap_locked(desc, ptr, new_size);
             if (grown != NULL) {
-                (void)mimir_platform_global_unlock();
+                (void)core_global_unlock();
                 return grown;
             }
         }
@@ -6290,7 +6359,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         if (new_ptr == NULL) {
             int cause = mimir_diag_last_cause; /* J-007 */
             mimir_stats_note_failure(); /* J-002 */
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
             mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
                                    cause, (uint64_t)new_size);
             return NULL;
@@ -6300,7 +6369,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         if (!retire_locked(desc)) {
             mimir_stats_note_failure(); /* J-002: release failure */
             retire_any_locked(new_ptr, new_desc);
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
             /* J-007: the transfer step's L6 release failed:
              * cause class backing (an OS release refusal). */
             mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
@@ -6308,7 +6377,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
                                    (uint64_t)new_size);
             return NULL;
         }
-        (void)mimir_platform_global_unlock();
+        (void)core_global_unlock();
         return new_ptr;
     }
 
@@ -6346,7 +6415,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
             /* Not a defined realloc (B-008 S4, invalid ptr):
              * nothing allocated, unmapped, unlinked or
              * counted on suspicion; NULL, no promise. */
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
             return NULL;
         }
         span_class = span->class_size;
@@ -6359,7 +6428,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         mimir_dbg_check_or_abort(ptr, span_class, "realloc");
 #endif
         if (new_size <= span_class) {
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
             return ptr;
         }
 
@@ -6391,7 +6460,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         if (new_ptr == NULL) {
             int cause = mimir_diag_last_cause; /* J-007 */
             mimir_stats_note_failure(); /* J-002 */
-            (void)mimir_platform_global_unlock();
+            (void)core_global_unlock();
             mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
                                    cause, (uint64_t)new_size);
             return NULL;
@@ -6418,7 +6487,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
 #else
         small_free_locked(ptr);
 #endif
-        (void)mimir_platform_global_unlock();
+        (void)core_global_unlock();
         return new_ptr;
     }
 }
@@ -6462,11 +6531,11 @@ void mimir_core_free(void *ptr)
                         small_free_locked(ptr);
                     }
                     tls_owner_clear(ptr);
-                    (void)mimir_platform_global_unlock();
+                    (void)core_global_unlock();
                     tls.remote_frees_out += 1;
                     return;
                 }
-                (void)mimir_platform_global_unlock();
+                (void)core_global_unlock();
             } else {
                 return; /* F-07: the block stays LIVE */
             }
@@ -6487,7 +6556,7 @@ void mimir_core_free(void *ptr)
                         small_free_locked(ptr);
                     }
                     tls_owner_clear(ptr);
-                    (void)mimir_platform_shard_unlock(fshard);
+                    (void)core_shard_unlock(fshard);
                     tls.remote_frees_out += 1;
                     return;
                 }
@@ -6547,7 +6616,7 @@ void mimir_core_free(void *ptr)
             tls.remote_frees_out += 1;
 #endif
         }
-        (void)mimir_platform_global_unlock();
+        (void)core_global_unlock();
         return;
 #else /* MIMIR_LOCK_SHARD */
         {
@@ -6564,7 +6633,7 @@ void mimir_core_free(void *ptr)
                 }
             }
         }
-        (void)mimir_platform_global_unlock();
+        (void)core_global_unlock();
         return;
 #endif /* MIMIR_LOCK_SHARD */
     }
@@ -6597,7 +6666,7 @@ void mimir_core_free(void *ptr)
         }
     }
     if (!retire_locked(desc)) {
-        (void)mimir_platform_global_unlock();
+        (void)core_global_unlock();
         return;
     }
 
@@ -6606,5 +6675,5 @@ void mimir_core_free(void *ptr)
      * (Invariant 2). ptr and every pointer into the former
      * mapping are dangling; later use is use-after-free UB
      * and a second free is double-free UB (S11.2 step 9). */
-    (void)mimir_platform_global_unlock();
+    (void)core_global_unlock();
 }

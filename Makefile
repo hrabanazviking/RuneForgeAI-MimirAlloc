@@ -1807,3 +1807,44 @@ test-z060: $(BUILD)/probe_z060
 	./$(BUILD)/probe_z060 madv
 
 .PHONY: test-z060
+
+# ------------------------------------------------------------------
+# Z-064: lock-failure observability (D-01) evidence test -
+# tests/core/test_z064_unlock.c drives the Z-064 unlock
+# tally through the test-only unlock shim
+# (tests/core/mimir_unlock_shim_z064.c, the I-004 --wrap
+# heritage extended to mimir_platform_global_unlock):
+# control leg (no injection, tally stays 0), report leg
+# (the real unlock is performed, a failure status is
+# reported to the core; the tally moves and the process
+# stays unwedged), and a true-failure leg in a forked
+# child (the real unlock is NOT performed; the tally
+# still moves and is read back through the lock-free
+# getter). Standalone via make test-z064; NOT part of
+# make test. Recorded run:
+# tests/perf/recorded_run_z13_z064.txt.
+# ------------------------------------------------------------------
+$(BUILD)/mimir_unlock_shim_z064.o: tests/core/mimir_unlock_shim_z064.c tests/core/mimir_unlock_shim_z064.h src/platform/mimir_platform.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/core/mimir_unlock_shim_z064.c -o $@
+
+$(BUILD)/test_z064_unlock.o: tests/core/test_z064_unlock.c include/mimir_alloc.h tests/core/mimir_unlock_shim_z064.h tests/core/mimir_stats_j002.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z064_unlock.c -o $@
+
+# The platform object for this test is built -fno-lto: the
+# production -flto build inlines the one-line L6 unlock
+# wrapper into the core, leaving no call for --wrap to
+# interpose on (proven in the slice build: shim attempts
+# stayed 0 under the plain LIBOBJS link). The core object
+# under test remains the production -flto object; only the
+# leaf platform object is compiled without LTO, from the
+# same source at the same -O2.
+$(BUILD)/mimir_platform_z064.o: src/platform/mimir_platform.c src/platform/mimir_platform.h | $(BUILD)
+	$(CC) $(CFLAGS) -fno-lto -c src/platform/mimir_platform.c -o $@
+
+$(BUILD)/test_z064_unlock: $(filter-out $(BUILD)/mimir_platform.o,$(LIBOBJS)) $(BUILD)/mimir_platform_z064.o $(BUILD)/mimir_unlock_shim_z064.o $(BUILD)/test_z064_unlock.o
+	$(CC) $(CFLAGS) $(filter-out $(BUILD)/mimir_platform.o,$(LIBOBJS)) $(BUILD)/mimir_platform_z064.o $(BUILD)/mimir_unlock_shim_z064.o $(BUILD)/test_z064_unlock.o -Wl,--wrap=mimir_platform_global_unlock -o $@
+
+test-z064: $(BUILD)/test_z064_unlock
+	./$(BUILD)/test_z064_unlock
+
+.PHONY: test-z064

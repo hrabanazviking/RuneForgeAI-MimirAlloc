@@ -1,0 +1,70 @@
+MimirAlloc Z13 recorded run - Z-064 Lock-failure observability (D-01)
+slice: Z-064 - Lock-failure observability (D-01) (Wave 8 opener: post-unlock failure tally wired to the internal stats surface; fault-injection proof (I-004 shim heritage) that a failed unlock is now counted and reported, never silently wedging the process. Gate: injection run shows the tally moving; standing gate green.)
+date: 2026-11-12 (America/Indiana/Indianapolis)
+base: merge 1ee9072 of seat main c0e19cd (banked Z-001..Z-060, remote-verified) into yrsa/mimiralloc-team-03 - clean merge, no conflicts. This slice BUILDS AHEAD: it banks only after Z-061, Z-062 and Z-063, in roadmap order.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed at the end of this file)
+machine load state: shared host; loadavg 1.83 at build start, 4.77 during the first test build, 2.21-2.59 around the gate and the run of record. Team-01's Z-061 one-hour soak was running throughout (two sampler processes at ~0% CPU); no other heavy co-tenant observed. All graded quantities here are exact counters, not timings, except the child-exit bound (10 ms observed against a 10 s bound).
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z064_gate.log: 4988 checks / 0 failed / 77 by-design skips, GATE RESULT: GREEN - identical to the Z-001 baseline (this slice adds no make-test tests; test-z064 is standalone).
+standalone suite of record: make test-z064 (tests/core/test_z064_unlock.c + the unlock shim), 19 checks / 0 failed, RESULT: PASS, reproduced identically in 4 consecutive executions (3 pre-gate, 1 post-gate run of record below).
+neighbouring standalone suites on the final tree: test-z048 57 run / 0 failed PASS; test-z050 60 run / 0 failed PASS; test-z052 35 run / 0 failed PASS.
+variant compile proof: src/core/mimir_core.c and src/platform/mimir_platform.c compile -Werror-clean under -DMIMIR_LOCK_SHARD=1, -DMIMIR_LOCK_HIST=1, -DMIMIR_DEBUG=1 and -DMIMIR_ARENA_CCD=1 (the tally wiring composes with the shard composite unlock, the Z-019 histogram unlock wrapper and the arena build; counting sits at exactly one wrapper per build flavour).
+nm -D on libmimiralloc.so: exactly 4 public symbols (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free) - the new getter mimir_core_unlock_failures is bound local like the stats snapshot (INC-E001-07 shape (b)); no new public API.
+artifacts: src/core/mimir_core.c, src/core/mimir_core.h, Makefile (test-z064 block, standalone, NOT in make test), tests/core/test_z064_unlock.c, tests/core/mimir_unlock_shim_z064.c, tests/core/mimir_unlock_shim_z064.h, this recorded run. sha256: Makefile e3441c52..., mimir_core.c e74ae32e..., mimir_core.h 34bbc752..., test_z064_unlock.c 035bb083..., mimir_unlock_shim_z064.c f0e06d48..., mimir_unlock_shim_z064.h 18d5a39e...
+team structure: 1 lead + 6 Mythic Engineering roles run sequentially by the lead (platform depth fallback, recorded per campaign rule): design, implementation, injection-proof, gate verification, stats-surface review, risk/commit-scope. Every gate fact was verified on-device by the lead.
+
+DESIGN (smallest wiring that meets the gate)
+- D-01 (INC-M002-01) as banked: every unlock call discards its status; a failed unlock would wedge every later call with no counter, no report, no termination. Owed: a post-unlock failure tally.
+- Tally: _Alignas(64) static uint64_t mimir_stats_unlock_failures in mimir_core.c (own cache line, the Z-016/Z-040 atomic posture), incremented by a single __atomic_fetch_add at the unlock site. The recording path takes NO lock - after a failed unlock the lock state is unknown by definition, so a lock-taking recorder would be exactly wrong.
+- Wiring: every central unlock in mimir_core.c now routes through one counted wrapper - core_global_unlock() for the global lock (41 former (void) call sites, the stats snapshot's own unlock included, plus the one direct shard_unlock_global_all call site), core_shard_unlock() for per-shard unlocks in MIMIR_LOCK_SHARD builds (7 call sites, incl. shard_lock_all's rollback and core_central_unlock). The wrapper calls the name with its current macro meaning in this file: the real L6 entry (production), shard_unlock_global_all (shard builds; the composite body still names the real primitives and leaves counting to its callers, so a composite failure counts exactly once), z19_unlock (MIMIR_LOCK_HIST builds; it forwards to the real entry and returns its status, counted exactly once). Call sites keep their (void) posture: counting is observability, not a new failure mode, and no caller gains a wedge it did not already have.
+- Reporting surface: struct mimir_stats gains uint64_t unlock_failures APPENDED AT THE END (every earlier field keeps its offset), copied by mimir_core_stats_snapshot under the lock from the atomic. A failure of the snapshot's own unlock is counted after the copy and appears in the NEXT snapshot - and immediately in the getter.
+- Lock-free getter: uint64_t mimir_core_unlock_failures(void) (mimir_core.h, beside the snapshot; one atomic load). It exists because the locked snapshot cannot be taken in precisely the state D-01 feared (mutex wedged by a truly failed unlock); the TRUE injection leg below is unprovable without it. Internal only, same shape (b) as the snapshot; nm -D stays exactly 4.
+- No design doc: the change is one counter, two wrappers and one appended stats field, fully described here and in the code comments; no ledger decision was needed (the roadmap gate names the tally itself).
+
+INJECTION PROOF (I-004 shim heritage, extended)
+- Instrument: tests/core/mimir_unlock_shim_z064.c - the I-004 --wrap road applied to the one L6 entry I-004 did not wrap, mimir_platform_global_unlock. Test-only object; no production object carries injection code. Two single-shot modes: REPORT (real unlock performed, ERR_LOCK returned to the core) and TRUE (real unlock NOT performed, ERR_LOCK returned - a genuine failure's exact state). Injected and genuine failures are counted separately, as in I-004.
+- Build fact proven during the slice (recorded honestly): under the plain LIBOBJS link the shim saw ZERO attempts - the -flto production build (Z-035) inlines the one-line L6 unlock wrapper into the core, leaving no call to interpose on. The test therefore links a -fno-lto build of the leaf platform object ONLY (same source, same -O2); the core object under test remains the production -flto object. Makefile comment records this.
+- CONTROL leg: two mixed small/large workloads, no injection: snapshot tally 0, getter 0, while the shim saw 42 real unlock calls (the Z-029 TLS cache serves most small traffic without the central lock; large-path and snapshot unlocks account for the 42) and 0 genuine failures.
+- REPORT leg: one armed failure -> snapshot tally exactly 1, getter 1; a full workload then succeeds with the tally unmoved (the allocator's handling of a reported unlock failure adds no wedge); two more armed failures (alloc site, free site) -> tally exactly 3, getter 3.
+- TRUE leg (forked child): armed true failure on a large allocation's unlock. The allocation still returns its block (the unlock is post-publication); the tally moves 3 -> 4 read back through the lock-free getter (a locked snapshot is impossible in that state); the child makes no further lock-taking call and exits 0 within 10 ms of fork (bound 10 s). Parent tally stays exactly 3 (process copy) and the parent keeps allocating. A failed unlock is now counted and reported in both injection modes; in the mode where the mutex is genuinely left locked, the tally is still readable and the harness process terminates promptly instead of hanging silently.
+
+VERDICT: GATE MET. Post-unlock failure tally wired to the internal stats surface (unlock_failures, snapshot + lock-free getter); injection run shows the tally moving (0 control -> 1 -> 3 report; 3 -> 4 true, child side); standing gate GREEN 4988/0/77.
+
+DISCOVERED DEFECT (pre-existing, NOT caused by this slice; recorded as immediate next work for the keeper): the standalone suites make test-j002 and make test-i004 FAIL on the unmodified seat tree c0e19cd with counts identical to the final Z-064 tree (test-j002 550 run / 113 failed; test-i004 248 run / 116 failed - verified by stashing this slice's changes and re-running on the clean merge). Failure shape: J-002-era bytes_released/bytes_mapped expectations predate the Z-048 mapping pool (mappings are pooled, not released) and the I-004 acquire injection no longer lands (pool hits serve allocations without an acquire call; the LTO-inline question above may also bear on its lock channel). Neither suite is part of make test / run_gate.sh, so the standing gate is unaffected; both suites' expectations need a reconciliation slice of their own. Z-064 does not touch them.
+OTHER BUGS: none in the allocator or tree found by this slice. Two test-side defects found and fixed in scope before the run of record: missing POSIX feature macros/<signal.h> in the new test (kill/usleep implicit declarations), and the LTO-inline shim blindness above (fixed test-side via the -fno-lto platform object; production objects untouched).
+
+=== RUN OF RECORD (make test-z064 output, verbatim) ===
+TALLY control snapshot=0 getter=0 shim_attempts=42 shim_injected=0 shim_real_failed=0
+TALLY report1 snapshot=1 getter=1 shim_injected_report=1
+TALLY report3 snapshot=3 getter=3 shim_injected_report=3
+TALLY true-child waited_ms=10 exit=0 raw: CHILD_TALLY before=3 after=4 alloc_ok=1
+CHECKS: 19 run, 0 failed
+RESULT: PASS
+
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T16:35:40Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2837323
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 65%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 2.21 3.18 3.04

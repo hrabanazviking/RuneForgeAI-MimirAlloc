@@ -228,6 +228,12 @@ size_t mimir_tune_get_retention_bound(void);
  *   NULL purely as an implementation posture (zero-size
  *   U-09, calloc zero factor U-09, realloc(ptr,0) U-12).
  *   Disjoint from alloc_failures.
+ * - unlock_failures: Z-064 / D-01 post-unlock failure
+ *   tally -- central (global, composite shard-build, and
+ *   per-shard) unlock calls whose L6 unlock returned a
+ *   failure status. Before Z-064 every unlock discarded
+ *   its status (INC-M002-01); this tally is the owed
+ *   observability. Monotone.
  * - cross_thread_frees: PARTIAL (INC-J002-01) -- frees of
  *   MAPPING-path blocks whose allocating thread (recorded
  *   in the mapping's reserve page past the 96-byte
@@ -265,8 +271,29 @@ struct mimir_stats {
     uint64_t span_total_spans[MIMIR_STATS_CLASS_COUNT];
     uint64_t span_empty_spans[MIMIR_STATS_CLASS_COUNT];
     uint64_t span_capacity_objects[MIMIR_STATS_CLASS_COUNT];
+    /* Z-064 (D-01): monotone count of central unlock calls
+     * whose L6 status was a failure, recorded at the unlock
+     * site by a pre-lock atomic (see mimir_core.c). Appended
+     * at the END of the struct so every earlier field keeps
+     * its offset. A snapshot copies the value under the
+     * lock; a failure of the snapshot's own unlock is
+     * counted after the copy and appears in the NEXT
+     * snapshot (and immediately in the lock-free getter
+     * below). */
+    uint64_t unlock_failures;
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
+
+/* Z-064 (D-01): lock-free read of the unlock_failures tally
+ * above. The stats snapshot is the reporting surface of
+ * record, but a snapshot takes the very lock whose unlock
+ * may have failed; this getter is a single atomic load, so
+ * the tally stays readable (and provable) even then.
+ * Internal only, same INC-E001-07 shape (b) as the snapshot:
+ * reached by tests through tests/core/mimir_stats_j002.h's
+ * inclusion of this header; bound local in the shared
+ * library (nm -D stays exactly 4). */
+uint64_t mimir_core_unlock_failures(void);
 
 #ifdef MIMIR_DEBUG
 /* J-004 on-demand red-zone verification (debug builds only;
