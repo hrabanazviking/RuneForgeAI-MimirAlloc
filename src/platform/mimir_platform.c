@@ -162,6 +162,85 @@ int mimir_platform_global_unlock(void)
     return MIMIR_PLATFORM_OK;
 }
 
+#ifdef MIMIR_LOCK_SHARD
+/*
+ * Z-039 geometry B shard locks: K mutexes, each in its own
+ * cache-line-sized slot (the Z-016 padding rule: a lock word
+ * never shares a line with another lock word), statically
+ * initialised like the global lock above. The audit state is
+ * two atomic counters plus a per-thread held-mask in TLS:
+ * taking shard s while a higher shard is held (or while s
+ * itself is already held) is an order violation and is
+ * counted, never hidden; the acquisition still proceeds, so
+ * a violation is evidence, not a new failure mode.
+ */
+struct mimir_shard_lock {
+    _Alignas(64) pthread_mutex_t mutex;
+    char padding[64];
+};
+
+static struct mimir_shard_lock
+    mimir_shard_locks[MIMIR_PLATFORM_SHARD_COUNT] = {
+        { PTHREAD_MUTEX_INITIALIZER, { 0 } },
+        { PTHREAD_MUTEX_INITIALIZER, { 0 } },
+        { PTHREAD_MUTEX_INITIALIZER, { 0 } },
+        { PTHREAD_MUTEX_INITIALIZER, { 0 } }
+    };
+
+static uint64_t mimir_shard_acq[MIMIR_PLATFORM_SHARD_COUNT];
+static uint64_t mimir_shard_violations;
+static _Thread_local unsigned int mimir_shard_held_mask;
+
+int mimir_platform_shard_lock(size_t shard)
+{
+    unsigned int bit;
+
+    if (shard >= MIMIR_PLATFORM_SHARD_COUNT) {
+        return MIMIR_PLATFORM_ERR_LOCK;
+    }
+    bit = 1u << shard;
+    if ((mimir_shard_held_mask & bit) != 0 ||
+        (mimir_shard_held_mask & (~0u << (shard + 1))) != 0) {
+        __atomic_fetch_add(&mimir_shard_violations, 1ULL,
+                           __ATOMIC_RELAXED);
+    }
+    if (pthread_mutex_lock(&mimir_shard_locks[shard].mutex) != 0) {
+        return MIMIR_PLATFORM_ERR_LOCK;
+    }
+    mimir_shard_held_mask |= bit;
+    __atomic_fetch_add(&mimir_shard_acq[shard], 1ULL,
+                       __ATOMIC_RELAXED);
+    return MIMIR_PLATFORM_OK;
+}
+
+int mimir_platform_shard_unlock(size_t shard)
+{
+    if (shard >= MIMIR_PLATFORM_SHARD_COUNT) {
+        return MIMIR_PLATFORM_ERR_LOCK;
+    }
+    if (pthread_mutex_unlock(&mimir_shard_locks[shard].mutex) != 0) {
+        return MIMIR_PLATFORM_ERR_LOCK;
+    }
+    mimir_shard_held_mask &= ~(1u << shard);
+    return MIMIR_PLATFORM_OK;
+}
+
+uint64_t mimir_platform_shard_acquisitions(size_t shard)
+{
+    if (shard >= MIMIR_PLATFORM_SHARD_COUNT) {
+        return 0;
+    }
+    return __atomic_load_n(&mimir_shard_acq[shard],
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_platform_shard_order_violations(void)
+{
+    return __atomic_load_n(&mimir_shard_violations,
+                           __ATOMIC_RELAXED);
+}
+#endif /* MIMIR_LOCK_SHARD */
+
 #ifdef MIMIR_ARENA_CCD
 /* Z-037: current logical CPU of the calling thread. */
 int mimir_platform_current_cpu(size_t *out_cpu)

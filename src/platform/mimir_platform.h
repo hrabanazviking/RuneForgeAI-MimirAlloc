@@ -101,6 +101,33 @@ int mimir_platform_map_release(void *base, size_t length);
 int mimir_platform_global_lock(void);
 int mimir_platform_global_unlock(void);
 
+#ifdef MIMIR_LOCK_SHARD
+/*
+ * Z-039 geometry B (lock-sharding, slice Z-039 follow-up):
+ * K shard locks beside the global lock. This declaration
+ * block exists ONLY in a MIMIR_LOCK_SHARD build; a production
+ * build of this header is unchanged. The shard locks are
+ * statically initialised in the implementation, exactly like
+ * the global lock (no allocation, no constructor dependency).
+ * mimir_platform_shard_acquisitions / _order_violations are
+ * the lock-order audit surface: the implementation counts
+ * every shard acquisition per shard and every acquisition
+ * that violates the campaign's fixed order (a shard may be
+ * taken only while no strictly higher shard is held by the
+ * calling thread; the global lock is taken last, after all
+ * shards -- the platform layer cannot see that step, so the
+ * audit covers the shard-to-shard order, and the core's
+ * acquisition helpers are the only road to the global lock
+ * in a shard build).
+ */
+#include <stdint.h>
+#define MIMIR_PLATFORM_SHARD_COUNT ((size_t)4)
+int mimir_platform_shard_lock(size_t shard);
+int mimir_platform_shard_unlock(size_t shard);
+uint64_t mimir_platform_shard_acquisitions(size_t shard);
+uint64_t mimir_platform_shard_order_violations(void);
+#endif /* MIMIR_LOCK_SHARD */
+
 #ifdef MIMIR_ARENA_CCD
 /*
  * Z-037 per-CCD arena prototype (MIMIRALLOC_Z13_ROADMAP.md

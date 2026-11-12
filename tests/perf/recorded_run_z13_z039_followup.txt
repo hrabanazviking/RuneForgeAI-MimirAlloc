@@ -1,0 +1,286 @@
+Z-039 FOLLOW-UP RECORDED RUN - the geometry decision, settled
+MimirAlloc Z13, Wave 5, slice Z-039 (Second arena geometry,
+evidence-conditional), follow-up session.
+Team: team-08 (worktree /home/volmarr/mimiralloc-team-08,
+branch yrsa/mimiralloc-team-08). Host: purpleraider (Z13).
+Date: 2026-11-12. Seat main at session start: 8aec32a
+(Z-039 part 1 banked; Z-038 banked as 7bc5473). Branch merged
+seat main first: merge commit 9e86b51, clean, no conflicts;
+recorded_run_z13_z037/z038/z039 all present post-merge.
+
+================================================================
+1. THE DECISION - pre-registered rules R1-R4 applied as written
+================================================================
+The rules below are quoted from tests/perf/
+recorded_run_z13_z039.txt (part 1, banked 8aec32a). No rule
+was added, bent or re-weighted in this session.
+
+  R1  arena beats banked by >5% on BOTH workloads in the
+      8..16 thread band -> build geometry A (per-thread
+      arenas, scaled from the Z-037 prototype).
+  R2  arena within the 5% TIE band at 8..16 on either
+      workload, or wins only at 32/SMT -> build geometry B
+      (lock-sharding of the central core).
+  R3  split band (one workload each way) -> follow the
+      workload the Z-036 verdict names as Wave 5 priority;
+      absent that naming, R2 applies.
+  R4  the built geometry gets its own ladder table in its
+      own recorded run; the road not taken is recorded with
+      the rule that closed it.
+
+The banked evidence (tests/perf/recorded_run_z13_z038.txt,
+seat 7bc5473), arena/banked median ratios in the decision
+band:
+
+  workload     8t      12t     16t
+  small_churn  1.009   1.002   0.988    TIE at all three rungs
+  mixed_batch  0.969   1.074   0.989    TIE, WIN, TIE
+
+Arena vs banked over the whole Z-038 ladder: TIE at 21/24
+rungs (ratios 0.969-1.016); arena WIN only at mixed_batch
+24/28/32 threads (+13.1% / +16.1% / +8.1%), all OUTSIDE the
+8..16 decision band.
+
+Application:
+  R1 FAILS. small_churn never beats banked by >5% in the
+  band (best 1.009); mixed_batch does so at only one of
+  three band rungs (12t, 1.074).
+  R3 does not rescue R1: the band is not split one-workload-
+  each-way (small_churn is TIE at every band rung), and the
+  Z-036 verdict names BOTH small_churn and mixed_batch as
+  verdict workloads - no single priority - so R3's own
+  fallback is R2 in any case.
+  R2 FIRES: the arena is within the 5% TIE band at 8..16 on
+  both workloads, and its only wins sit at 24/28/32 threads.
+
+DECISION: geometry B - lock-sharding. Recorded as D-008 in
+docs/DECISION_LEDGER.md. Road not taken: geometry A
+(per-thread arenas), closed by R2 for the reason above;
+Z-037's per-CCD arena prototype remains in the tree behind
+its own flag, untouched by this slice.
+
+================================================================
+2. WHAT WAS BUILT - geometry B behind MIMIR_LOCK_SHARD
+================================================================
+Form of adoption, the Z-037/Z-034 pattern: a flag-gated
+prototype. The production default remains the banked central
+lock; a flag-off build is byte-identical to the seat's
+(zero-cost proof in section 3). Making sharding the default
+is a later adoption decision, not this slice's.
+
+Design, following the Z-039 part-1 paper design:
+  - K = 4 shard locks (L6, src/platform): shard map by class
+    GROUP - class 0 (16 B) -> shard 0, class 1 (32 B) ->
+    shard 1, classes 2..3 (48, 64 B) -> shard 2, classes
+    4..19 (80..1024 B) -> shard 3. Each shard mutex is
+    cache-line padded (Z-016 rule); per-shard acquisition
+    counters and a lock-order audit (thread-local held-mask;
+    taking a shard while a higher-or-equal shard is held is
+    counted as a violation, never silently allowed) live in
+    the platform layer.
+  - Per-shard span lists: the span registry head becomes
+    mimir_shard_span_head[shard] selected by a thread-local
+    hint naming the shard of the class being served.
+  - Fixed global lock order: shards ascending, then the
+    retained global lock LAST (it guards the mapping
+    registry). Banked global sections (large path, stats,
+    metadata check, retained snapshot, drain/trim, tune,
+    TLS drain, destructor) take ALL shards ascending + the
+    global lock by macro superset, so their bodies are
+    unchanged and the order is honoured by construction.
+  - Hot paths take exactly ONE shard: TLS refill miss, TLS
+    full-bin drain, pending-full direct accounting,
+    cross-thread free of a span object (searches the shard
+    lists ascending, keeps only the found span's shard).
+    Two-class operations (realloc) run under the global set,
+    the superset course the paper design allows.
+  - Shared counters that shard sections update concurrently
+    (live spans/bytes/objects, stats byte counters) are
+    _Atomic in a shard build only; the peak sampler is a
+    CAS-max. The per-span TLS tally table is replicated per
+    shard, selected by the span's own class.
+  - Combinations refused with #error, Z-037 precedent:
+    MIMIR_LOCK_SHARD with MIMIR_DEBUG, MIMIR_ARENA_CCD,
+    MIMIR_OOL_META or MIMIR_LOCK_HIST (each combination is
+    unmeasured surface; the refusal was exercised in this
+    session - SHARD+DEBUG build fails at the #error).
+
+Files changed/added by the follow-up (the commit's path
+list): src/platform/mimir_platform.h, src/platform/
+mimir_platform.c, src/core/mimir_core.h, src/core/
+mimir_core.c, docs/DECISION_LEDGER.md (D-008), tests/core/
+mimir_shard_z039.h (new), tests/perf/probe_z039f.c (new),
+tests/perf/run_z039f.sh (new), tests/perf/
+summarize_z039f.py (new), tests/perf/
+recorded_run_z13_z039_followup.txt (this file, new).
+Diffstat vs merge base: 5 source/doc files, +673/-3 lines
+before the repair fixes; the new test/perf files are
+additions only. No README.md touched. No production
+behaviour changes with the flag off (proof below).
+
+================================================================
+3. CORRECTNESS EVIDENCE
+================================================================
+Standing gate (this tree, flag off, bash
+scripts/z13/run_gate.sh, log hidden_files/gate_z039f.log):
+  GATE COUNTS: checks=4988 failed=0 skips=77 - GREEN,
+  identical to the standing baseline 4988/0/77. Delta is
+  exactly zero and explained: this follow-up adds NO
+  make-test tests. The geometry is a flag-gated prototype;
+  its correctness evidence is the flag-on suite, the shard
+  probe and the ladder selfchecks below, not new gate rows.
+
+Zero-cost proof (run_z039f.sh, vs pristine seat tree
+/home/volmarr/mimiralloc-z13-forge at 8aec32a):
+  CORE     IDENTICAL 53776e674ac0f175cee1e3da6a7e71dd6f
+                     aca9e2964dc15345b29c08ede30221
+  PLATFORM IDENTICAL 85eb0588c68e1f01dd1683f5d24ffbc1ebe
+                     18e042c49f5639c896cf7862482eb
+  API      IDENTICAL 1ae7a6ecc4f2006ae015006e06e07f01a2e
+                     1b38c8c334c1a2a19c79b5bced5e4
+  prod core carries 0 shard symbols; sharded core carries
+  11; prod core 38600 bytes, sharded core 43776 bytes.
+
+Flag-on suite (the eight make-test binaries rebuilt with
+-DMIMIR_LOCK_SHARD=1 core+platform, shared API object;
+raw: /tmp/z039f_sharded.raw.suite in the session):
+  test_smoke  SMOKE 18/18 checks passed
+  test_core   RESULT: PASS
+  test_b007   RESULT: PASS
+  test_c005   RESULT: PASS
+  test_c006   RESULT: PASS
+  test_c007   RESULT: PASS (its fault-injection FAIL rows
+              report as by-design SKIP, as in the gate)
+  test_c008   RESULT: PASS
+  test_d004   RESULT: PASS (per-thread checks failures=0)
+  Eight of eight PASS against the sharded core.
+
+Shard correctness probe (probe_z039f.c shardcheck, sharded
+binary; the banked binary refuses the phase, exit 3; a
+LEG_SHARDED build without the flag fails at #error):
+  SHARDCHECK map class0=0 class1=1 class2=2 class3=2
+             class4=3 class19=3 OK
+  SHARDCHECK acquisitions s0=31744 s1=31571 s2=31427
+             s3=31468 order_violations=0
+  SHARDCHECK PASS
+  The storm: 8 threads x 20000 iterations over all 20
+  classes, cross-thread frees through a handoff ring,
+  cross-shard realloc moves; every shard exercised ~31.5k
+  acquisitions; the platform lock-order audit read ZERO
+  violations at the end. (An earlier probe draft deadlocked
+  its OWN handoff ring - writer spinning on a full slot
+  whose reader was itself blocked writing; the probe was
+  fixed to a non-waiting protocol, consume-first + free-
+  locally-if-full. The allocator was never the blocker:
+  the fixed probe passed on its first run.)
+
+Ladder selfchecks (both legs, this session): replica vs
+bench MATCH (1228352, 9472 ops at 37 batches); references
+small_churn 6371544, mixed_batch 6627200, identical on both
+legs and to Z-020/Z-021/Z-038. Every ladder rung's
+checksums read OK on both legs.
+
+================================================================
+4. THE FOLLOW-UP LADDER (R4 artefact) - banked vs sharded
+================================================================
+Method (docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004; the frozen
+Z-020/Z-021/Z-038 shape, rung for rung): one probe source
+for both legs (tests/perf/probe_z039f.c); bench_k002.c
+included UNMODIFIED (main renamed away); workloads
+small_churn (50000 iterations per thread) and mixed_batch
+(200 batches = 51200 ops per thread); rungs 1 2 3 4 6 8 12
+16 20 24 28 32 threads; repetitions are separate PROCESSES,
+5 per ladder point, headline = median of processes; one
+discarded warm-up process per point at 1/10 scale plus the
+probe in-process 1/10 warm-up; 2 s pauses between points;
+worker t pins itself to CPU t (identity order, verified per
+worker); runner wraps each process in taskset -c 0-31.
+Timing window: PER-THREAD (the Z-021 window) on both legs.
+Leg order in this session: banked, sharded.
+
+Load state, recorded honestly: the session ran in a quiet
+window - load average 0.99/1.52/1.40 at ladder start
+(~06:41), 1.26/2.00/1.69 at end (06:47); no Aesir forge
+load was visible during the ladder (an Aesir mojo test had
+been active earlier in the morning, before this session's
+build phase). The standing gate ran concurrently only
+during the build phase, before the first ladder point.
+Rep spreads were tight (typically <1% min..max) on all but
+the drift-rejected points listed below. Per-point load
+comments are in the raws (/tmp/z039f_banked.raw,
+/tmp/z039f_sharded.raw in the session).
+
+Median aggregate Mops/s (median of 5 processes):
+
+small_churn
+threads   banked   sharded  ratio   verdict (5% band)
+      1   35.523   34.088R  0.960   TIE  (R: drift-rejected)
+      2   24.655   28.112   1.140   WIN
+      3   28.713   32.501   1.132   WIN
+      4   29.138   33.701   1.157   WIN
+      6   29.535   32.269   1.093   WIN
+      8   30.600   30.139   0.985   TIE
+     12   17.985   19.591   1.089   WIN
+     16   19.966   19.789   0.991   TIE
+     20   24.010   24.047   1.002   TIE
+     24   28.959   28.961   1.000   TIE
+     28   33.303   32.928   0.989   TIE
+     32   36.862   37.169   1.008   TIE
+
+mixed_batch
+threads   banked   sharded  ratio   verdict (5% band)
+      1   37.062R  37.005R  0.998   TIE  (R: both legs)
+      2   23.305   27.904   1.197   WIN
+      3   28.824   33.107   1.149   WIN
+      4   29.090   34.071   1.171   WIN
+      6   29.565   31.079   1.051   WIN
+      8   29.935   29.197   0.975   TIE
+     12   17.949   19.369   1.079   WIN
+     16   21.051   20.506   0.974   TIE
+     20   24.234   24.928   1.029   TIE
+     24   31.004R  27.748   0.895   LOSS (banked median R)
+     28   29.701   29.835   1.005   TIE
+     32   37.708   30.061R  0.797   LOSS (sharded median R)
+
+Drift-rejects (drift > 8% bound, medians INDICATIVE ONLY):
+sharded small_churn 1t (21.15%), sharded mixed_batch 1t
+(9.19%), banked mixed_batch 1t (13.35%), banked mixed_batch
+24t (8.09%), sharded mixed_batch 32t (19.89%, bimodal reps
+29.7-36.7 Mops/s). The banked small_churn 1t point was
+clean (drift 0.37%).
+Both legs share the same absolute shape (a dip at 12-16
+threads present in both, tight reps) - a property of these
+workloads on this host, not of either geometry; the ratios
+are the comparable quantity.
+
+Honest reading of geometry B's own ladder:
+  - In the 8..16 decision band B is TIE at 8 and 16 on both
+    workloads and WIN at 12 (+8.9% / +7.9%): sharding does
+    not beat the banked core across the band, it matches it
+    with one mid-band win.
+  - Below the band (2-6 threads) B wins consistently on
+    both workloads (+5%..+20%): removing the single lock
+    from the contended small-class paths pays most when a
+    few threads hammer the hot classes.
+  - At SMT counts on mixed_batch, B loses at 24 (0.895,
+    against a drift-rejected banked median) and 32 (0.797,
+    drift-rejected sharded median, indicative only). The
+    32t figure must not be quoted as settled; the 24t loss
+    is the session's one clean high-count regression and
+    is recorded as such.
+  - Nothing in this ladder re-opens the decision: R1-R4
+    chose B from Z-038's evidence; this table is B's own
+    record under R4, regressions included.
+
+================================================================
+5. STATE AFTER THIS SESSION
+================================================================
+Z-039's evidence condition is now discharged in full: part
+1 banked the decision procedure, this follow-up applied it
+and built the chosen geometry. The slice's remaining road
+is the adoption question - whether and when MIMIR_LOCK_SHARD
+becomes the production default - which is a decision for a
+later slice on this evidence (band TIE, low-count wins,
+one clean SMT regression on mixed_batch), not a step this
+follow-up was charged to take. The production default in
+the tree remains the banked central lock, at zero cost.

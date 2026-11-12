@@ -365,6 +365,29 @@ void mimir_core_lock_hist_reset(void);
  * contract header's, so a signature drift between this
  * file and the defining translation unit (which includes
  * both) is a compile error, never a silent miss. */
+#ifdef MIMIR_LOCK_SHARD
+/* Z-039 geometry B (lock-sharding) surface: exists ONLY in
+ * a MIMIR_LOCK_SHARD build of the core (slice Z-039
+ * follow-up). Internal only, INC-E001-07 shape (b) exactly
+ * like the surfaces above: declared here, re-declared for
+ * tests only in tests/core/mimir_shard_z039.h; bound local
+ * in the shared library (nm -D stays exactly 4). The shard
+ * map is the Z-039 paper design's grouping: the hot small
+ * classes 16 B and 32 B each own a shard, 48 B + 64 B share
+ * one, and every colder class (80 B..1024 B) shares the
+ * last -- K = 4 shard locks beside the retained global
+ * lock, which in a shard build guards the mapping registry
+ * and is always taken LAST (fixed order: shards ascending,
+ * then global). */
+#define MIMIR_SHARD_COUNT ((size_t)4)
+struct mimir_shard_snapshot {
+    uint64_t acquisitions[MIMIR_SHARD_COUNT];
+    uint64_t order_violations;
+};
+size_t mimir_shard_of_class(size_t class_index);
+int mimir_shard_snapshot(struct mimir_shard_snapshot *out);
+#endif /* MIMIR_LOCK_SHARD */
+
 struct mimir_tls_cache_snapshot;
 int mimir_tls_cache_snapshot(struct mimir_tls_cache_snapshot *out);
 #ifdef MIMIR_ARENA_CCD

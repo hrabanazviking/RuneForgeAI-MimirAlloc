@@ -48,6 +48,7 @@ leaves open. Statuses in this ledger mean:
 | D-005 | Implementation language (C11 vs C++17 core) | Superseded by D-006 | Section 7.2 | A-009 |
 | D-006 | Implementation language — C11 core | Adopted | Section 7.2 | A-009 |
 | D-007 | Z13 redesign: TLS cache (Wave 4), per-CCD arenas (Wave 5) | Adopted | Z13 roadmap Z-026 | Z-026 (settler); consumers Z-028, Z-037, Z-039 |
+| D-008 | Z13 Wave 5 second geometry: lock-sharding (geometry B); per-thread arenas NOT taken | Adopted | Z13 roadmap Z-039; Z-039 recorded run decision rule R1-R4 | Z-039 follow-up (settler) |
 
 ---
 
@@ -185,6 +186,54 @@ leaves open. Statuses in this ledger mean:
 
 ---
 
+## D-008 - Z13 Wave 5 second geometry: lock-sharding chosen at Z-039
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice Z-039
+  (Wave 5), which names this ledger as the decision's home;
+  the pre-registered decision rule R1-R4 in
+  tests/perf/recorded_run_z13_z039.txt; the banked evidence
+  it applies to is tests/perf/recorded_run_z13_z038.txt
+  (seat 7bc5473).
+- **Decision:** (1) Geometry B is chosen: lock-sharding of
+  the central core -- K = 4 shard locks keyed by size class
+  (16 B and 32 B each own a shard, 48 B + 64 B share one,
+  80 B..1024 B share the last), per-shard span lists, the
+  mapping registry keeping the global lock taken LAST in a
+  fixed ascending order (shards 0..3, then global), TLS
+  refill/drain and central small alloc/free taking exactly
+  their class's shard, cross-thread frees taking only the
+  found span's shard, and all-shard acquisitions (flush,
+  realloc, large path, snapshots, drain/trim) honouring
+  the same order by superset. (2) Geometry A (per-thread
+  arenas, scaled from Z-037's per-CCD prototype) is NOT
+  taken: the road not taken, with its reason, is recorded
+  in tests/perf/recorded_run_z13_z039_followup.txt. The
+  deciding evidence, applied exactly as pre-registered:
+  in Z-038's 8..16 thread decision band the arena leg's
+  median ratios to banked are small_churn 1.009 / 1.002 /
+  0.988 at 8 / 12 / 16 threads and mixed_batch 0.969 /
+  1.074 / 0.989 -- R1 (arena beats banked by >5% on BOTH
+  workloads in the band) fails on small_churn at every
+  rung and on mixed_batch at two of three; R2 (arena
+  within the 5% TIE band at 8..16 on either workload)
+  fires, and R3's split route also lands on R2 because
+  Z-036's verdict names no single priority workload. The
+  arena leg's only wins sit at mixed_batch 24/28/32
+  threads (+13.1% / +16.1% / +8.1%), outside the decision
+  band. (3) Form of adoption, the Z-037 pattern: geometry
+  B is built behind the build flag MIMIR_LOCK_SHARD with
+  exactly zero production cost when the flag is off
+  (flag-off objects byte-identical to the seat's); the
+  production default remains the banked central lock
+  until a later adoption slice flips the default on its
+  own ladder evidence. The follow-up's own ladder table
+  (banked vs sharded, same shapes and protocol as Z-038)
+  is the gate evidence in
+  tests/perf/recorded_run_z13_z039_followup.txt.
+- **Supersedes:** None. **Status of entry:** Current.
+
+---
 ## Notes - roadmap inconsistencies discovered in the A-002 design phase
 
 The following inconsistencies were discovered while designing this slice. Per campaign

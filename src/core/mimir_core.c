@@ -432,7 +432,15 @@ _Static_assert(sizeof(thrd_t) <= 4096 - 96,
  */
 static struct mimir_descriptor *mimir_registry_head; /* NULL: empty */
 static size_t mimir_live_mappings;                   /* 0 at start  */
+#ifdef MIMIR_LOCK_SHARD
+static _Atomic size_t mimir_live_bytes;              /* 0 at start  */
+#else
+#ifdef MIMIR_LOCK_SHARD
+static _Atomic size_t mimir_live_bytes;              /* 0 at start  */
+#else
 static size_t mimir_live_bytes;                      /* 0 at start  */
+#endif
+#endif
 
 /*
  * E-005 audit counters (docs/PHASE_5_AUDIT_HOOK_E005.md;
@@ -475,9 +483,15 @@ unsigned long mimir_audit_mapping_retired;
  * snapshot reads them with __atomic_load_n under the lock.
  * Counters drive no allocation decision (Invariant 8).
  */
+#ifdef MIMIR_LOCK_SHARD
+static _Atomic uint64_t mimir_stats_bytes_requested;
+static _Atomic uint64_t mimir_stats_bytes_allocated;
+static _Atomic uint64_t mimir_stats_bytes_released;
+#else
 static uint64_t mimir_stats_bytes_requested;
 static uint64_t mimir_stats_bytes_allocated;
 static uint64_t mimir_stats_bytes_released;
+#endif
 static uint64_t mimir_stats_peak_mapped;
 static uint64_t mimir_stats_alloc_failures;
 static uint64_t mimir_stats_alloc_posture_nulls;
@@ -516,7 +530,15 @@ static const char *const mimir_diag_cause_names[] = {
     "none", "backing", "arithmetic", "lock", "page-size",
     "internal"
 };
+#ifdef MIMIR_LOCK_SHARD
+static _Thread_local int mimir_diag_last_cause;
+#else
+#ifdef MIMIR_LOCK_SHARD
+static _Thread_local int mimir_diag_last_cause;
+#else
 static int mimir_diag_last_cause;
+#endif
+#endif
 static int mimir_diag_guard; /* 0 idle, 1 reporting */
 static uint64_t mimir_diag_emitted_count;
 static uint64_t mimir_diag_suppressed_count;
@@ -1203,13 +1225,173 @@ static void mimir_dbg_check_or_abort(const void *obj,
 }
 #endif /* MIMIR_DEBUG */
 
+/*
+ * Z-039 geometry B -- lock-sharding of the central core
+ * (MIMIRALLOC_Z13_ROADMAP.md Wave 5, slice Z-039 follow-up;
+ * decision D-008 in docs/DECISION_LEDGER.md). Everything in
+ * this section exists ONLY under MIMIR_LOCK_SHARD. A
+ * production build never defines it: no code, no data, no
+ * symbol, no cost (proof in
+ * tests/perf/recorded_run_z13_z039_followup.txt, the
+ * Z-019/Z-034/Z-037 zero-cost pattern). Combination refusals
+ * (below): MIMIR_DEBUG (the debug layout owns its own
+ * serving paths and bypasses the TLS cache this geometry
+ * shards around), MIMIR_ARENA_CCD (two partition geometries
+ * at once are future work, exactly as Z-037 recorded for
+ * its own combinations), MIMIR_OOL_META (the trial's free
+ * path is its own), MIMIR_LOCK_HIST (the histograms
+ * instrument the ONE lock; a sharded instrument is future
+ * work).
+ *
+ * Design (the Z-039 recorded run's paper geometry B,
+ * applied by decision rule R2 to Z-038's banked ladder):
+ * the singleton core keeps ONE set of registries, but the
+ * span registry is split into one list per shard and the
+ * one global lock is joined by K = 4 shard locks keyed by
+ * size class: shard 0 = class 16 B, shard 1 = class 32 B,
+ * shard 2 = classes 48 B + 64 B, shard 3 = classes
+ * 80 B..1024 B (the hot small classes each own a shard;
+ * the cold classes share). A class's spans, its active
+ * hint, its TLS tally table and its free lists are guarded
+ * by that class's shard ONLY. The mapping registry keeps
+ * the global lock. FIXED LOCK ORDER, audited in L6: shards
+ * in ascending index, the global lock LAST -- never the
+ * reverse, never a shard while a higher shard is held.
+ * Operations that genuinely span shards (the caller's TLS
+ * pending/handed flush, realloc, the large path, stats /
+ * metadata / drain / trim snapshots) acquire ALL shards
+ * ascending and then the global lock: in this build the
+ * existing entry points' global-lock calls resolve to
+ * exactly that acquisition (shard_lock_global_all below),
+ * so the banked global sections stay correct by superset,
+ * and the two-class rule of the paper design is honoured
+ * by the same ascending order. The paths the ladder
+ * measures take exactly one shard: a TLS refill/drain
+ * batch for one class, a central small alloc/free for one
+ * class, and a cross-thread free (which searches the shard
+ * lists in ascending order and keeps only the found
+ * span's shard). Shared counters that shard-held sections
+ * update (live spans/bytes/objects, the J-002 byte totals)
+ * are _Atomic in this build; the peak sampler is a CAS
+ * max. mimir_shard_hint is the serving thread's current
+ * shard, a _Thread_local scratch set by every serving
+ * helper before it touches the registry macro below --
+ * under sharding there is no single lock to serialise a
+ * shared hint, so the hint is per-thread by construction.
+ */
+#ifdef MIMIR_LOCK_SHARD
+#if defined(MIMIR_DEBUG) || defined(MIMIR_ARENA_CCD) || \
+    defined(MIMIR_OOL_META) || defined(MIMIR_LOCK_HIST)
+#error "MIMIR_LOCK_SHARD is not defined in combination with MIMIR_DEBUG, MIMIR_ARENA_CCD, MIMIR_OOL_META or MIMIR_LOCK_HIST (Z-039 follow-up)"
+#endif
+_Static_assert(MIMIR_SHARD_COUNT == MIMIR_PLATFORM_SHARD_COUNT,
+               "core and platform shard counts must agree (Z-039)");
+
+static _Thread_local size_t mimir_shard_hint;
+
+static size_t shard_of_class(size_t class_index)
+{
+    if (class_index < 2) {
+        return class_index; /* 16 B -> 0, 32 B -> 1 */
+    }
+    if (class_index < 4) {
+        return 2; /* 48 B, 64 B */
+    }
+    return 3; /* 80 B..1024 B */
+}
+
+size_t mimir_shard_of_class(size_t class_index)
+{
+    return shard_of_class(class_index);
+}
+
+int mimir_shard_snapshot(struct mimir_shard_snapshot *out)
+{
+    size_t s;
+
+    if (out == NULL) {
+        return -1;
+    }
+    for (s = 0; s < MIMIR_SHARD_COUNT; s++) {
+        out->acquisitions[s] =
+            mimir_platform_shard_acquisitions(s);
+    }
+    out->order_violations =
+        mimir_platform_shard_order_violations();
+    return 0;
+}
+
+static int shard_lock_all(void)
+{
+    size_t s;
+
+    for (s = 0; s < MIMIR_SHARD_COUNT; s++) {
+        if (mimir_platform_shard_lock(s) != MIMIR_PLATFORM_OK) {
+            while (s > 0) {
+                s--;
+                (void)mimir_platform_shard_unlock(s);
+            }
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static void shard_unlock_all(void)
+{
+    size_t s = MIMIR_SHARD_COUNT;
+
+    while (s > 0) {
+        s--;
+        (void)mimir_platform_shard_unlock(s);
+    }
+}
+
+/* The all-shards-then-global acquisition: what every
+ * banked global-lock call site means in this build. The
+ * two helpers are defined BEFORE the macro pair below so
+ * their bodies still name the real L6 primitives. */
+static int shard_lock_global_all(void)
+{
+    if (shard_lock_all() != 0) {
+        return MIMIR_PLATFORM_ERR_LOCK;
+    }
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        shard_unlock_all();
+        return MIMIR_PLATFORM_ERR_LOCK;
+    }
+    return MIMIR_PLATFORM_OK;
+}
+
+static int shard_unlock_global_all(void)
+{
+    int rc = mimir_platform_global_unlock();
+
+    shard_unlock_all();
+    return rc;
+}
+
+#define mimir_platform_global_lock shard_lock_global_all
+#define mimir_platform_global_unlock shard_unlock_global_all
+#endif /* MIMIR_LOCK_SHARD */
+
 /* Span registry anchors and counters: fixed static storage
  * below L1, exactly as the mapping registry's are (B-006
  * S7.2 / S8.1). A span header is on this list if and only
  * if its state is LIVE. mimir_class_active is a per-class
  * hint for the span to try first; correctness never rests
  * on it -- the registry walk is authoritative. */
+#ifndef MIMIR_LOCK_SHARD
 static struct mimir_span_header *mimir_span_head; /* NULL: empty */
+#else
+/* Z-039: one span list per shard; every pre-Z-039 use of
+ * mimir_span_head resolves through this macro to the list
+ * of the shard named by the serving thread's hint, which
+ * the serving helpers set before touching the registry. */
+static struct mimir_span_header
+    *mimir_shard_span_head[MIMIR_SHARD_COUNT];
+#define mimir_span_head (mimir_shard_span_head[mimir_shard_hint])
+#endif
 #ifndef MIMIR_ARENA_CCD
 static struct mimir_span_header *mimir_class_active[MIMIR_SMALL_CLASS_COUNT];
 #else
@@ -1226,9 +1408,21 @@ static struct mimir_span_header
 static size_t mimir_arena_hint;
 #define mimir_class_active (mimir_arena_active[mimir_arena_hint])
 #endif
+#ifdef MIMIR_LOCK_SHARD
+static _Atomic size_t mimir_live_spans;
+static _Atomic size_t mimir_live_span_bytes;
+static _Atomic size_t mimir_live_small_objects;
+#else
+#ifdef MIMIR_LOCK_SHARD
+static _Atomic size_t mimir_live_spans;
+static _Atomic size_t mimir_live_span_bytes;
+static _Atomic size_t mimir_live_small_objects;
+#else
 static size_t mimir_live_spans;
 static size_t mimir_live_span_bytes;
 static size_t mimir_live_small_objects;
+#endif
+#endif
 
 unsigned long mimir_audit_span_published;
 unsigned long mimir_audit_span_retired;
@@ -1582,12 +1776,32 @@ static int span_free_node_valid(const struct mimir_span_header *span,
  * the exact high-water mark (I-002 Q-PEAKMAPPED). */
 static void mimir_stats_peak_update_locked(void)
 {
+#ifdef MIMIR_LOCK_SHARD
+    /* Z-039: the sampler runs under whichever shard (or the
+     * global set) published; the two totals are atomic and
+     * the high-water moves by CAS, so concurrent publishers
+     * on different shards cannot lose a peak. The value is
+     * still only ever sampled at the two publication points. */
+    uint64_t mapped =
+        (uint64_t)(__atomic_load_n(&mimir_live_bytes,
+                                   __ATOMIC_RELAXED) +
+                   __atomic_load_n(&mimir_live_span_bytes,
+                                   __ATOMIC_RELAXED));
+    uint64_t cur = __atomic_load_n(&mimir_stats_peak_mapped,
+                                   __ATOMIC_RELAXED);
+    while (mapped > cur &&
+           !__atomic_compare_exchange_n(
+               &mimir_stats_peak_mapped, &cur, mapped, 0,
+               __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+    }
+#else
     uint64_t mapped =
         (uint64_t)(mimir_live_bytes + mimir_live_span_bytes);
 
     if (mapped > mimir_stats_peak_mapped) {
         mimir_stats_peak_mapped = mapped;
     }
+#endif
 }
 
 /*
@@ -1610,6 +1824,9 @@ static int arena_register(struct mimir_span_header *span,
 #endif
 static struct mimir_span_header *span_acquire_locked(size_t class_index)
 {
+#ifdef MIMIR_LOCK_SHARD
+    mimir_shard_hint = shard_of_class(class_index);
+#endif
     size_t page_size;
     void *base = NULL;
     size_t mapping_length = 0;
@@ -1951,6 +2168,13 @@ static int span_release_locked(struct mimir_span_header *span)
     size_t mapping_length = span->mapping_length;
     size_t class_index = span->class_index;
     int status;
+#ifdef MIMIR_LOCK_SHARD
+    /* Z-039: the registry/active writes below name this
+     * span's shard list; the hint is set, not saved -- every
+     * caller either holds every shard or re-sets the hint
+     * before its next registry touch. */
+    mimir_shard_hint = shard_of_class(class_index);
+#endif
 #ifdef MIMIR_ARENA_CCD
     /* Z-037: the active-slot writes in this function name
      * the span's OWNER arena, never the serving hint: a
@@ -2049,6 +2273,9 @@ static size_t tls_binned_count_locked(
 #if !defined(MIMIR_ARENA_CCD) || defined(MIMIR_DEBUG)
 static size_t empty_spans_of_class_locked(size_t class_index)
 {
+#ifdef MIMIR_LOCK_SHARD
+    mimir_shard_hint = shard_of_class(class_index);
+#endif
     struct mimir_span_header *span = mimir_span_head;
     size_t count = 0;
 
@@ -2484,6 +2711,37 @@ static struct mimir_span_header *find_span_live_locked(void *ptr)
     return NULL;
 }
 
+#ifdef MIMIR_LOCK_SHARD
+/* Z-039: find_span_live_locked walks ONE shard list (the
+ * hint's). This variant finds a live span across all lists:
+ * the hint's list first (the single-shard callers' span is
+ * always there), then the others ascending; on success the
+ * hint names the found span's shard. List stability is the
+ * CALLER's lock set, never this function's. */
+static struct mimir_span_header *find_span_live_any_locked(void *ptr)
+{
+    size_t first = mimir_shard_hint;
+    size_t s;
+    struct mimir_span_header *span;
+
+    span = find_span_live_locked(ptr);
+    if (span != NULL) {
+        return span;
+    }
+    for (s = 0; s < MIMIR_SHARD_COUNT; s++) {
+        if (s == first) {
+            continue;
+        }
+        mimir_shard_hint = s;
+        span = find_span_live_locked(ptr);
+        if (span != NULL) {
+            return span;
+        }
+    }
+    mimir_shard_hint = first;
+    return NULL;
+}
+#endif /* MIMIR_LOCK_SHARD */
 /*
  * Serve one small object from the class path, with the
  * lock held. size is admitted by the caller (1..1024).
@@ -2502,6 +2760,9 @@ static void *small_alloc_locked(size_t size, int zero_user,
                                 struct mimir_span_header **out_span)
 {
     size_t class_index = class_index_for(size);
+#ifdef MIMIR_LOCK_SHARD
+    mimir_shard_hint = shard_of_class(class_index);
+#endif
     size_t class_size = mimir_class_sizes[class_index];
 #ifdef MIMIR_ARENA_CCD
     /* Z-037: serve from the calling thread's arena only. */
@@ -2617,7 +2878,11 @@ static void *small_alloc_locked(size_t size, int zero_user,
  */
 static void small_free_locked(void *ptr)
 {
+#ifdef MIMIR_LOCK_SHARD
+    struct mimir_span_header *span = find_span_live_any_locked(ptr);
+#else
     struct mimir_span_header *span = find_span_live_locked(ptr);
+#endif
 
     if (span == NULL) {
         return;
@@ -3204,10 +3469,23 @@ static void tls_ensure_init(void)
  * true at every instant (block heading), and a span with
  * a nonzero tally is never released. */
 #define TLS_TALLY_SLOTS ((size_t)4096)
+#ifndef MIMIR_LOCK_SHARD
 static struct {
     struct mimir_span_header *span;
     uint32_t count;
 } tls_tally[TLS_TALLY_SLOTS];
+#endif
+#ifdef MIMIR_LOCK_SHARD
+/* Z-039: one tally table per shard. The macro selects by
+ * the span argument's own class, so every tally call site
+ * (parameter named span in both tally functions) lands in
+ * its span's shard table under its span's shard lock. */
+static struct {
+    struct mimir_span_header *span;
+    uint32_t count;
+} tls_shard_tally[MIMIR_SHARD_COUNT][TLS_TALLY_SLOTS];
+#define tls_tally (tls_shard_tally[shard_of_class((size_t)span->class_index)])
+#endif
 
 static void tally_add(struct mimir_span_header *span,
                       int32_t delta)
@@ -3358,6 +3636,78 @@ static void tls_flush_locked(void)
     }
     tls.handed_len = 0;
 }
+
+#ifdef MIMIR_LOCK_SHARD
+/* Z-039: convert the calling thread's pending/handed TLS
+ * accounting, if any. The pending and handed lists are
+ * thread-local, so the emptiness check needs no lock; a
+ * non-empty conversion spans classes and therefore takes
+ * the all-shards-then-global acquisition. Entries that
+ * take a single shard call this FIRST, so the flush call
+ * inside their locked section finds empty lists and is a
+ * no-op there. On lock failure the lists stay pending --
+ * the next central entry retries the conversion, exactly
+ * the banked posture for a failed flush. */
+static void shard_flush_phase(void)
+{
+    if (tls.pending_len == 0 && tls.pending_req == 0 &&
+        tls.pending_alloc == 0 && tls.handed_len == 0) {
+        return;
+    }
+    if (shard_lock_global_all() != MIMIR_PLATFORM_OK) {
+        return;
+    }
+    tls_flush_locked();
+    (void)shard_unlock_global_all();
+}
+
+/* Z-039: search the shard lists in ascending order for a
+ * live span containing ptr, keeping ONLY the found span's
+ * shard locked (the caller unlocks it via *out_shard).
+ * Returns NULL with *out_shard == SIZE_MAX when no list
+ * holds the pointer, and NULL with *out_shard == (size_t)-2
+ * when a shard lock failed (the F-07 posture: the caller
+ * leaves the block LIVE). */
+static struct mimir_span_header *shard_find_span_live(
+    void *ptr, size_t *out_shard)
+{
+    size_t s;
+
+    *out_shard = SIZE_MAX;
+    for (s = 0; s < MIMIR_SHARD_COUNT; s++) {
+        struct mimir_span_header *span;
+
+        if (mimir_platform_shard_lock(s) != MIMIR_PLATFORM_OK) {
+            *out_shard = (size_t)-2;
+            return NULL;
+        }
+        mimir_shard_hint = s;
+        span = find_span_live_locked(ptr);
+        if (span != NULL) {
+            *out_shard = s;
+            return span;
+        }
+        (void)mimir_platform_shard_unlock(s);
+    }
+    return NULL;
+}
+
+/* The unlock matching a one-class central section: the
+ * class's shard in a shard build, the global lock in a
+ * production build (the #else body is the only one a
+ * production build compiles, and vice versa). */
+static void core_central_unlock(size_t class_index)
+{
+    (void)mimir_platform_shard_unlock(
+        shard_of_class(class_index));
+}
+#else
+static void core_central_unlock(size_t class_index)
+{
+    (void)class_index;
+    (void)mimir_platform_global_unlock();
+}
+#endif /* MIMIR_LOCK_SHARD */
 /* ---- locked core helpers --------------------------------
  * Everything in this section runs with the central lock
  * held and uses only this file's internal locked machinery.
@@ -3369,6 +3719,9 @@ static void tls_flush_locked(void)
 static struct mimir_span_header *tls_find_span_locked(
     const void *ptr, size_t class_index)
 {
+#ifdef MIMIR_LOCK_SHARD
+    mimir_shard_hint = shard_of_class(class_index);
+#endif
     struct mimir_span_header *span = mimir_span_head;
     size_t steps = 0;
     while (span != NULL) {
@@ -3399,6 +3752,9 @@ static void *tls_take_one_locked(
      * thread's arena only (the partition is shared with
      * the direct small path by construction). */
     size_t arena = arena_select_locked();
+#endif
+#ifdef MIMIR_LOCK_SHARD
+    mimir_shard_hint = shard_of_class(class_index);
 #endif
     struct mimir_span_header *span =
         mimir_class_active[class_index];
@@ -3629,8 +3985,13 @@ static void tls_account_publication_locked(
  * additionally requires an empty tally). */
 static void small_free_tally_locked(void *ptr)
 {
+#ifdef MIMIR_LOCK_SHARD
+    struct mimir_span_header *span =
+        find_span_live_any_locked(ptr);
+#else
     struct mimir_span_header *span =
         find_span_live_locked(ptr);
+#endif
     if (span == NULL) {
         return;
     }
@@ -3861,6 +4222,7 @@ static void *tls_alloc(size_t size, int zero_user,
                            __ATOMIC_RELAXED);
         return block;
     }
+#ifndef MIMIR_LOCK_SHARD
     /* Cache miss: one locked refill, then the handout is
      * accounted under the same lock. */
     if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
@@ -3871,10 +4233,27 @@ static void *tls_alloc(size_t size, int zero_user,
     }
     mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
     tls_flush_locked();
+#else /* MIMIR_LOCK_SHARD */
+    /* Z-039: the caller's pending accounting converts
+     * first (all shards, briefly, only when non-empty);
+     * the refill itself runs under this class's shard
+     * alone. */
+    shard_flush_phase();
+    if (mimir_platform_shard_lock(
+            shard_of_class(class_index)) != MIMIR_PLATFORM_OK) {
+        mimir_stats_note_failure();
+        mimir_core_diag_report(op, MIMIR_DIAG_CAUSE_LOCK,
+                               (uint64_t)size);
+        return NULL;
+    }
+    mimir_shard_hint = shard_of_class(class_index);
+    mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
+    tls_flush_locked();
+#endif /* MIMIR_LOCK_SHARD */
     if (tls_refill_locked(class_index) == 0) {
         int cause = mimir_diag_last_cause;
         mimir_stats_note_failure();
-        (void)mimir_platform_global_unlock();
+        (void)core_central_unlock(class_index);
         mimir_core_diag_report(op, cause, (uint64_t)size);
         return NULL;
     }
@@ -3906,7 +4285,7 @@ static void *tls_alloc(size_t size, int zero_user,
         if (is_calloc) {
             tls.calloc_served += 1;
         }
-        (void)mimir_platform_global_unlock();
+        (void)core_central_unlock(class_index);
         return block;
     }
 }
@@ -3944,6 +4323,7 @@ static void tls_free_local(void *ptr,
             }
         }
     }
+#ifndef MIMIR_LOCK_SHARD
     if (tls.bin_len[class_index] >= MIMIR_TLS_BIN_CAPACITY) {
         if (mimir_platform_global_lock() !=
             MIMIR_PLATFORM_OK) {
@@ -3954,11 +4334,28 @@ static void tls_free_local(void *ptr,
         (void)mimir_platform_global_unlock();
         tls.local_frees_to_core += 1;
     }
+#else /* MIMIR_LOCK_SHARD */
+    if (tls.bin_len[class_index] >= MIMIR_TLS_BIN_CAPACITY) {
+        shard_flush_phase();
+        if (mimir_platform_shard_lock(
+                shard_of_class(class_index)) !=
+            MIMIR_PLATFORM_OK) {
+            return;
+        }
+        mimir_shard_hint = shard_of_class(class_index);
+        tls_flush_locked();
+        tls_drain_batch_locked(class_index);
+        (void)mimir_platform_shard_unlock(
+            shard_of_class(class_index));
+        tls.local_frees_to_core += 1;
+    }
+#endif /* MIMIR_LOCK_SHARD */
     {
         int settled_pend = 0;
         if (!handed) {
             if (tls_pending_add(span, -1) == 0) {
                 settled_pend = 1;
+#ifndef MIMIR_LOCK_SHARD
             } else if (mimir_platform_global_lock() ==
                        MIMIR_PLATFORM_OK) {
                 /* Pending list full: account directly; the
@@ -3969,6 +4366,23 @@ static void tls_free_local(void *ptr,
                 tally_add(span, 1);
                 (void)mimir_platform_global_unlock();
             }
+#else /* MIMIR_LOCK_SHARD */
+            } else {
+                shard_flush_phase();
+                if (mimir_platform_shard_lock(
+                        shard_of_class(class_index)) ==
+                    MIMIR_PLATFORM_OK) {
+                    mimir_shard_hint =
+                        shard_of_class(class_index);
+                    tls_flush_locked();
+                    span->live_count -= 1;
+                    mimir_live_small_objects -= 1;
+                    tally_add(span, 1);
+                    (void)mimir_platform_shard_unlock(
+                        shard_of_class(class_index));
+                }
+            }
+#endif /* MIMIR_LOCK_SHARD */
         }
         tls.bins[class_index][tls.bin_len[class_index]] =
             ptr;
@@ -4105,6 +4519,9 @@ static size_t trim_some_locked(size_t max_spans)
              class_index < MIMIR_SMALL_CLASS_COUNT &&
              released < max_spans;
              class_index++) {
+#ifdef MIMIR_LOCK_SHARD
+            mimir_shard_hint = shard_of_class(class_index);
+#endif
             struct mimir_span_header *span = mimir_span_head;
             struct mimir_span_header *victim = NULL;
 
@@ -4143,9 +4560,16 @@ static size_t trim_some_locked(size_t max_spans)
 static void retained_snapshot_locked(size_t *out_spans,
                                      size_t *out_bytes)
 {
-    struct mimir_span_header *span = mimir_span_head;
+    struct mimir_span_header *span;
     size_t spans = 0;
     size_t bytes = 0;
+
+#ifdef MIMIR_LOCK_SHARD
+    size_t sh;
+    for (sh = 0; sh < MIMIR_SHARD_COUNT; sh++) {
+        mimir_shard_hint = sh;
+#endif
+    span = mimir_span_head;
 
     while (span != NULL) {
         if (span->live_count == 0
@@ -4161,6 +4585,9 @@ static void retained_snapshot_locked(size_t *out_spans,
         }
         span = span->list_next;
     }
+#ifdef MIMIR_LOCK_SHARD
+    } /* for sh */
+#endif
     if (out_spans != NULL) {
         *out_spans = spans;
     }
@@ -4413,6 +4840,9 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
     for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
         out->span_class_size[i] = (uint64_t)mimir_class_sizes[i];
     }
+#ifdef MIMIR_LOCK_SHARD
+    { size_t sh; for (sh = 0; sh < MIMIR_SHARD_COUNT; sh++) { mimir_shard_hint = sh;
+#endif
     span = mimir_span_head;
     while (span != NULL) {
         size_t idx = (size_t)span->class_index;
@@ -4437,6 +4867,9 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
         }
         span = span->list_next;
     }
+#ifdef MIMIR_LOCK_SHARD
+    } }
+#endif
     (void)mimir_platform_global_unlock();
     return 0;
 }
@@ -4525,9 +4958,16 @@ int mimir_core_metadata_check(void)
     if (bytes != mimir_live_bytes) {
         violations++;
     }
+#ifndef MIMIR_LOCK_SHARD
     span = mimir_span_head;
     count = 0;
     bytes = 0;
+#else
+    count = 0;
+    bytes = 0;
+    { size_t sh; for (sh = 0; sh < MIMIR_SHARD_COUNT; sh++) { mimir_shard_hint = sh; sprev = NULL;
+    span = mimir_span_head;
+#endif
     while (span != NULL) {
         count++;
         if (count > mimir_live_spans) {
@@ -4591,6 +5031,9 @@ int mimir_core_metadata_check(void)
         sprev = span;
         span = span->list_next;
     }
+#ifdef MIMIR_LOCK_SHARD
+    } }
+#endif
     if (count != mimir_live_spans) {
         violations++;
     }
@@ -4630,6 +5073,9 @@ int mimir_core_metadata_check(void)
       }
 #else
         struct mimir_span_header *want = mimir_class_active[i];
+#ifdef MIMIR_LOCK_SHARD
+        mimir_shard_hint = shard_of_class(i);
+#endif
         struct mimir_span_header *walk = mimir_span_head;
         size_t steps = 0;
         int found = 0;
@@ -5023,7 +5469,11 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
      * observably (small_free_locked), so no rollback
      * branch exists on this path. */
     {
+#ifdef MIMIR_LOCK_SHARD
+        struct mimir_span_header *span = find_span_live_any_locked(ptr);
+#else
         struct mimir_span_header *span = find_span_live_locked(ptr);
+#endif
         struct mimir_span_header *new_span = NULL;
         size_t span_class;
 
@@ -5136,6 +5586,7 @@ void mimir_core_free(void *ptr)
                 tls_free_local(ptr, ospan);
                 return;
             }
+#ifndef MIMIR_LOCK_SHARD
             if (mimir_platform_global_lock() ==
                 MIMIR_PLATFORM_OK) {
                 tls_flush_locked();
@@ -5154,6 +5605,32 @@ void mimir_core_free(void *ptr)
             } else {
                 return; /* F-07: the block stays LIVE */
             }
+#else /* MIMIR_LOCK_SHARD */
+            {
+                size_t fshard = 0;
+                struct mimir_span_header *fspan;
+
+                shard_flush_phase();
+                fspan = shard_find_span_live(ptr, &fshard);
+                if (fshard == (size_t)-2) {
+                    return; /* F-07: the block stays LIVE */
+                }
+                if (fspan != NULL) {
+                    if (tls_owner_is_handed(ptr)) {
+                        small_free_tally_locked(ptr);
+                    } else {
+                        small_free_locked(ptr);
+                    }
+                    tls_owner_clear(ptr);
+                    (void)mimir_platform_shard_unlock(fshard);
+                    tls.remote_frees_out += 1;
+                    return;
+                }
+                /* Not a live span object: fall through to
+                 * the legacy path below (a mapping block,
+                 * or a free with no defined behaviour). */
+            }
+#endif /* MIMIR_LOCK_SHARD */
         }
     }
 #endif
@@ -5194,6 +5671,7 @@ void mimir_core_free(void *ptr)
          * live span object is retired exactly once onto
          * its span's free list (small_free_locked); any
          * other pointer keeps the S8.3 posture below. */
+#ifndef MIMIR_LOCK_SHARD
         if (find_span_live_locked(ptr) != NULL) {
             small_free_locked(ptr);
 #ifndef MIMIR_DEBUG
@@ -5206,6 +5684,24 @@ void mimir_core_free(void *ptr)
         }
         (void)mimir_platform_global_unlock();
         return;
+#else /* MIMIR_LOCK_SHARD */
+        {
+            size_t sh;
+            int found = 0;
+
+            for (sh = 0; sh < MIMIR_SHARD_COUNT && !found;
+                 sh++) {
+                mimir_shard_hint = sh;
+                if (find_span_live_locked(ptr) != NULL) {
+                    small_free_locked(ptr);
+                    tls.remote_frees_out += 1;
+                    found = 1;
+                }
+            }
+        }
+        (void)mimir_platform_global_unlock();
+        return;
+#endif /* MIMIR_LOCK_SHARD */
     }
 
     /* Retire exactly once (B-006 S11.2 steps 5-7) via the
