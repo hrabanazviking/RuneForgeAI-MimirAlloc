@@ -1,0 +1,58 @@
+MimirAlloc Z13 slice Z-011 - recorded run of tests/perf/probe_z011.c
+slice: Z-011 - Bandwidth saturation (Wave 2)
+date: 2026-11-12T02:17:10-05:00 (primary run start, America/New_York); corroborating runs 2026-11-12T02:17:14-05:00 and 2026-11-12T02:17:17-05:00
+base: f94bb34ec0d0e49af616c20996a5144de603bfd1 (branch yrsa/mimiralloc-team-01, Z-010 team commit; Z-010 unbanked, queues behind Z-004..Z-009)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (Strix Halo), 16 cores / 32 threads, 2 CCDs, 128 GiB UMA (single NUMA node, CPUs 0-31)
+cache topology (sysfs, printed by the runner): cpu0 L3 32768K shared_cpu_list 0-7,16-23 (CCD0);
+  cpu8 L3 32768K shared_cpu_list 8-15,24-31 (CCD1); L3 total 64 MiB (2 instances); pagesize 4096
+scaling_governor: performance (cpu0)
+compiler: cc (Ubuntu 15.3.0-4ubuntu1) -std=c11 -Wall -Wextra -Werror -pthread -O2 (standalone build in run_z011.sh; Makefile untouched)
+sha256: probe_z011.c 48b48fce3c31496be378af3bb837f348ef9449e63c89f17b782c545eb5b6258b
+        run_z011.sh   77d7e815d0f2ca23307fce9ddba0b110ea24dc5af70e0827f5efb5c9327dae31
+        /tmp/probe_z011 86f78b8e7314f37242e9e75fad62759011b749c1049aeb466f37cc5696412cf7
+method: STREAM-style triad a[i] = b[i] + 3.0*c[i], double elements, 33,554,432 elements per
+  array (256 MiB per array, 768 MiB total footprint = 12x total L3, so every pass is DRAM-bound);
+  pthreads with static contiguous partitioning; each thread pinned to logical CPU == its index
+  (CPUs 0..15 physical cores, 16..31 SMT siblings) and first-touches its own chunk; one warm-up
+  pass; 5 timed repetitions per thread count, best (minimum) time reported (STREAM convention);
+  clock_gettime(CLOCK_MONOTONIC) by thread 0 across barrier-synchronised passes.
+  Bandwidth = STREAM byte count 3 arrays x 8 B x N = 805,306,368 bytes per pass (read b, read c,
+  write a). Write-allocate (read-for-ownership) traffic is real extra DRAM traffic this
+  convention does not count; figures are therefore the STREAM-convention rate, comparable to
+  published STREAM numbers, not a raw bus-traffic count.
+  Value check every run: a[mid] = 6.5 (= 2.0 + 3.0*1.5) and sink 19.5 - triad verified computed.
+load state (SHARED HOST - recorded honestly):
+  pinned runs: load average 0.71 / 0.73 / 0.67 (1-min) at run starts, no process above 0.8% CPU
+  in the runner's start snapshot - a quiet window on this host; the Aesir forge mojo test run
+  that had overlapped the earlier draft runs (started 02:13, ~200-234% CPU) had finished.
+  Raw logs: hidden_files/z011_probe_pin1.log (primary), z011_probe_pin2.log, z011_probe_pin3.log.
+method note (draft runs, NOT results): three earlier unpinned runs (hidden_files/z011_probe_raw.log,
+  z011_probe_raw2.log, z011_probe_raw3.log) were unstable - the 4-thread figure swung
+  61.81..114.98 GB/s run to run as the scheduler happened to spread or concentrate threads
+  across the two CCDs, and the first of them overlapped the Aesir job above. Pinning
+  (thread index == CPU index) was adopted before recording; the pinned curve below repeats
+  to within ~0.1 GB/s at 1..8 threads across all three runs.
+
+=== BANDWIDTH CURVE - GB/s, best of 5 reps per run (STREAM byte count) ===
+threads   pin1 (primary)   pin2      pin3      placement
+1             38.25        38.22     38.25     1 core, CCD0
+2             60.24        60.29     60.30     CCD0
+4             61.68        61.72     61.72     CCD0
+8             61.79        61.75     61.77     all of CCD0 (8 physical cores)
+16           105.89       109.69    112.76     all 16 physical cores, both CCDs
+32            97.66       101.80    101.32     + SMT siblings
+
+=== GATE VERDICT ===
+Gate: bandwidth curve + the saturation thread count recorded - MET.
+- One core alone pulls 38.2 GB/s (STREAM triad, this machine).
+- Single-CCD plateau: ~61.7-61.8 GB/s, already reached at 4 threads (2->4 threads: +2.4%;
+  4->8: +0.2%) - one CCD's path to DRAM saturates at 4 streaming threads.
+- Machine saturation thread count: 16 threads (all physical cores, both CCDs) -
+  105.89..112.76 GB/s across the three runs, peak 112.76 GB/s.
+- SMT (32 threads) buys nothing: 97.66..101.80 GB/s, 4-10% BELOW the 16-thread figures -
+  the workload is DRAM-bound long before the second hardware thread per core matters.
+- Saturation thread count of record: 16 for the whole machine (4 per CCD on the way there).
+Correctness gate: make clean && make test in the team worktree - exit 0; per-target CHECKS
+  summaries identical to the Z-010 log: 4970 CHECKS + 18 smoke = 4988 checks run, 0 failed,
+  77 by-design SKIPPED/NOT-YET lines (hidden_files/z011_make_test.log).
