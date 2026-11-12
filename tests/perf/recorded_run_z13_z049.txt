@@ -1,0 +1,688 @@
+MimirAlloc Z13 recorded run - THP for cached mappings
+slice: Z-049 - THP for cached mappings
+date: 2026-11-12T07:05-07:08-05:00 (America/New_York)
+base: 7b959bb (team-03 merge of seat main 517bbb1, banked
+Z-001..Z-046, into yrsa/mimiralloc-team-03 for Z-049; merge
+was CLEAN, no conflicts; merged tree gate GREEN before the
+probe was written - see correctness gate below)
+load state: quiet machine. uptime 1-min load 0.15 before
+execution 1, 0.50 / 0.62 around executions 2-3, on the
+32-thread host; no Aesir / Lifthrasir / Tensile heavy run
+observed in any run window. Numbers are quiet-machine
+numbers for this recorded run.
+dependency honesty: Z-047 (mapping-cache design, team-01)
+and Z-048 (mapping-cache implementation, team-02) were
+mustered in parallel with this slice and are NOT landed in
+this tree. This probe therefore measures the pooled shape
+directly, exactly as the banked large path creates mappings
+today (src/core/mimir_core.c alloc_locked: one descriptor
+page, usable_offset == 4096, mapping_length == 4096 +
+usable rounded to pages) and exactly as a cache would hold
+and reuse them. The adopt/reject decisions below are
+addressed to the Z-048 implementation. No production code
+is changed by this slice; its roadmap gate is the decision,
+recorded with numbers.
+harness: tests/perf/probe_z049.c (sha256
+a2ca39e43995a2d3b7e85c41d3d17a6335171216d3b177faf10775ed40ace763),
+runner tests/perf/run_z049.sh (sha256
+da9640458a6ae096d204da6e4b958c8267b62cc6a87642abafa2289e32a28041),
+summariser tests/perf/summarize_z049.py (final sha256
+71e193b8d845c9ef0141389c775048f45014b0989e5ca54098775f2bc4f23bc0;
+the executions ran with summariser shas b62aa3b1 (exec 1)
+and a2ddfbb5 (exec 2-3) - the summariser is not part of the
+measurement, and its two later edits touched only the
+grading labels of the no-huge-backing case; probe source
+and probe binary sha256
+3009764556ce0f243cfc97c7a90df04b2bd8418e669d592d0c0c446c1968288f
+are identical across all three executions). Built with the
+repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2 into
+build/z49/ (standalone, no Makefile target, NOT part of
+make test). Recorded run = 3 consecutive executions,
+REPS=5 per config, mode order alternating per rep.
+method: for each usable size in {1 MiB, 2 MiB, 20 MiB,
+200 MiB}: mmap(4096 + size) MAP_PRIVATE|MAP_ANONYMOUS,
+madvise the WHOLE mapping MADV_NOHUGEPAGE (off) or
+MADV_HUGEPAGE (on), write one descriptor byte in page 0
+(as the allocator publishes its descriptor), then three
+phases over the usable extent: fresh (first-touch one byte
+per 4 KiB page timed + minor-fault delta from
+/proc/self/stat; smaps Rss + AnonHugePages of the VMA;
+memset write + read-sum bandwidth with passes repeated to
+a 256 MiB target), resident (pool hit with pages kept:
+one full memset pass timed + fault delta), dontneed
+(pool hit after MADV_DONTNEED on the usable extent only:
+RSS after DONTNEED, re-fault timed + fault delta + huge
+backing re-formed or not). Every raw fresh line records
+base_mod_pmd (mapping base modulo 2 MiB) - it decides the
+2 MiB result, see the lead synthesis. Read checksums are
+identical across modes and reps for every size in every
+execution (probe enforces; RESULT: PASS in all 3) -
+workload equivalence proven.
+pre-registered adopt rule (fixed before the recorded
+executions, in summarize_z049.py): ADOPT a size decade iff
+huge backing actually formed in the pooled shape
+(AnonHugePages > 0 in the on leg) AND (fresh-fault or
+re-fault improvement >= 10% or write improvement >= 5%)
+AND no measured metric regresses > 10%. REJECT if no huge
+backing formed, or the win is mixed with a > 10%
+regression, or there is no benefit to buy. The lead
+synthesis after the machine synthesis applies this rule
+per execution where the executions disagree (2 MiB).
+correctness gate: scripts/z13/run_gate.sh on the final
+tree, log hidden_files/z049_gate_final.log (team-local,
+not banked): GATE COUNTS checks=4988 failed=0 skips=77,
+GATE RESULT: GREEN - identical to the Z-001 baseline
+(probe is standalone; no Makefile change; no production
+code). The pre-build merge tree gate
+(hidden_files/z049_gate_merged.log) read the same counts.
+
+=== Z-002 HEADER (scripts/z13/host_truth.sh, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T12:09:53Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5107727
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 67%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.95 1.53 1.11
+=== END Z-002 HEADER ===
+
+=== PROBE EXECUTION 1 (raw + median + verdict, verbatim) ===
+probe_z049: THP for cached (pooled) mappings, MimirAlloc large-path shape (1 descriptor page + usable extent)
+pmd_bytes=2097152 reps=5 order=alternating
+raw,size=1048576,mode=off,rep=0,phase=fresh,base_mod_pmd=1032192,fault_ns=100629,fault_ns_per_page=393,minflt_delta=260,rss_kib=1028,anon_huge_kib=0,write_mibs=164133.4,read_mibs=39289.9,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=0,phase=resident,reuse_memset_ns=6993,minflt_delta=0
+raw,size=1048576,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=89117,refault_ns_per_page=348,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=1,phase=fresh,base_mod_pmd=1032192,fault_ns=86702,fault_ns_per_page=338,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=164398.5,read_mibs=39268.7,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=1,phase=resident,reuse_memset_ns=6853,minflt_delta=0
+raw,size=1048576,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=86682,refault_ns_per_page=338,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=2,phase=fresh,base_mod_pmd=1032192,fault_ns=86091,fault_ns_per_page=336,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=163658.2,read_mibs=39284.2,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=2,phase=resident,reuse_memset_ns=6883,minflt_delta=0
+raw,size=1048576,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=85881,refault_ns_per_page=335,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=3,phase=fresh,base_mod_pmd=1032192,fault_ns=86051,fault_ns_per_page=336,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=165155.0,read_mibs=39288.6,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=3,phase=resident,reuse_memset_ns=6953,minflt_delta=0
+raw,size=1048576,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=86421,refault_ns_per_page=337,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=4,phase=fresh,base_mod_pmd=1032192,fault_ns=86090,fault_ns_per_page=336,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=166206.7,read_mibs=39315.9,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=4,phase=resident,reuse_memset_ns=6853,minflt_delta=0
+raw,size=1048576,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=85520,refault_ns_per_page=334,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=fresh,fault_ns=86091,fault_ns_per_page=336,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=164398.5,read_mibs=39288.6
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=resident,reuse_memset_ns=6883,minflt_delta=0
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=86421,refault_ns_per_page=337,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=0,phase=fresh,base_mod_pmd=1032192,fault_ns=86332,fault_ns_per_page=337,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=164866.2,read_mibs=39268.5,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=0,phase=resident,reuse_memset_ns=6913,minflt_delta=0
+raw,size=1048576,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=86582,refault_ns_per_page=338,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=1,phase=fresh,base_mod_pmd=1032192,fault_ns=89037,fault_ns_per_page=347,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=165669.0,read_mibs=39240.7,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=1,phase=resident,reuse_memset_ns=6923,minflt_delta=0
+raw,size=1048576,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=85731,refault_ns_per_page=334,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=2,phase=fresh,base_mod_pmd=1032192,fault_ns=87073,fault_ns_per_page=340,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=164999.3,read_mibs=39278.8,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=2,phase=resident,reuse_memset_ns=6923,minflt_delta=0
+raw,size=1048576,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=86001,refault_ns_per_page=335,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=3,phase=fresh,base_mod_pmd=1032192,fault_ns=86882,fault_ns_per_page=339,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=162445.1,read_mibs=39307.3,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=3,phase=resident,reuse_memset_ns=6993,minflt_delta=0
+raw,size=1048576,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=87654,refault_ns_per_page=342,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=4,phase=fresh,base_mod_pmd=1032192,fault_ns=87323,fault_ns_per_page=341,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=166140.8,read_mibs=39291.1,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=4,phase=resident,reuse_memset_ns=6923,minflt_delta=0
+raw,size=1048576,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=85971,refault_ns_per_page=335,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=fresh,fault_ns=87073,fault_ns_per_page=340,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=164999.3,read_mibs=39278.8
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=resident,reuse_memset_ns=6923,minflt_delta=0
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=86001,refault_ns_per_page=335,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=0,phase=fresh,base_mod_pmd=2080768,fault_ns=199163,fault_ns_per_page=388,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=137860.2,read_mibs=38803.4,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=0,phase=resident,reuse_memset_ns=15579,minflt_delta=0
+raw,size=2097152,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=175959,refault_ns_per_page=343,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=1,phase=fresh,base_mod_pmd=2080768,fault_ns=176249,fault_ns_per_page=344,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131807.8,read_mibs=38673.6,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=1,phase=resident,reuse_memset_ns=15629,minflt_delta=0
+raw,size=2097152,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=176069,refault_ns_per_page=343,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=2,phase=fresh,base_mod_pmd=2080768,fault_ns=176971,fault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131721.5,read_mibs=38738.3,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=2,phase=resident,reuse_memset_ns=15539,minflt_delta=0
+raw,size=2097152,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=175168,refault_ns_per_page=342,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=3,phase=fresh,base_mod_pmd=2080768,fault_ns=176420,fault_ns_per_page=344,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131328.1,read_mibs=38743.3,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=3,phase=resident,reuse_memset_ns=15599,minflt_delta=0
+raw,size=2097152,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=175307,refault_ns_per_page=342,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=4,phase=fresh,base_mod_pmd=2080768,fault_ns=176630,fault_ns_per_page=344,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131413.3,read_mibs=38735.4,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=4,phase=resident,reuse_memset_ns=15499,minflt_delta=0
+raw,size=2097152,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=174627,refault_ns_per_page=341,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+median,size=2097152,label=2MiB,mode=off,phase=fresh,fault_ns=176630,fault_ns_per_page=344,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131721.5,read_mibs=38738.3
+median,size=2097152,label=2MiB,mode=off,phase=resident,reuse_memset_ns=15579,minflt_delta=0
+median,size=2097152,label=2MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=175307,refault_ns_per_page=342,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=on,rep=0,phase=fresh,base_mod_pmd=2080768,fault_ns=176861,fault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131781.3,read_mibs=38721.9,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=0,phase=resident,reuse_memset_ns=15589,minflt_delta=0
+raw,size=2097152,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=174827,refault_ns_per_page=341,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=on,rep=1,phase=fresh,base_mod_pmd=2080768,fault_ns=179576,fault_ns_per_page=350,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131875.8,read_mibs=38829.8,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=1,phase=resident,reuse_memset_ns=15499,minflt_delta=0
+raw,size=2097152,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=174887,refault_ns_per_page=341,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=on,rep=2,phase=fresh,base_mod_pmd=2080768,fault_ns=179185,fault_ns_per_page=349,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131869.0,read_mibs=38752.6,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=2,phase=resident,reuse_memset_ns=15469,minflt_delta=0
+raw,size=2097152,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=175308,refault_ns_per_page=342,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=on,rep=3,phase=fresh,base_mod_pmd=2080768,fault_ns=176290,fault_ns_per_page=344,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131596.7,read_mibs=38746.3,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=3,phase=resident,reuse_memset_ns=15509,minflt_delta=0
+raw,size=2097152,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=178945,refault_ns_per_page=349,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=on,rep=4,phase=fresh,base_mod_pmd=2080768,fault_ns=175138,fault_ns_per_page=342,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131413.3,read_mibs=38776.3,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=4,phase=resident,reuse_memset_ns=15549,minflt_delta=0
+raw,size=2097152,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=178144,refault_ns_per_page=347,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+median,size=2097152,label=2MiB,mode=on,phase=fresh,fault_ns=176861,fault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=131781.3,read_mibs=38752.6
+median,size=2097152,label=2MiB,mode=on,phase=resident,reuse_memset_ns=15509,minflt_delta=0
+median,size=2097152,label=2MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=175308,refault_ns_per_page=342,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=0,phase=fresh,base_mod_pmd=2080768,fault_ns=3045576,fault_ns_per_page=594,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=88355.2,read_mibs=37108.3,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=0,phase=resident,reuse_memset_ns=214241,minflt_delta=0
+raw,size=20971520,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1850029,refault_ns_per_page=361,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=1,phase=fresh,base_mod_pmd=2080768,fault_ns=1866481,fault_ns_per_page=364,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=93725.1,read_mibs=36875.1,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=1,phase=resident,reuse_memset_ns=211275,minflt_delta=0
+raw,size=20971520,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1849279,refault_ns_per_page=361,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=2,phase=fresh,base_mod_pmd=2080768,fault_ns=1869446,fault_ns_per_page=365,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=93366.8,read_mibs=37005.3,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=2,phase=resident,reuse_memset_ns=210393,minflt_delta=0
+raw,size=20971520,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1845852,refault_ns_per_page=360,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=3,phase=fresh,base_mod_pmd=2080768,fault_ns=1874336,fault_ns_per_page=366,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=93910.3,read_mibs=37007.6,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=3,phase=resident,reuse_memset_ns=210533,minflt_delta=0
+raw,size=20971520,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1852905,refault_ns_per_page=361,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=4,phase=fresh,base_mod_pmd=2080768,fault_ns=1876990,fault_ns_per_page=366,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=94228.4,read_mibs=36999.1,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=4,phase=resident,reuse_memset_ns=213489,minflt_delta=0
+raw,size=20971520,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1855040,refault_ns_per_page=362,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+median,size=20971520,label=20MiB,mode=off,phase=fresh,fault_ns=1874336,fault_ns_per_page=366,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=93725.1,read_mibs=37005.3
+median,size=20971520,label=20MiB,mode=off,phase=resident,reuse_memset_ns=211275,minflt_delta=0
+median,size=20971520,label=20MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1850029,refault_ns_per_page=361,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=on,rep=0,phase=fresh,base_mod_pmd=2080768,fault_ns=626622,fault_ns_per_page=122,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432,write_mibs=93958.6,read_mibs=39064.7,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=0,phase=resident,reuse_memset_ns=141755,minflt_delta=0
+raw,size=20971520,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=352108,refault_ns_per_page=68,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432
+raw,size=20971520,mode=on,rep=1,phase=fresh,base_mod_pmd=2080768,fault_ns=351508,fault_ns_per_page=68,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432,write_mibs=142764.2,read_mibs=38960.2,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=1,phase=resident,reuse_memset_ns=145983,minflt_delta=0
+raw,size=20971520,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=346197,refault_ns_per_page=67,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432
+raw,size=20971520,mode=on,rep=2,phase=fresh,base_mod_pmd=2080768,fault_ns=346017,fault_ns_per_page=67,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432,write_mibs=142212.4,read_mibs=39065.8,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=2,phase=resident,reuse_memset_ns=142416,minflt_delta=0
+raw,size=20971520,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=350415,refault_ns_per_page=68,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432
+raw,size=20971520,mode=on,rep=3,phase=fresh,base_mod_pmd=2080768,fault_ns=346308,fault_ns_per_page=67,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432,write_mibs=142071.5,read_mibs=39054.5,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=3,phase=resident,reuse_memset_ns=145312,minflt_delta=0
+raw,size=20971520,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=351768,refault_ns_per_page=68,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432
+raw,size=20971520,mode=on,rep=4,phase=fresh,base_mod_pmd=2080768,fault_ns=345185,fault_ns_per_page=67,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432,write_mibs=142247.1,read_mibs=38979.4,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=4,phase=resident,reuse_memset_ns=142196,minflt_delta=0
+raw,size=20971520,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=349834,refault_ns_per_page=68,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432
+median,size=20971520,label=20MiB,mode=on,phase=fresh,fault_ns=346308,fault_ns_per_page=67,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432,write_mibs=142212.4,read_mibs=39054.5
+median,size=20971520,label=20MiB,mode=on,phase=resident,reuse_memset_ns=142416,minflt_delta=0
+median,size=20971520,label=20MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=350415,refault_ns_per_page=68,minflt_delta=521,rss_kib=20484,anon_huge_kib=18432
+raw,size=209715200,mode=off,rep=0,phase=fresh,base_mod_pmd=2080768,fault_ns=28553671,fault_ns_per_page=557,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55087.8,read_mibs=29978.1,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=0,phase=resident,reuse_memset_ns=3711301,minflt_delta=0
+raw,size=209715200,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24101554,refault_ns_per_page=470,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=1,phase=fresh,base_mod_pmd=2080768,fault_ns=24132752,fault_ns_per_page=471,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55344.2,read_mibs=34599.9,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=1,phase=resident,reuse_memset_ns=3768227,minflt_delta=0
+raw,size=209715200,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24224534,refault_ns_per_page=473,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=2,phase=fresh,base_mod_pmd=2080768,fault_ns=24206330,fault_ns_per_page=472,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55362.3,read_mibs=34629.6,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=2,phase=resident,reuse_memset_ns=3873824,minflt_delta=0
+raw,size=209715200,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24273755,refault_ns_per_page=474,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=3,phase=fresh,base_mod_pmd=2080768,fault_ns=24153762,fault_ns_per_page=471,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55323.2,read_mibs=34610.4,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=3,phase=resident,reuse_memset_ns=3892770,minflt_delta=0
+raw,size=209715200,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24266032,refault_ns_per_page=473,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=4,phase=fresh,base_mod_pmd=2080768,fault_ns=24785593,fault_ns_per_page=484,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55172.1,read_mibs=34345.1,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=4,phase=resident,reuse_memset_ns=3883142,minflt_delta=0
+raw,size=209715200,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24273976,refault_ns_per_page=474,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+median,size=209715200,label=200MiB,mode=off,phase=fresh,fault_ns=24206330,fault_ns_per_page=472,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55323.2,read_mibs=34599.9
+median,size=209715200,label=200MiB,mode=off,phase=resident,reuse_memset_ns=3873824,minflt_delta=0
+median,size=209715200,label=200MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24266032,refault_ns_per_page=473,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=on,rep=0,phase=fresh,base_mod_pmd=2080768,fault_ns=4214542,fault_ns_per_page=82,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752,write_mibs=55222.8,read_mibs=34060.8,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=0,phase=resident,reuse_memset_ns=4327964,minflt_delta=0
+raw,size=209715200,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4748941,refault_ns_per_page=92,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752
+raw,size=209715200,mode=on,rep=1,phase=fresh,base_mod_pmd=2080768,fault_ns=4906536,fault_ns_per_page=95,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752,write_mibs=45428.5,read_mibs=34820.6,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=1,phase=resident,reuse_memset_ns=3638535,minflt_delta=0
+raw,size=209715200,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4204503,refault_ns_per_page=82,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752
+raw,size=209715200,mode=on,rep=2,phase=fresh,base_mod_pmd=2080768,fault_ns=4091372,fault_ns_per_page=79,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752,write_mibs=54373.6,read_mibs=34602.4,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=2,phase=resident,reuse_memset_ns=3766053,minflt_delta=0
+raw,size=209715200,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4333354,refault_ns_per_page=84,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752
+raw,size=209715200,mode=on,rep=3,phase=fresh,base_mod_pmd=2080768,fault_ns=4134813,fault_ns_per_page=80,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752,write_mibs=55306.8,read_mibs=34945.5,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=3,phase=resident,reuse_memset_ns=3676907,minflt_delta=0
+raw,size=209715200,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4044043,refault_ns_per_page=78,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752
+raw,size=209715200,mode=on,rep=4,phase=fresh,base_mod_pmd=2080768,fault_ns=4108744,fault_ns_per_page=80,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752,write_mibs=54991.4,read_mibs=34944.6,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=4,phase=resident,reuse_memset_ns=3755544,minflt_delta=0
+raw,size=209715200,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4095890,refault_ns_per_page=79,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752
+median,size=209715200,label=200MiB,mode=on,phase=fresh,fault_ns=4134813,fault_ns_per_page=80,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752,write_mibs=54991.4,read_mibs=34820.6
+median,size=209715200,label=200MiB,mode=on,phase=resident,reuse_memset_ns=3755544,minflt_delta=0
+median,size=209715200,label=200MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4204503,refault_ns_per_page=82,minflt_delta=611,rss_kib=204804,anon_huge_kib=202752
+verdict,size=1048576,label=1MiB-subPMD,fresh_fault_improve_pct=-1.2,write_improve_pct=0.4,read_improve_pct=-0.0,refault_improve_pct=0.6,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+verdict,size=2097152,label=2MiB,fresh_fault_improve_pct=-0.3,write_improve_pct=0.0,read_improve_pct=0.0,refault_improve_pct=0.0,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+verdict,size=20971520,label=20MiB,fresh_fault_improve_pct=81.7,write_improve_pct=51.7,read_improve_pct=5.5,refault_improve_pct=81.2,anon_huge_kib_fresh_on=18432,anon_huge_kib_refault_on=18432,verdict=WIN
+verdict,size=209715200,label=200MiB,fresh_fault_improve_pct=83.1,write_improve_pct=-0.6,read_improve_pct=0.6,refault_improve_pct=82.7,anon_huge_kib_fresh_on=202752,anon_huge_kib_refault_on=202752,verdict=WIN
+RESULT: PASS
+
+=== PROBE EXECUTION 2 (raw + median + verdict, verbatim) ===
+probe_z049: THP for cached (pooled) mappings, MimirAlloc large-path shape (1 descriptor page + usable extent)
+pmd_bytes=2097152 reps=5 order=alternating
+raw,size=1048576,mode=off,rep=0,phase=fresh,base_mod_pmd=1142784,fault_ns=176811,fault_ns_per_page=690,minflt_delta=260,rss_kib=1028,anon_huge_kib=0,write_mibs=160201.5,read_mibs=34914.6,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=0,phase=resident,reuse_memset_ns=7183,minflt_delta=0
+raw,size=1048576,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=98063,refault_ns_per_page=383,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=1,phase=fresh,base_mod_pmd=1142784,fault_ns=92132,fault_ns_per_page=359,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=168435.1,read_mibs=34674.3,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=1,phase=resident,reuse_memset_ns=7534,minflt_delta=0
+raw,size=1048576,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=99707,refault_ns_per_page=389,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=2,phase=fresh,base_mod_pmd=1142784,fault_ns=98113,fault_ns_per_page=383,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=168542.9,read_mibs=37522.0,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=2,phase=resident,reuse_memset_ns=6833,minflt_delta=0
+raw,size=1048576,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=90148,refault_ns_per_page=352,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=3,phase=fresh,base_mod_pmd=1142784,fault_ns=90459,fault_ns_per_page=353,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=167471.4,read_mibs=37531.1,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=3,phase=resident,reuse_memset_ns=6692,minflt_delta=0
+raw,size=1048576,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=90650,refault_ns_per_page=354,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=4,phase=fresh,base_mod_pmd=1142784,fault_ns=89448,fault_ns_per_page=349,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=169091.7,read_mibs=37580.3,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=4,phase=resident,reuse_memset_ns=6662,minflt_delta=0
+raw,size=1048576,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=101129,refault_ns_per_page=395,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=fresh,fault_ns=92132,fault_ns_per_page=359,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=168435.1,read_mibs=37522.0
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=resident,reuse_memset_ns=6833,minflt_delta=0
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=98063,refault_ns_per_page=383,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=0,phase=fresh,base_mod_pmd=1142784,fault_ns=89647,fault_ns_per_page=350,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=169771.4,read_mibs=37639.3,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=0,phase=resident,reuse_memset_ns=6703,minflt_delta=0
+raw,size=1048576,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=90479,refault_ns_per_page=353,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=1,phase=fresh,base_mod_pmd=1142784,fault_ns=89057,fault_ns_per_page=347,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=170078.8,read_mibs=37637.4,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=1,phase=resident,reuse_memset_ns=6673,minflt_delta=0
+raw,size=1048576,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=91311,refault_ns_per_page=356,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=2,phase=fresh,base_mod_pmd=1142784,fault_ns=89678,fault_ns_per_page=350,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=170130.9,read_mibs=37767.3,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=2,phase=resident,reuse_memset_ns=6633,minflt_delta=0
+raw,size=1048576,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=89868,refault_ns_per_page=351,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=3,phase=fresh,base_mod_pmd=1142784,fault_ns=89999,fault_ns_per_page=351,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=169331.4,read_mibs=37746.6,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=3,phase=resident,reuse_memset_ns=6713,minflt_delta=0
+raw,size=1048576,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=91170,refault_ns_per_page=356,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=4,phase=fresh,base_mod_pmd=1142784,fault_ns=89337,fault_ns_per_page=348,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=170529.3,read_mibs=37789.8,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=4,phase=resident,reuse_memset_ns=6622,minflt_delta=0
+raw,size=1048576,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=90048,refault_ns_per_page=351,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=fresh,fault_ns=89647,fault_ns_per_page=350,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=170078.8,read_mibs=37746.6
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=resident,reuse_memset_ns=6673,minflt_delta=0
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=90479,refault_ns_per_page=353,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=479186,fault_ns_per_page=935,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=135149.2,read_mibs=38965.5,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=0,phase=resident,reuse_memset_ns=15499,minflt_delta=0
+raw,size=2097152,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=186358,refault_ns_per_page=363,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=179195,fault_ns_per_page=349,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=136702.3,read_mibs=38933.5,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=1,phase=resident,reuse_memset_ns=15439,minflt_delta=0
+raw,size=2097152,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=177121,refault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=178625,fault_ns_per_page=348,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=136148.7,read_mibs=35899.7,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=2,phase=resident,reuse_memset_ns=20639,minflt_delta=0
+raw,size=2097152,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=181440,refault_ns_per_page=354,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=183934,fault_ns_per_page=359,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=138160.6,read_mibs=35829.6,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=3,phase=resident,reuse_memset_ns=15849,minflt_delta=0
+raw,size=2097152,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=181730,refault_ns_per_page=354,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=179395,fault_ns_per_page=350,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=136174.9,read_mibs=38928.6,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=4,phase=resident,reuse_memset_ns=15479,minflt_delta=0
+raw,size=2097152,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=176830,refault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+median,size=2097152,label=2MiB,mode=off,phase=fresh,fault_ns=179395,fault_ns_per_page=350,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=136174.9,read_mibs=38928.6
+median,size=2097152,label=2MiB,mode=off,phase=resident,reuse_memset_ns=15499,minflt_delta=0
+median,size=2097152,label=2MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=181440,refault_ns_per_page=354,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=on,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=44273,fault_ns_per_page=86,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=149969.7,read_mibs=38963.1,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=0,phase=resident,reuse_memset_ns=13535,minflt_delta=0
+raw,size=2097152,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=20338,refault_ns_per_page=39,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=18405,fault_ns_per_page=35,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151744.6,read_mibs=38948.2,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=1,phase=resident,reuse_memset_ns=13616,minflt_delta=0
+raw,size=2097152,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=17172,refault_ns_per_page=33,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=18204,fault_ns_per_page=35,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151717.5,read_mibs=38980.6,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=2,phase=resident,reuse_memset_ns=13495,minflt_delta=0
+raw,size=2097152,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=16852,refault_ns_per_page=32,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=18164,fault_ns_per_page=35,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151451.4,read_mibs=38962.8,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=3,phase=resident,reuse_memset_ns=13335,minflt_delta=0
+raw,size=2097152,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=16722,refault_ns_per_page=32,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=18004,fault_ns_per_page=35,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151768.9,read_mibs=38985.3,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=4,phase=resident,reuse_memset_ns=13536,minflt_delta=0
+raw,size=2097152,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=16941,refault_ns_per_page=33,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+median,size=2097152,label=2MiB,mode=on,phase=fresh,fault_ns=18204,fault_ns_per_page=35,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151717.5,read_mibs=38963.1
+median,size=2097152,label=2MiB,mode=on,phase=resident,reuse_memset_ns=13535,minflt_delta=0
+median,size=2097152,label=2MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=16941,refault_ns_per_page=33,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=20971520,mode=off,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=2560158,fault_ns_per_page=500,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=95083.4,read_mibs=38058.2,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=0,phase=resident,reuse_memset_ns=202509,minflt_delta=0
+raw,size=20971520,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1934618,refault_ns_per_page=377,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=1907598,fault_ns_per_page=372,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=104011.6,read_mibs=38108.2,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=1,phase=resident,reuse_memset_ns=194584,minflt_delta=0
+raw,size=20971520,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1919460,refault_ns_per_page=374,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=1907086,fault_ns_per_page=372,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=103801.1,read_mibs=38151.5,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=2,phase=resident,reuse_memset_ns=193832,minflt_delta=0
+raw,size=20971520,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1908589,refault_ns_per_page=372,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=1894242,fault_ns_per_page=369,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=104009.3,read_mibs=38100.1,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=3,phase=resident,reuse_memset_ns=195686,minflt_delta=0
+raw,size=20971520,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1911675,refault_ns_per_page=373,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=1900113,fault_ns_per_page=371,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=103322.1,read_mibs=38129.7,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=4,phase=resident,reuse_memset_ns=204562,minflt_delta=0
+raw,size=20971520,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1936622,refault_ns_per_page=378,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+median,size=20971520,label=20MiB,mode=off,phase=fresh,fault_ns=1907086,fault_ns_per_page=372,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=103801.1,read_mibs=38108.2
+median,size=20971520,label=20MiB,mode=off,phase=resident,reuse_memset_ns=195686,minflt_delta=0
+median,size=20971520,label=20MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1919460,refault_ns_per_page=374,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=on,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=390561,fault_ns_per_page=76,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=109405.5,read_mibs=38848.1,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=0,phase=resident,reuse_memset_ns=138599,minflt_delta=0
+raw,size=20971520,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=194524,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=184114,fault_ns_per_page=35,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=145638.8,read_mibs=38873.0,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=1,phase=resident,reuse_memset_ns=141975,minflt_delta=0
+raw,size=20971520,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=186569,refault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=185066,fault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=144130.8,read_mibs=38878.1,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=2,phase=resident,reuse_memset_ns=136425,minflt_delta=0
+raw,size=20971520,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=189765,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=183534,fault_ns_per_page=35,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=145295.2,read_mibs=38861.9,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=3,phase=resident,reuse_memset_ns=140463,minflt_delta=0
+raw,size=20971520,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=184796,refault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=184054,fault_ns_per_page=35,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=142886.0,read_mibs=38819.3,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=4,phase=resident,reuse_memset_ns=141915,minflt_delta=0
+raw,size=20971520,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=191809,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+median,size=20971520,label=20MiB,mode=on,phase=fresh,fault_ns=184114,fault_ns_per_page=35,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=144130.8,read_mibs=38861.9
+median,size=20971520,label=20MiB,mode=on,phase=resident,reuse_memset_ns=140463,minflt_delta=0
+median,size=20971520,label=20MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=189765,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=209715200,mode=off,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=25651593,fault_ns_per_page=501,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=54282.2,read_mibs=32965.0,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=0,phase=resident,reuse_memset_ns=3710009,minflt_delta=0
+raw,size=209715200,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=37099422,refault_ns_per_page=724,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=25636564,fault_ns_per_page=500,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55404.9,read_mibs=34552.2,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=1,phase=resident,reuse_memset_ns=3610713,minflt_delta=0
+raw,size=209715200,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24228932,refault_ns_per_page=473,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=24288654,fault_ns_per_page=474,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55408.4,read_mibs=34145.3,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=2,phase=resident,reuse_memset_ns=3630840,minflt_delta=0
+raw,size=209715200,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24286620,refault_ns_per_page=474,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=24376648,fault_ns_per_page=476,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=54423.8,read_mibs=33985.7,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=3,phase=resident,reuse_memset_ns=3641510,minflt_delta=0
+raw,size=209715200,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=25030582,refault_ns_per_page=488,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=24994604,fault_ns_per_page=488,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=54621.1,read_mibs=33837.3,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=4,phase=resident,reuse_memset_ns=3624248,minflt_delta=0
+raw,size=209715200,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24401705,refault_ns_per_page=476,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+median,size=209715200,label=200MiB,mode=off,phase=fresh,fault_ns=24994604,fault_ns_per_page=488,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=54621.1,read_mibs=33985.7
+median,size=209715200,label=200MiB,mode=off,phase=resident,reuse_memset_ns=3630840,minflt_delta=0
+median,size=209715200,label=200MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24401705,refault_ns_per_page=476,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=on,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=4046507,fault_ns_per_page=79,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=54870.9,read_mibs=33567.4,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=0,phase=resident,reuse_memset_ns=3706211,minflt_delta=0
+raw,size=209715200,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=3978480,refault_ns_per_page=77,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=3967149,fault_ns_per_page=77,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=54875.6,read_mibs=34587.0,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=1,phase=resident,reuse_memset_ns=3642031,minflt_delta=0
+raw,size=209715200,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=3995392,refault_ns_per_page=78,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=4073638,fault_ns_per_page=79,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=54559.5,read_mibs=34556.5,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=2,phase=resident,reuse_memset_ns=3752257,minflt_delta=0
+raw,size=209715200,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4141485,refault_ns_per_page=80,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=3887521,fault_ns_per_page=75,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=54807.8,read_mibs=33680.9,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=3,phase=resident,reuse_memset_ns=3622405,minflt_delta=0
+raw,size=209715200,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=3910182,refault_ns_per_page=76,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=3783005,fault_ns_per_page=73,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=55028.7,read_mibs=34590.7,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=4,phase=resident,reuse_memset_ns=3631452,minflt_delta=0
+raw,size=209715200,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=3871681,refault_ns_per_page=75,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+median,size=209715200,label=200MiB,mode=on,phase=fresh,fault_ns=3967149,fault_ns_per_page=77,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=54870.9,read_mibs=34556.5
+median,size=209715200,label=200MiB,mode=on,phase=resident,reuse_memset_ns=3642031,minflt_delta=0
+median,size=209715200,label=200MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=3978480,refault_ns_per_page=77,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+verdict,size=1048576,label=1MiB-subPMD,fresh_fault_improve_pct=2.5,write_improve_pct=1.0,read_improve_pct=0.6,refault_improve_pct=7.8,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+verdict,size=2097152,label=2MiB,fresh_fault_improve_pct=90.0,write_improve_pct=11.4,read_improve_pct=0.1,refault_improve_pct=90.7,anon_huge_kib_fresh_on=2048,anon_huge_kib_refault_on=2048,verdict=WIN
+verdict,size=20971520,label=20MiB,fresh_fault_improve_pct=90.6,write_improve_pct=38.9,read_improve_pct=2.0,refault_improve_pct=90.1,anon_huge_kib_fresh_on=20480,anon_huge_kib_refault_on=20480,verdict=WIN
+verdict,size=209715200,label=200MiB,fresh_fault_improve_pct=84.2,write_improve_pct=0.5,read_improve_pct=1.7,refault_improve_pct=83.8,anon_huge_kib_fresh_on=204800,anon_huge_kib_refault_on=204800,verdict=WIN
+RESULT: PASS
+
+=== PROBE EXECUTION 3 (raw + median + verdict, verbatim) ===
+probe_z049: THP for cached (pooled) mappings, MimirAlloc large-path shape (1 descriptor page + usable extent)
+pmd_bytes=2097152 reps=5 order=alternating
+raw,size=1048576,mode=off,rep=0,phase=fresh,base_mod_pmd=716800,fault_ns=210955,fault_ns_per_page=824,minflt_delta=260,rss_kib=1028,anon_huge_kib=0,write_mibs=128120.6,read_mibs=36197.8,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=0,phase=resident,reuse_memset_ns=7433,minflt_delta=0
+raw,size=1048576,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=93956,refault_ns_per_page=367,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=1,phase=fresh,base_mod_pmd=716800,fault_ns=94978,fault_ns_per_page=371,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=149863.2,read_mibs=36261.7,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=1,phase=resident,reuse_memset_ns=7243,minflt_delta=0
+raw,size=1048576,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=94316,refault_ns_per_page=368,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=2,phase=fresh,base_mod_pmd=716800,fault_ns=93936,fault_ns_per_page=366,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=149621.0,read_mibs=36271.2,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=2,phase=resident,reuse_memset_ns=7414,minflt_delta=0
+raw,size=1048576,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=94477,refault_ns_per_page=369,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=3,phase=fresh,base_mod_pmd=716800,fault_ns=93134,fault_ns_per_page=363,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=151086.0,read_mibs=36295.3,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=3,phase=resident,reuse_memset_ns=7134,minflt_delta=0
+raw,size=1048576,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=93395,refault_ns_per_page=364,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=off,rep=4,phase=fresh,base_mod_pmd=716800,fault_ns=93164,fault_ns_per_page=363,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=149809.6,read_mibs=36337.0,cksum=13021231110841958400
+raw,size=1048576,mode=off,rep=4,phase=resident,reuse_memset_ns=7153,minflt_delta=0
+raw,size=1048576,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=94136,refault_ns_per_page=367,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=fresh,fault_ns=93936,fault_ns_per_page=366,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=149809.6,read_mibs=36271.2
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=resident,reuse_memset_ns=7243,minflt_delta=0
+median,size=1048576,label=1MiB-subPMD,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=94136,refault_ns_per_page=367,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=0,phase=fresh,base_mod_pmd=716800,fault_ns=92944,fault_ns_per_page=363,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=129404.0,read_mibs=37310.5,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=0,phase=resident,reuse_memset_ns=7414,minflt_delta=0
+raw,size=1048576,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=107811,refault_ns_per_page=421,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=1,phase=fresh,base_mod_pmd=716800,fault_ns=89317,fault_ns_per_page=348,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=161883.2,read_mibs=35818.1,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=1,phase=resident,reuse_memset_ns=7444,minflt_delta=0
+raw,size=1048576,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=96951,refault_ns_per_page=378,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=2,phase=fresh,base_mod_pmd=716800,fault_ns=88415,fault_ns_per_page=345,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=162962.0,read_mibs=39015.1,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=2,phase=resident,reuse_memset_ns=6883,minflt_delta=0
+raw,size=1048576,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=87995,refault_ns_per_page=343,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=3,phase=fresh,base_mod_pmd=716800,fault_ns=87343,fault_ns_per_page=341,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=162503.0,read_mibs=39017.3,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=3,phase=resident,reuse_memset_ns=6733,minflt_delta=0
+raw,size=1048576,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=87153,refault_ns_per_page=340,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=1048576,mode=on,rep=4,phase=fresh,base_mod_pmd=716800,fault_ns=88105,fault_ns_per_page=344,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=162297.5,read_mibs=38997.2,cksum=13021231110841958400
+raw,size=1048576,mode=on,rep=4,phase=resident,reuse_memset_ns=6683,minflt_delta=0
+raw,size=1048576,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=88185,refault_ns_per_page=344,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=fresh,fault_ns=88415,fault_ns_per_page=345,minflt_delta=256,rss_kib=1028,anon_huge_kib=0,write_mibs=162297.5,read_mibs=38997.2
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=resident,reuse_memset_ns=6883,minflt_delta=0
+median,size=1048576,label=1MiB-subPMD,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=88185,refault_ns_per_page=344,minflt_delta=256,rss_kib=1028,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=231343,fault_ns_per_page=451,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=137142.5,read_mibs=38760.4,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=0,phase=resident,reuse_memset_ns=15218,minflt_delta=0
+raw,size=2097152,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=183343,refault_ns_per_page=358,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=177021,fault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=134015.1,read_mibs=38216.3,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=1,phase=resident,reuse_memset_ns=15429,minflt_delta=0
+raw,size=2097152,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=180337,refault_ns_per_page=352,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=176610,fault_ns_per_page=344,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=133092.3,read_mibs=38322.4,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=2,phase=resident,reuse_memset_ns=15399,minflt_delta=0
+raw,size=2097152,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=178213,refault_ns_per_page=348,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=177642,fault_ns_per_page=346,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=132671.5,read_mibs=38330.3,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=3,phase=resident,reuse_memset_ns=15459,minflt_delta=0
+raw,size=2097152,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=177112,refault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=off,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=176971,fault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=132838.4,read_mibs=38276.0,cksum=13021231110841958400
+raw,size=2097152,mode=off,rep=4,phase=resident,reuse_memset_ns=15399,minflt_delta=0
+raw,size=2097152,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=176881,refault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+median,size=2097152,label=2MiB,mode=off,phase=fresh,fault_ns=177021,fault_ns_per_page=345,minflt_delta=512,rss_kib=2052,anon_huge_kib=0,write_mibs=133092.3,read_mibs=38322.4
+median,size=2097152,label=2MiB,mode=off,phase=resident,reuse_memset_ns=15399,minflt_delta=0
+median,size=2097152,label=2MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=178213,refault_ns_per_page=348,minflt_delta=512,rss_kib=2052,anon_huge_kib=0
+raw,size=2097152,mode=on,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=43842,fault_ns_per_page=85,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=150978.0,read_mibs=39008.3,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=0,phase=resident,reuse_memset_ns=13596,minflt_delta=0
+raw,size=2097152,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=17773,refault_ns_per_page=34,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=18575,fault_ns_per_page=36,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151795.1,read_mibs=38957.1,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=1,phase=resident,reuse_memset_ns=13486,minflt_delta=0
+raw,size=2097152,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=17272,refault_ns_per_page=33,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=18545,fault_ns_per_page=36,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151188.8,read_mibs=38993.5,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=2,phase=resident,reuse_memset_ns=13515,minflt_delta=0
+raw,size=2097152,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=17463,refault_ns_per_page=34,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=21079,fault_ns_per_page=41,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151355.4,read_mibs=38833.2,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=3,phase=resident,reuse_memset_ns=13585,minflt_delta=0
+raw,size=2097152,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=17362,refault_ns_per_page=33,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=2097152,mode=on,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=18354,fault_ns_per_page=35,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151066.4,read_mibs=38972.7,cksum=13021231110841958400
+raw,size=2097152,mode=on,rep=4,phase=resident,reuse_memset_ns=13625,minflt_delta=0
+raw,size=2097152,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=17402,refault_ns_per_page=33,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+median,size=2097152,label=2MiB,mode=on,phase=fresh,fault_ns=18575,fault_ns_per_page=36,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048,write_mibs=151188.8,read_mibs=38972.7
+median,size=2097152,label=2MiB,mode=on,phase=resident,reuse_memset_ns=13585,minflt_delta=0
+median,size=2097152,label=2MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=17402,refault_ns_per_page=33,minflt_delta=1,rss_kib=2052,anon_huge_kib=2048
+raw,size=20971520,mode=off,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=2687446,fault_ns_per_page=524,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=86777.5,read_mibs=37096.5,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=0,phase=resident,reuse_memset_ns=221694,minflt_delta=0
+raw,size=20971520,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1939297,refault_ns_per_page=378,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=1944626,fault_ns_per_page=379,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=94419.3,read_mibs=37062.9,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=1,phase=resident,reuse_memset_ns=216124,minflt_delta=0
+raw,size=20971520,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1926082,refault_ns_per_page=376,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=1918257,fault_ns_per_page=374,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=93772.1,read_mibs=37216.5,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=2,phase=resident,reuse_memset_ns=215994,minflt_delta=0
+raw,size=20971520,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1929829,refault_ns_per_page=376,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=1929188,fault_ns_per_page=376,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=93604.7,read_mibs=37011.2,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=3,phase=resident,reuse_memset_ns=214882,minflt_delta=0
+raw,size=20971520,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1924228,refault_ns_per_page=375,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=off,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=1918669,fault_ns_per_page=374,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=94467.0,read_mibs=37197.6,cksum=7595718147986948096
+raw,size=20971520,mode=off,rep=4,phase=resident,reuse_memset_ns=213760,minflt_delta=0
+raw,size=20971520,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1933937,refault_ns_per_page=377,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+median,size=20971520,label=20MiB,mode=off,phase=fresh,fault_ns=1929188,fault_ns_per_page=376,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0,write_mibs=93772.1,read_mibs=37096.5
+median,size=20971520,label=20MiB,mode=off,phase=resident,reuse_memset_ns=215994,minflt_delta=0
+median,size=20971520,label=20MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=1929829,refault_ns_per_page=376,minflt_delta=5120,rss_kib=20484,anon_huge_kib=0
+raw,size=20971520,mode=on,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=391572,fault_ns_per_page=76,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=98469.7,read_mibs=38886.4,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=0,phase=resident,reuse_memset_ns=143328,minflt_delta=0
+raw,size=20971520,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=192019,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=184756,fault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=144658.2,read_mibs=38878.7,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=1,phase=resident,reuse_memset_ns=143288,minflt_delta=0
+raw,size=20971520,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=186198,refault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=185436,fault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=143197.7,read_mibs=38903.1,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=2,phase=resident,reuse_memset_ns=139090,minflt_delta=0
+raw,size=20971520,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=190136,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=185276,fault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=144290.6,read_mibs=38902.3,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=3,phase=resident,reuse_memset_ns=144010,minflt_delta=0
+raw,size=20971520,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=187721,refault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=20971520,mode=on,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=185246,fault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=143731.3,read_mibs=38916.2,cksum=7595718147986948096
+raw,size=20971520,mode=on,rep=4,phase=resident,reuse_memset_ns=142637,minflt_delta=0
+raw,size=20971520,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=192831,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+median,size=20971520,label=20MiB,mode=on,phase=fresh,fault_ns=185276,fault_ns_per_page=36,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480,write_mibs=143731.3,read_mibs=38902.3
+median,size=20971520,label=20MiB,mode=on,phase=resident,reuse_memset_ns=143288,minflt_delta=0
+median,size=20971520,label=20MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=190136,refault_ns_per_page=37,minflt_delta=10,rss_kib=20484,anon_huge_kib=20480
+raw,size=209715200,mode=off,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=25845565,fault_ns_per_page=504,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=55060.7,read_mibs=34678.6,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=0,phase=resident,reuse_memset_ns=3630490,minflt_delta=0
+raw,size=209715200,mode=off,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=24258648,refault_ns_per_page=473,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=24252436,fault_ns_per_page=473,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=54079.3,read_mibs=25571.4,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=1,phase=resident,reuse_memset_ns=4745555,minflt_delta=0
+raw,size=209715200,mode=off,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=27460065,refault_ns_per_page=536,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=28510329,fault_ns_per_page=556,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=52158.7,read_mibs=24690.3,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=2,phase=resident,reuse_memset_ns=4770652,minflt_delta=0
+raw,size=209715200,mode=off,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=26561495,refault_ns_per_page=518,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=26860603,fault_ns_per_page=524,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=45712.9,read_mibs=31574.8,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=3,phase=resident,reuse_memset_ns=3706000,minflt_delta=0
+raw,size=209715200,mode=off,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=25678263,refault_ns_per_page=501,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=off,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=27738476,fault_ns_per_page=541,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=47435.9,read_mibs=30819.9,cksum=3255307777704198144
+raw,size=209715200,mode=off,rep=4,phase=resident,reuse_memset_ns=4152967,minflt_delta=0
+raw,size=209715200,mode=off,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=28108317,refault_ns_per_page=548,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+median,size=209715200,label=200MiB,mode=off,phase=fresh,fault_ns=26860603,fault_ns_per_page=524,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0,write_mibs=52158.7,read_mibs=30819.9
+median,size=209715200,label=200MiB,mode=off,phase=resident,reuse_memset_ns=4152967,minflt_delta=0
+median,size=209715200,label=200MiB,mode=off,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=26561495,refault_ns_per_page=518,minflt_delta=51200,rss_kib=204804,anon_huge_kib=0
+raw,size=209715200,mode=on,rep=0,phase=fresh,base_mod_pmd=2093056,fault_ns=5602468,fault_ns_per_page=109,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=46453.6,read_mibs=27476.1,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=0,phase=resident,reuse_memset_ns=4209322,minflt_delta=0
+raw,size=209715200,mode=on,rep=0,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4891177,refault_ns_per_page=95,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=1,phase=fresh,base_mod_pmd=2093056,fault_ns=4479698,fault_ns_per_page=87,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=47387.6,read_mibs=31016.6,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=1,phase=resident,reuse_memset_ns=3980214,minflt_delta=0
+raw,size=209715200,mode=on,rep=1,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4517799,refault_ns_per_page=88,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=2,phase=fresh,base_mod_pmd=2093056,fault_ns=4618948,fault_ns_per_page=90,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=52618.9,read_mibs=32101.8,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=2,phase=resident,reuse_memset_ns=3718644,minflt_delta=0
+raw,size=209715200,mode=on,rep=2,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4358421,refault_ns_per_page=85,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=3,phase=fresh,base_mod_pmd=2093056,fault_ns=4484607,fault_ns_per_page=87,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=52197.6,read_mibs=29692.8,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=3,phase=resident,reuse_memset_ns=3718915,minflt_delta=0
+raw,size=209715200,mode=on,rep=3,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4591387,refault_ns_per_page=89,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+raw,size=209715200,mode=on,rep=4,phase=fresh,base_mod_pmd=2093056,fault_ns=4166883,fault_ns_per_page=81,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=53569.9,read_mibs=31218.2,cksum=3255307777704198144
+raw,size=209715200,mode=on,rep=4,phase=resident,reuse_memset_ns=3738772,minflt_delta=0
+raw,size=209715200,mode=on,rep=4,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4385372,refault_ns_per_page=85,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+median,size=209715200,label=200MiB,mode=on,phase=fresh,fault_ns=4484607,fault_ns_per_page=87,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800,write_mibs=52197.6,read_mibs=31016.6
+median,size=209715200,label=200MiB,mode=on,phase=resident,reuse_memset_ns=3738772,minflt_delta=0
+median,size=209715200,label=200MiB,mode=on,phase=dontneed,rss_after_dontneed_kib=4,refault_ns=4517799,refault_ns_per_page=88,minflt_delta=100,rss_kib=204804,anon_huge_kib=204800
+verdict,size=1048576,label=1MiB-subPMD,fresh_fault_improve_pct=5.7,write_improve_pct=8.3,read_improve_pct=7.5,refault_improve_pct=6.3,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+verdict,size=2097152,label=2MiB,fresh_fault_improve_pct=89.6,write_improve_pct=13.6,read_improve_pct=1.7,refault_improve_pct=90.5,anon_huge_kib_fresh_on=2048,anon_huge_kib_refault_on=2048,verdict=WIN
+verdict,size=20971520,label=20MiB,fresh_fault_improve_pct=90.4,write_improve_pct=53.3,read_improve_pct=4.9,refault_improve_pct=90.2,anon_huge_kib_fresh_on=20480,anon_huge_kib_refault_on=20480,verdict=WIN
+verdict,size=209715200,label=200MiB,fresh_fault_improve_pct=83.4,write_improve_pct=0.1,read_improve_pct=0.6,refault_improve_pct=83.0,anon_huge_kib_fresh_on=204800,anon_huge_kib_refault_on=204800,verdict=WIN
+RESULT: PASS
+
+=== SYNTHESIS (tests/perf/summarize_z049.py on the 3 executions) ===
+synthesis: median-of-medians across 3 executions
+size=1048576 label=1MiB-subPMD
+  fresh: fault/page off=359.0ns on=345.0ns improve=3.9%; minflt off=256.0 on=256.0; write off=164398.5 on=164999.3 improve=0.4%; read off=37522.0 on=38997.2 improve=3.9%; anon_huge_on=0.0 KiB
+  resident: reuse_memset off=6883.0ns on=6883.0ns improve=0.0%
+  dontneed: rss_after off=4.0 on=4.0 KiB; refault/page off=367.0ns on=344.0ns improve=6.3%; minflt off=256.0 on=256.0; anon_huge_on=0.0 KiB
+  grade=TIE-no-huge-backing decision=REJECT-no-effect
+size=2097152 label=2MiB
+  fresh: fault/page off=345.0ns on=36.0ns improve=89.6%; minflt off=512.0 on=1.0; write off=133092.3 on=151188.8 improve=13.6%; read off=38738.3 on=38963.1 improve=0.6%; anon_huge_on=2048.0 KiB
+  resident: reuse_memset off=15499.0ns on=13585.0ns improve=12.3%
+  dontneed: rss_after off=4.0 on=4.0 KiB; refault/page off=348.0ns on=33.0ns improve=90.5%; minflt off=512.0 on=1.0; anon_huge_on=2048.0 KiB
+  grade=WIN decision=ADOPT
+size=20971520 label=20MiB
+  fresh: fault/page off=372.0ns on=36.0ns improve=90.3%; minflt off=5120.0 on=10.0; write off=93772.1 on=143731.3 improve=53.3%; read off=37096.5 on=38902.3 improve=4.9%; anon_huge_on=20480.0 KiB
+  resident: reuse_memset off=211275.0ns on=142416.0ns improve=32.6%
+  dontneed: rss_after off=4.0 on=4.0 KiB; refault/page off=374.0ns on=37.0ns improve=90.1%; minflt off=5120.0 on=10.0; anon_huge_on=20480.0 KiB
+  grade=WIN decision=ADOPT
+size=209715200 label=200MiB
+  fresh: fault/page off=488.0ns on=80.0ns improve=83.6%; minflt off=51200.0 on=100.0; write off=54621.1 on=54870.9 improve=0.5%; read off=33985.7 on=34556.5 improve=1.7%; anon_huge_on=204800.0 KiB
+  resident: reuse_memset off=3873824.0ns on=3738772.0ns improve=3.5%
+  dontneed: rss_after off=4.0 on=4.0 KiB; refault/page off=476.0ns on=82.0ns improve=82.8%; minflt off=51200.0 on=100.0; anon_huge_on=204800.0 KiB
+  grade=WIN decision=ADOPT
+per-execution probe verdicts:
+  run1 verdict,size=1048576,label=1MiB-subPMD,fresh_fault_improve_pct=-1.2,write_improve_pct=0.4,read_improve_pct=-0.0,refault_improve_pct=0.6,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+  run1 verdict,size=2097152,label=2MiB,fresh_fault_improve_pct=-0.3,write_improve_pct=0.0,read_improve_pct=0.0,refault_improve_pct=0.0,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+  run1 verdict,size=20971520,label=20MiB,fresh_fault_improve_pct=81.7,write_improve_pct=51.7,read_improve_pct=5.5,refault_improve_pct=81.2,anon_huge_kib_fresh_on=18432,anon_huge_kib_refault_on=18432,verdict=WIN
+  run1 verdict,size=209715200,label=200MiB,fresh_fault_improve_pct=83.1,write_improve_pct=-0.6,read_improve_pct=0.6,refault_improve_pct=82.7,anon_huge_kib_fresh_on=202752,anon_huge_kib_refault_on=202752,verdict=WIN
+  run2 verdict,size=1048576,label=1MiB-subPMD,fresh_fault_improve_pct=2.5,write_improve_pct=1.0,read_improve_pct=0.6,refault_improve_pct=7.8,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+  run2 verdict,size=2097152,label=2MiB,fresh_fault_improve_pct=90.0,write_improve_pct=11.4,read_improve_pct=0.1,refault_improve_pct=90.7,anon_huge_kib_fresh_on=2048,anon_huge_kib_refault_on=2048,verdict=WIN
+  run2 verdict,size=20971520,label=20MiB,fresh_fault_improve_pct=90.6,write_improve_pct=38.9,read_improve_pct=2.0,refault_improve_pct=90.1,anon_huge_kib_fresh_on=20480,anon_huge_kib_refault_on=20480,verdict=WIN
+  run2 verdict,size=209715200,label=200MiB,fresh_fault_improve_pct=84.2,write_improve_pct=0.5,read_improve_pct=1.7,refault_improve_pct=83.8,anon_huge_kib_fresh_on=204800,anon_huge_kib_refault_on=204800,verdict=WIN
+  run3 verdict,size=1048576,label=1MiB-subPMD,fresh_fault_improve_pct=5.7,write_improve_pct=8.3,read_improve_pct=7.5,refault_improve_pct=6.3,anon_huge_kib_fresh_on=0,anon_huge_kib_refault_on=0,verdict=LOSS-no-huge-backing
+  run3 verdict,size=2097152,label=2MiB,fresh_fault_improve_pct=89.6,write_improve_pct=13.6,read_improve_pct=1.7,refault_improve_pct=90.5,anon_huge_kib_fresh_on=2048,anon_huge_kib_refault_on=2048,verdict=WIN
+  run3 verdict,size=20971520,label=20MiB,fresh_fault_improve_pct=90.4,write_improve_pct=53.3,read_improve_pct=4.9,refault_improve_pct=90.2,anon_huge_kib_fresh_on=20480,anon_huge_kib_refault_on=20480,verdict=WIN
+  run3 verdict,size=209715200,label=200MiB,fresh_fault_improve_pct=83.4,write_improve_pct=0.1,read_improve_pct=0.6,refault_improve_pct=83.0,anon_huge_kib_fresh_on=204800,anon_huge_kib_refault_on=204800,verdict=WIN
+
+=== LEAD SYNTHESIS AND DECISIONS (the Z-049 gate) ===
+
+The machine synthesis above is median-of-medians and, at
+2 MiB, it hides the slice's most important fact, so the
+decisions below are taken per execution, from the
+per-execution verdicts and the raw base_mod_pmd fields:
+
+ALIGNMENT IS THE WHOLE 2 MiB STORY. Within one execution
+every large mapping lands at the same base offset modulo
+the 2 MiB PMD. When that offset is 2093056 (PMD - 4096,
+executions 2 and 3), the usable extent starts exactly on a
+PMD boundary - the kernel's usual THP-aware placement for
+mappings of this size - and MADV_HUGEPAGE backs it fully.
+When the offset is 2080768 (PMD - 16384, execution 1), no
+complete PMD window lies inside a 2 MiB usable extent and
+THP forms ZERO huge pages there. At 20/200 MiB the same
+offset only clips the head/tail partial windows (execution
+1 coverage 18432/20480 KiB = 90% and 202752/204800 KiB =
+99%); the WIN survives at both sizes in all executions.
+
+Per-decade decisions (roadmap gate: adopt/reject per size
+decade, recorded with numbers):
+
+1 MiB - REJECT (no effect to adopt). Grade: TIE. No PMD
+window can fit inside a 1 MiB usable extent; AnonHugePages
+0 in every rep of every execution; minor faults identical
+(256 both modes, fresh and re-fault); all median deltas
+inside the 10% noise band (fresh fault +3.9%, write
++0.4%, read +3.9%, re-fault +6.3% median-of-medians, with
+zero huge backing those deltas are noise, not signal).
+Advising HUGEPAGE here would be decoration.
+
+2 MiB - ADOPT, bimodal, named. Grade: WIN when aligned,
+TIE-no-op when not; no execution showed any regression,
+so adoption is free in the bad case and large in the good
+case. Aligned executions 2-3: fresh fault/page 345 -> 36
+ns (+89.6/+90.0%), minor faults 512 -> 1, write +11.4/
++13.6%, re-fault +90.5/+90.7%, AnonHugePages 2048 KiB.
+Unaligned execution 1: AnonHugePages 0, every delta
+within +/-0.3% - THP was simply absent. Follow-up named
+for the Z-048 pool implementation (not measured here):
+guaranteed 2 MiB coverage would need the usable extent
+PMD-aligned by construction (reserve + trim the head,
+the Z-013 probe's own trick); whether that is worth its
+VMA cost is the implementation slice's call, informed by
+these numbers.
+
+20 MiB - ADOPT. Grade: WIN in all 3 executions. Fresh
+fault/page 372 -> 36 ns median-of-medians (+90.3%;
+per-execution +81.7/+90.6/+90.4%), minor faults 5120 ->
+10 in aligned executions (521 in execution 1, where the
+two clipped partial windows fault at 4 KiB), write
++38.9..+53.3% per execution, read +2.0..+5.5%, re-fault
++81.2..+90.2%. Resident pool-hit memset +32.6%
+(median-of-medians): even with pages kept, huge backing
+pays bandwidth.
+
+200 MiB - ADOPT on fault; bandwidth TIE. Grade:
+WIN-fault / TIE-bandwidth, in all 3 executions. Fresh
+fault/page 488 -> 80 ns median-of-medians (+83.6%;
+per-execution +83.1/+84.2/+83.4%), re-fault +82.7..
++83.8%, minor faults 51200 -> 100 (611 in execution 1).
+Write -0.6/+0.5/+0.1% and read +0.6/+1.7/+0.6% per
+execution: this settles, for pooled mappings, the
+question Z-013 left unstable and Z-018 carried as its
+one OWED row ("THP adoption at 200 MiB for pooled
+mappings") - at 200 MiB in the pooled shape THP buys
+fault cost only, neither winning nor losing bandwidth.
+Z-018's open row is discharged by this run: ADOPT.
+
+RSS honesty (both modes, all executions): Rss equals the
+full mapping bytes (usable + descriptor page) once
+touched - median 2052 / 20484 / 204804 KiB at 2 / 20 /
+200 MiB - THP changes backing, never accounted size.
+After MADV_DONTNEED on the usable extent, Rss falls to
+4 KiB (the descriptor page alone) in BOTH modes at every
+size: a pool that returns pages keeps no THP-era RSS.
+Resident pool hits fault nothing in either mode
+(minflt delta 0 at every size): with pages kept, THP's
+only resident-phase effect is the bandwidth deltas
+above.
+
+Summary of the gate: MADV_HUGEPAGE on pooled mappings is
+ADOPTED for usable sizes >= 2 MiB (with the 2 MiB
+alignment bimodality named and its construction fix
+handed to Z-048) and REJECTED as a no-op below 2 MiB.
