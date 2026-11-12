@@ -1,0 +1,387 @@
+MimirAlloc Z13 slice Z-021 - recorded run of tests/perf/probe_z021.c
+slice: Z-021 - The contention ladder (glibc comparator): the identical 1..32 thread ladder as Z-020 on small_churn and mixed_batch, run on the glibc leg, presented side by side with Z-020 under the same protocol and header discipline
+date: 2026-11-12T03:57-03:58-05:00 (run of record, attempt 6; corroborating attempt 5 at 03:54, superseded aligned attempt 4 at 03:49 - see method; America/New_York)
+base: 98289d8 (branch yrsa/mimiralloc-team-07: merge of seat main 0b6c20f, banked Z-001..Z-019, into the team branch at 5856459 / Z-007; clean merge, no conflicts)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+
+environment header (scripts/z13/host_truth.sh, Z-002, verbatim in runner output):
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T08:57:25Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 57%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.40 2.04 2.75
+
+topology (sysfs, printed by the runner):
+cpu0 core_id=0 siblings=0,16 L3=32768K L3_shared=0-7,16-23
+cpu8 core_id=8 siblings=8,24 L3=32768K L3_shared=8-15,24-31
+cpu16 core_id=0 siblings=0,16 L3=32768K L3_shared=0-7,16-23
+cpu24 core_id=8 siblings=8,24 L3=32768K L3_shared=8-15,24-31
+governor cpu0: performance
+
+compiler: cc -std=c11 -Wall -Wextra -Werror -pthread -O2 -DLEG_GLIBC
+sha256 (run of record):
+8de9578c1d50510a7bdf063071ec174994fbdd07ca7d6a26d6b9d77a3e890bdc  tests/perf/probe_z021.c
+b3cb8055b9fc9f8e52747712926a7a7a411dfe8eb4040733f4e2ad26cbd81616  tests/perf/run_z021.sh
+0deb46646fc2dd619d916d3630e5284cb8933e5e3a8874f7f0f1fe88aea4caee  tests/perf/summarize_z021.py
+0be8928757b24eada08ffe20602c172b6ac7a6f54282fb370d0872340264198c  /tmp/probe_z021 (built binary; attempt 6 rebuilt it from identical sources, identical hash)
+
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004): the ladder is team-06 Z-020 probe design reused for the glibc leg exactly as its header prescribes - bench_k002.c included UNMODIFIED (its main renamed away), built with -DLEG_GLIBC so the bench own leg switch binds malloc/free. Fixed work PER THREAD (small_churn 50000 iterations; mixed_batch 200 batches = 51200 ops; the scale is printed on every LADDER line). Workers rendezvous on a barrier and run simultaneously. Pinning: worker t pins itself to CPU t (identity order 0-15 physical - 0-7 CCD0, 8-15 CCD1 - and 16-31 SMT siblings), verified per worker with sched_getcpu(); the runner additionally wraps each process in taskset -c 0-31. Threads 17..32 engage SMT siblings by design: the x-axis is thread count on this 16-core host. Repetitions are separate PROCESSES, 5 per ladder point, headline = median of processes; one discarded warm-up process per point at 1/10 scale plus the probe in-process 1/10 warm-up pass; 2 s pauses between points (thermal honesty). mixed_batch caveat (same as Z-020): the bench function pointer array is a static, so it is not thread-safe; the probe runs a thread-local replica with identical size cycle, touch seeds and reverse-order frees, and the selfcheck phase proves replica == bench (checksum 1228352 and 9472 ops at 37 batches, MATCH) in the same run before any ladder number is taken. Checksum discipline: every worker runs identical work, the probe aborts if per-thread checksums diverge inside a process, and the summariser verifies chk_each against the selfcheck reference for every point and rep. The chk_each values are IDENTICAL to Z-020 values (small_churn 6371544, mixed_batch 6627200) - the two legs performed provably identical work, rung for rung.
+
+====================================================================
+RESULTS AND VERDICT (assembled 2026-11-12 by the finishing lead)
+====================================================================
+assembly note: the previous lead was cancelled at the commit step with
+this file ending at the method section above. The sections below were
+assembled ONLY from the landed logs in the team worktree hidden_files/:
+z021_run.log (run of record, attempt 6, 2026-11-12T03:57-03:58-05:00),
+z021_run_attempt5.log (corroborating attempt, 03:54), and the banked
+Z-020 recorded run at the seat (seat c84f021). Every median, ratio and
+rep extreme below was recomputed from the raw LADDER lines of those
+logs by the finishing lead and cross-checked against the summarisers'
+own printed tables; the summariser outputs are also reproduced
+verbatim further down. NO re-run was performed: the landed logs
+support the slice's named gate under the grading discipline stated
+below, and the host is a shared machine (loadavg 3.08 at assembly
+time, Aesir/Lifthrasir forges and the Tensile lab co-resident), so a
+fresh run would not have been cleaner evidence. Attempts 1-3 used an
+earlier summariser format and attempt 4 was the superseded ALIGNED
+timing run (see the deviation note); none of attempts 1-4 is used for
+any number below.
+
+timing-method deviation from Z-020 (correction to the method section
+above, which describes the ladder shape and protocol as identical to
+Z-020): the ladder shape, rungs, scales, reps, pinning and line format
+ARE identical, but the timing window differs. Z-020 times
+release..last-join on the main thread. This probe times per-thread:
+each worker stamps CLOCK_MONOTONIC right after the barrier releases
+and again at the end of its timed pass, and the window is
+max(end) - min(start) across workers. Cause (recorded in the probe
+header): in the superseded aligned run, an unpinned main thread waking
+late from the barrier truncated the window and produced reps with
+impossible aggregate throughput (up to 13.6 Gops/s at 28 threads;
+attempt 4's raw still shows a 12344 Mops/s max rep at 32 threads on
+small_churn). Comparability limit, stated plainly: the two legs'
+absolute throughputs were measured under different timing windows, in
+different load windows (Z-020: 03:38-03:51, contended, loadavg up to
+12.60 at ladder points; Z-021 attempt 6: 03:57-03:58, the lightest
+window of the six attempts, loadavg 1.40 at start falling to 0.61 at
+end), about 20 minutes apart on a shared host. Which leg any given
+load difference favoured is unknown. That is one reason every exact
+factor below is graded INDICATIVE unless it rests on the rep-level
+separation, which no window or load artefact of the observed kind can
+manufacture: Z-020's own reps show no truncation signature (its
+per-thread rates never exceed its solo rate and collapse monotonically
+with tight drift), and the separation margins are 8x to 3240x.
+
+drift discipline (Z-004 protocol section 8, applied, not waived):
+the summariser flags a rung DRIFT-REJECT when the first-half vs
+second-half rep medians differ by more than the 8% bound; such a
+median is INDICATIVE ONLY and carries no clean claim below. In the
+run of record, 17 of 24 rungs are DRIFT-REJECT (small_churn:
+2,3,4,6,8,12,16,24; mixed_batch: 1,3,4,8,12,16,20,28,32). Within many
+points the 5 rep processes split into a slow cluster and a fast
+cluster (rep-ordering effect); all 120 raw LADDER lines are preserved
+in hidden_files/z021_run.log. Z-020's mixed_batch medians at 20 and
+32 threads are likewise INDICATIVE in its own record (drift 15.6%
+and 22.0% after two re-takes) and are marked * wherever used below.
+correctness gate at assembly: full make test GREEN - 4988 checks,
+0 failed, 77 by-design skips, make exit 0 (hidden_files/z021_gate.log,
+run by the previous lead in this worktree; a final gate re-run after
+this assembly is logged separately as hidden_files/z021_gate_final.log
+and quoted in CAMPAIGN_STATE.md).
+
+=== SUMMARISER OUTPUT, RUN OF RECORD (summarize_z021.py on attempt 6 raw, verbatim from hidden_files/z021_run.log) ===
+=== small_churn (glibc) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1            299.884  172.265  300.607     1.00x     100.0%            299.884    3.59  OK
+      2            596.079  331.552  597.579     1.99x      99.4%            298.039   23.85  OK
+  DRIFT-REJECT threads=2: drift 23.85% > bound 8.0% - median indicative only
+      3            683.717  489.970  883.720     2.28x      76.0%            227.906   55.68  OK
+  DRIFT-REJECT threads=3: drift 55.68% > bound 8.0% - median indicative only
+      4           1148.673  662.840  1180.944     3.83x      95.8%            287.168   23.51  OK
+  DRIFT-REJECT threads=4: drift 23.51% > bound 8.0% - median indicative only
+      6           1746.318  1023.168  1753.473     5.82x      97.1%            291.053   22.21  OK
+  DRIFT-REJECT threads=6: drift 22.21% > bound 8.0% - median indicative only
+      8           2268.628  1336.461  2316.531     7.57x      94.6%            283.579   42.87  OK
+  DRIFT-REJECT threads=8: drift 42.87% > bound 8.0% - median indicative only
+     12           3181.488  1708.161  3290.195    10.61x      88.4%            265.124   21.45  OK
+  DRIFT-REJECT threads=12: drift 21.45% > bound 8.0% - median indicative only
+     16           4411.894  2406.087  4507.525    14.71x      91.9%            275.743   22.84  OK
+  DRIFT-REJECT threads=16: drift 22.84% > bound 8.0% - median indicative only
+     20           3592.741  3091.161  3612.899    11.98x      59.9%            179.637    7.27  OK
+     24           4169.026  2458.865  4274.509    13.90x      57.9%            173.709   21.64  OK
+  DRIFT-REJECT threads=24: drift 21.64% > bound 8.0% - median indicative only
+     28           4564.409  4503.345  4598.955    15.22x      54.4%            163.015    0.56  OK
+     32           5424.299  5362.182  5440.363    18.09x      56.5%            169.509    0.46  OK
+INVERSION small_churn: peak aggregate throughput at 32 threads (5424.299 Mops/s)
+INVERSION small_churn: scaling inverts between 16 and 20 threads (first drop beyond the 5.0% noise bound)
+=== mixed_batch (glibc) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1            234.220  168.745  296.464     1.00x     100.0%            234.220   40.43  OK
+  DRIFT-REJECT threads=1: drift 40.43% > bound 8.0% - median indicative only
+      2            442.082  336.768  588.831     1.89x      94.4%            221.041    4.08  OK
+      3            881.770  504.554  890.528     3.76x     125.5%            293.923   42.46  OK
+  DRIFT-REJECT threads=3: drift 42.46% > bound 8.0% - median indicative only
+      4           1012.373  635.155  1112.844     4.32x     108.1%            253.093   42.70  OK
+  DRIFT-REJECT threads=4: drift 42.70% > bound 8.0% - median indicative only
+      6           1688.385  1667.997  1723.983     7.21x     120.1%            281.398    1.00  OK
+      8           2216.882  756.586  2236.516     9.46x     118.3%            277.110   32.62  OK
+  DRIFT-REJECT threads=8: drift 32.62% > bound 8.0% - median indicative only
+     12           3073.352  1231.435  3413.239    13.12x     109.3%            256.113   40.31  OK
+  DRIFT-REJECT threads=12: drift 40.31% > bound 8.0% - median indicative only
+     16           4020.811  2566.617  4300.601    17.17x     107.3%            251.301   42.59  OK
+  DRIFT-REJECT threads=16: drift 42.59% > bound 8.0% - median indicative only
+     20           2893.064  1685.505  2937.548    12.35x      61.8%            144.653   20.30  OK
+  DRIFT-REJECT threads=20: drift 20.30% > bound 8.0% - median indicative only
+     24           3526.687  3487.174  3546.576    15.06x      62.7%            146.945    0.98  OK
+     28           3910.604  3254.993  3962.684    16.70x      59.6%            139.664    8.26  OK
+  DRIFT-REJECT threads=28: drift 8.26% > bound 8.0% - median indicative only
+     32           4384.301  2761.434  4450.046    18.72x      58.5%            137.009   17.76  OK
+  DRIFT-REJECT threads=32: drift 17.76% > bound 8.0% - median indicative only
+INVERSION mixed_batch: peak aggregate throughput at 32 threads (4384.301 Mops/s)
+INVERSION mixed_batch: scaling inverts between 16 and 20 threads (first drop beyond the 5.0% noise bound)
+SUMMARY DONE Z-021
+
+=== SIDE BY SIDE WITH Z-020 (the roadmap gate artefact) ===
+Medians are aggregate Mops/s (millions of ops/s; Z-020 ops/s values
+divided by 1e6), headline = median of 5 rep processes per rung.
+R = DRIFT-REJECT on that leg's rung (median indicative only).
+Ratios are glibc / mimir medians, computed from the raw lines and
+shown rounded to 0.1; ratio floors in the verdict are stated as
+conservative bounds, never as rounded-up inequalities.
+
+small_churn (50000 iterations per thread):
+thr   glibc_a6_med  flag  mimir_med  glibc_a6/mimir  glibc_a5_med  glibc_a5/mimir
+  1       299.884         20.398           14.7x       240.992           11.8x
+  2       596.079    R     6.177           96.5x       338.616           54.8x
+  3       683.717    R     6.857           99.7x       513.762           74.9x
+  4      1148.673    R     5.474          209.8x       704.101          128.6x
+  6      1746.318    R     3.512          497.2x       366.105          104.2x
+  8      2268.628    R     3.071          738.6x       435.848          141.9x
+ 12      3181.488    R     1.087         2926.1x       680.315          625.7x
+ 16      4411.894    R     1.044         4226.5x      2834.708         2715.6x
+ 20      3592.741          0.930         3861.9x      1997.112         2146.7x
+ 24      4169.026    R     0.937         4447.3x       801.415          854.9x
+ 28      4564.409          0.878         5198.2x       938.313         1068.6x
+ 32      5424.299          0.874         6205.9x      1118.775         1280.0x
+Z-020 drift on every small_churn rung: 0.2..3.6% (all clean).
+Attempt-6 glibc drift: 3.59, 23.85, 55.68, 23.51, 22.21, 42.87, 21.45,
+22.84, 7.27, 21.64, 0.56, 0.46% in rung order.
+
+mixed_batch (200 batches = 51200 ops per thread):
+thr   glibc_a6_med  flag  mimir_med  glibc_a6/mimir  glibc_a5_med  glibc_a5/mimir
+  1       234.220    R     4.087           57.3x        92.231           22.6x
+  2       442.082          2.099          210.6x       184.270           87.8x
+  3       881.770    R     1.507          585.2x       272.820          181.1x
+  4      1012.373    R     1.267          798.9x       660.522          521.3x
+  6      1688.385          0.973         1734.7x       308.457          316.9x
+  8      2216.882    R     0.736         3010.6x       385.135          523.0x
+ 12      3073.352    R     0.375         8194.9x       576.335         1536.8x
+ 16      4020.811    R     0.305        13192.9x       813.783         2670.1x
+ 20      2893.064    R     0.207*       13957.1x       724.707         3496.2x
+ 24      3526.687          0.184        19173.9x       814.184         4426.5x
+ 28      3910.604    R     0.187        20888.1x       910.938         4865.7x
+ 32      4384.301    R     0.136*       32177.6x      1537.340        11283.0x
+Attempt-6 glibc drift: 40.43, 4.08, 42.46, 42.70, 1.00, 32.62, 40.31,
+42.59, 20.30, 0.98, 8.26, 17.76% in rung order. (* = the Z-020 mimir
+median itself is indicative in Z-020's record; the 1-thread ratio
+displayed as 22.6x is exactly 22.57x - see the floor wording in the
+verdict, which uses the conservative bound.)
+
+=== REP-LEVEL SEPARATION (no median involved) ===
+For each rung: the SLOWEST glibc rep process across attempts 5+6
+(10 reps) against the FASTEST mimir rep process in Z-020's final
+merged raw (5 reps). Separation = glibc_min_rep / mimir_max_rep.
+Every rung on both workloads is fully separated: no glibc rep, in
+either attempt, was ever as slow as any mimir rep at the same rung.
+
+small_churn: thr  glibc_min_rep  mimir_max_rep  separation
+                1        164.665         20.443       8.05x
+                2        331.552          6.580      50.39x
+                3        489.970          6.988      70.11x
+                4        658.488          5.519     119.31x
+                6        335.794          3.520      95.39x
+                8        380.040          3.108     122.30x
+               12        662.385          1.144     579.17x
+               16       2406.087          1.050    2292.30x
+               20        532.948          0.933     571.16x
+               24        434.826          0.950     457.94x
+               28        816.481          0.890     916.92x
+               32       1106.106          0.881    1254.92x
+mixed_batch: thr  glibc_min_rep  mimir_max_rep  separation
+                1         90.095          4.115      21.90x
+                2        182.948          2.582      70.85x
+                3        266.401          1.590     167.50x
+                4        611.391          1.318     464.02x
+                6        307.387          0.981     313.34x
+                8        157.726          0.780     202.08x
+               12        571.868          0.384    1490.99x
+               16        485.646          0.310    1564.23x
+               20        512.635          0.264    1944.49x
+               24        576.763          0.185    3111.84x
+               28        462.192          0.218    2116.32x
+               32        590.977          0.182    3240.50x
+
+=== INVERSION POINTS, SIDE BY SIDE ===
+MimirAlloc (Z-020): aggregate peaks at 1 thread on both workloads;
+scaling inverts at 2 threads (small_churn -69.7%, mixed_batch -48.6%
+vs the 1-thread peak) and the collapse is sustained to 32 threads
+(scaling 0.043x / 0.033x). Mechanism per Z-020/Z-019: lock wait
+explodes while hold grows gently - the KL-B wound.
+glibc (run of record): NO sustained inversion inside 1..32 on either
+workload. Aggregate peaks at 32 threads on both (small_churn 5424.299
+Mops/s, 18.09x scaling, drift-clean rung; mixed_batch 4384.301
+Mops/s, 18.72x, drift-rejected rung so the peak value is indicative).
+There IS a local inversion between 16 and 20 threads on both
+workloads - the summariser's first-drop flag - and it recovers:
+small_churn dips -18.6% (4411.894 to 3592.741, the 20-thread rung is
+drift-clean, so the dip itself is a real local inversion) then
+climbs past the 16-thread value by 24 threads; mixed_batch dips
+-28.0% on a drift-rejected rung (indicative) then likewise recovers.
+Per-thread efficiency tells the SMT story: glibc holds roughly
+92-99% efficiency through 16 threads on small_churn (drift-flagged
+rungs indicative) and falls to 54-60% at 20-32 threads, where the
+SMT siblings engage - efficiency halves, aggregate still grows.
+Shape confound, recorded: rungs ascend in order over about 48 s
+while loadavg fell 1.40 to 0.61, so time and thread count are
+partially confounded in the run of record; attempts 1 and 2 (start
+loadavg 3.71 and 11.33) also peaked at 32 threads on both workloads,
+while attempt 5 peaked at 16 (small_churn) / 32 (mixed_batch). The
+peak-at-32 shape is the majority shape across attempts and is graded
+INDICATIVE; the inversion CONTRAST with Z-020 (sustained collapse
+from 2 threads vs no sustained inversion) does not depend on it.
+
+=== SUMMARISER OUTPUT, CORROBORATING ATTEMPT 5 (verbatim from hidden_files/z021_run_attempt5.log, 2026-11-12T03:54-03:55-05:00) ===
+=== small_churn (glibc) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1            240.992  164.665  243.948     1.00x     100.0%            240.992   31.20  OK
+  DRIFT-REJECT threads=1: drift 31.20% > bound 8.0% - median indicative only
+      2            338.616  333.290  562.553     1.41x      70.3%            169.308   61.34  OK
+  DRIFT-REJECT threads=2: drift 61.34% > bound 8.0% - median indicative only
+      3            513.762  503.381  834.985     2.13x      71.1%            171.254   59.72  OK
+  DRIFT-REJECT threads=3: drift 59.72% > bound 8.0% - median indicative only
+      4            704.101  658.488  720.599     2.92x      73.0%            176.025    5.30  OK
+      6            366.105  335.794  528.824     1.52x      25.3%             61.018   46.06  OK
+  DRIFT-REJECT threads=6: drift 46.06% > bound 8.0% - median indicative only
+      8            435.848  380.040  668.017     1.81x      22.6%             54.481   20.23  OK
+  DRIFT-REJECT threads=8: drift 20.23% > bound 8.0% - median indicative only
+     12            680.315  662.385  729.383     2.82x      23.5%             56.693    6.17  OK
+     16           2834.708  2735.744  2932.895    11.76x      73.5%            177.169    4.92  OK
+     20           1997.112  532.948  2115.457     8.29x      41.4%             99.856    6.88  OK
+     24            801.415  434.826  1288.278     3.33x      13.9%             33.392   16.61  OK
+  DRIFT-REJECT threads=24: drift 16.61% > bound 8.0% - median indicative only
+     28            938.313  816.481  1126.338     3.89x      13.9%             33.511   12.01  OK
+  DRIFT-REJECT threads=28: drift 12.01% > bound 8.0% - median indicative only
+     32           1118.775  1106.106  1424.916     4.64x      14.5%             34.962    0.88  OK
+INVERSION small_churn: peak aggregate throughput at 16 threads (2834.708 Mops/s)
+INVERSION small_churn: scaling inverts between 4 and 6 threads (first drop beyond the 5.0% noise bound)
+=== mixed_batch (glibc) ===
+threads  median_agg_Mops/s  min      max      scaling  efficiency  per-thread_Mops/s  drift%  checksums
+      1             92.231   90.095   92.529     1.00x     100.0%             92.231    2.08  OK
+      2            184.270  182.948  184.536     2.00x      99.9%             92.135    0.24  OK
+      3            272.820  266.401  275.749     2.96x      98.6%             90.940    1.36  OK
+      4            660.522  611.391  684.336     7.16x     179.0%            165.130    1.92  OK
+      6            308.457  307.387  310.273     3.34x      55.7%             51.409    0.05  OK
+      8            385.135  157.726  387.376     4.18x      52.2%             48.142    3.35  OK
+     12            576.335  571.868  581.980     6.25x      52.1%             48.028    0.22  OK
+     16            813.783  485.646  851.770     8.82x      55.1%             50.861   17.83  OK
+  DRIFT-REJECT threads=16: drift 17.83% > bound 8.0% - median indicative only
+     20            724.707  512.635  932.454     7.86x      39.3%             36.235   20.14  OK
+  DRIFT-REJECT threads=20: drift 20.14% > bound 8.0% - median indicative only
+     24            814.184  576.763  927.909     8.83x      36.8%             33.924    8.88  OK
+  DRIFT-REJECT threads=24: drift 8.88% > bound 8.0% - median indicative only
+     28            910.938  462.192  924.623     9.88x      35.3%             32.533   24.50  OK
+  DRIFT-REJECT threads=28: drift 24.50% > bound 8.0% - median indicative only
+     32           1537.340  590.977  2712.376    16.67x      52.1%             48.042   24.22  OK
+  DRIFT-REJECT threads=32: drift 24.22% > bound 8.0% - median indicative only
+INVERSION mixed_batch: peak aggregate throughput at 32 threads (1537.340 Mops/s)
+INVERSION mixed_batch: scaling inverts between 4 and 6 threads (first drop beyond the 5.0% noise bound)
+SUMMARY DONE Z-021
+
+corroboration scope, stated plainly: attempt 5 was built from
+byte-identical sources (its log prints the same four sha256 hashes
+as attempt 6) and its checksums and selfchecks match exactly. It
+corroborates the workload identity, the checksum discipline and the
+DIRECTION of every comparison. It does NOT corroborate attempt 6's
+absolute medians: at several rungs its medians sit 2-5x below
+attempt 6 (small_churn 6T 366.105 vs 1746.318; mixed_batch 1T 92.231
+vs 234.220), and its own shape differs (small_churn peak at 16
+threads). Absolute glibc throughput on this shared host varies by
+attempt; no absolute glibc number in this file is a quiet-machine
+baseline.
+
+=== VERDICT - Z-021 ===
+Gate status: the roadmap gate for Z-021 is "glibc ladder table side
+by side with Z-020" - MET: the full 1..32 ladder for both workloads
+is filed above side by side with Z-020's banked table, with the
+inversion points named for both legs.
+Verdict vs glibc, in the roadmap's grades: MimirAlloc LOSS at every
+tested rung (1,2,3,4,6,8,12,16,20,24,28,32) on both workloads -
+glibc WIN at every rung. Grading of the evidence, honestly split:
+(1) The DIRECTION is proven at rep level, with no median involved:
+at every rung, the slowest glibc rep of 10 (attempts 5+6) outran the
+fastest mimir rep of 5 (Z-020) - worst-case separation 8.05x
+(small_churn, 1 thread) and 21.90x (mixed_batch, 1 thread), rising
+to 1254.92x and 3240.50x at 32 threads.
+(2) On the rungs where BOTH legs are drift-clean in the run of
+record (small_churn 1,20,28,32; mixed_batch 2,6,24) the medians
+agree with the rep-level verdict, with factors 14.7x to 6205.9x
+(small) and 210.6x to 19173.9x (mixed).
+(3) Every other per-rung factor is INDICATIVE ONLY (17 of 24
+glibc rungs drift-rejected in the run of record; Z-020's mixed_batch
+20/32 medians indicative in its own record). Conservative median
+floors across both attempts, stated as bounds: glibc median >= 11.8x
+mimir at every small_churn rung (exact worst 11.81x, attempt 5,
+1 thread) and >= 22.5x at every mixed_batch rung (exact worst
+22.57x, attempt 5, 1 thread).
+(4) glibc's own scaling: no sustained inversion inside 1..32 (local
+16-to-20 dip, recovering; peak at 32) against MimirAlloc's inversion
+at 2 threads and sustained collapse - the contention contrast this
+pair of slices exists to record. At 1 thread glibc is also faster
+(14.7x small_churn on the run of record; 57.3x mixed_batch
+indicative), so the loss is not only a scaling loss: the banked
+core's single-thread small path is slower too (KL-A), and under
+contention the gap grows by two to three orders of magnitude (KL-B).
+
+provenance limits (recorded, not hidden): the runner header records
+cc flags (-std=c11 -Wall -Wextra -Werror -pthread -O2 -DLEG_GLIBC)
+but not the cc version; the built probe lived at /tmp/probe_z021 and
+is ephemeral (its sha256 is in the header block above and in both
+run logs, hashed at build time before the ladder ran). The glibc
+under test is the host's Ubuntu GLIBC 2.44 (host truth header). The
+checksum discipline proves the checksum invariant held per rung on
+both legs (chk_each constant and equal to the selfcheck reference:
+6371544 small_churn, 6627200 mixed_batch; total = threads x ref;
+summariser exit 0) - i.e. the same checksum-bearing work completed
+per thread on both legs; it is not a proof of op-by-op sequence
+identity beyond what the bench checksum covers. The mixed_batch
+replica==bench selfcheck (1228352, 9472 ops at 37 batches) validates
+the thread-local replica construction at selfcheck scale; the
+ladder-scale references come from the probe's own selfcheck phase
+in the same run.
+-Z-021 recorded run ends. Sources: hidden_files/z021_run.log
+(attempt 6, run of record), hidden_files/z021_run_attempt5.log
+(corroboration), seat tests/perf/recorded_run_z13_z020.txt (banked
+Z-020), hidden_files/z021_gate.log (correctness gate).
