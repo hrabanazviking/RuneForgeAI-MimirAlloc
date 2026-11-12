@@ -1,0 +1,53 @@
+MimirAlloc Z-001 campaign baseline recorded run
+slice: Z-001 - Campaign baseline: the full suite on x86-64 / 4 KiB pages
+date: 2026-11-12T01:38:58-05:00 (clean run start, America/New_York)
+base: 5ad882b0006578732c85b9bcda68977dd644b009 (branch yrsa/mimiralloc-team-01, seat founding commit)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+arch: x86_64 (uname -m)
+pagesize: 4096 (getconf PAGESIZE); suite-reported runtime system page size: 4096 bytes
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (lscpu model name), nproc 32
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+compiler: gcc (Ubuntu 15.3.0-4ubuntu1) 15.3.0, repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2
+scaling_governor: performance (cpu0)
+command: make clean && make test (unmodified tree, unmodified Makefile test target)
+full log: hidden_files/z001_make_test.log (team-local, not banked)
+host note: load average about 4.2 at run start; a robustness-campaign soak (/tmp/soak.sh) and a tensile bench shared the host; no interference observed, suite completed normally
+
+=== per-target results (read from the log) ===
+./build/test_smoke  SMOKE 18/18 checks passed (no RESULT line; exit ok)
+./build/test_core   CHECKS: 29 run, 0 failed - RESULT: PASS
+./build/test_b007   CHECKS: 69 run, 0 failed - RESULT: PASS
+./build/test_c005   CHECKS: 95 run, 0 failed - RESULT: PASS
+./build/test_c006   CHECKS: 23 run, 0 failed - RESULT: PASS
+./build/test_c007   CHECKS: 122 run, 0 failed - RESULT: PASS
+./build/test_c008   CHECKS: 42 run, 0 failed, 7 skipped-not-yet - RESULT: PASS
+./build/test_d004   CHECKS: 4590 run, 0 failed - RESULT: PASS (threads=4, host_page_size=4096, allocs=2088 frees=2088)
+
+=== full-suite counts ===
+targets run: 8 of 8 in the make test target
+checks run: 4988 total (18 smoke + 4970 CHECKS across the other 7 targets), 0 failed
+make exit code: 0 (EXIT:0 recorded at end of log)
+failures: none - no target failed, no triage entries required
+skips: 77 SKIP lines, all pre-existing by-design SKIPPED/NOT-YET or BLOCKED rows
+  (70 in test_c007, 7 in test_c008; fault-injection shim absent in the banked
+  base, INC-C007-01, and open-contract rows - identical posture to the
+  16 KiB aarch64 runs; skips are not failures and no new skip appeared
+  that is attributable to arch or page size)
+
+=== formal discharge lines ===
+O-01 DISCHARGED by this run: the portable suite (unmodified make test,
+  all 8 targets) ran in full on an x86-64 host (purpleraider, uname -m
+  x86_64) with per-target counts recorded above and the page size
+  recorded in this header (4096). First x86-64 run in campaign history;
+  4988 checks run, 0 failed, make exit 0.
+O-06 DISCHARGED by this run: the suite ran in full on a 4 KiB-page host
+  (getconf PAGESIZE = 4096; the suite itself reported runtime system
+  page size: 4096 bytes in test_core, test_b007, test_c005, test_c006
+  and test_c007, and host_page_size=4096 in test_d004 CONFIG). First
+  4 KiB-page run in campaign history; every prior banked figure was a
+  16 KiB-page figure. 4988 checks run, 0 failed, make exit 0.
+
+Verdict: Z-001 gate met - full-suite counts in this recorded run file;
+O-01 and O-06 formally discharged; no failures to triage; no source or
+test changes were needed (no portability defect surfaced on x86-64 or
+on 4 KiB pages in the make test suite).
