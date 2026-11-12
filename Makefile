@@ -852,6 +852,29 @@ test-z013: $(BUILD)/probe_z013
 
 .PHONY: test-z013
 
+# Z-017: alignment audit probe - dual-leg (bench_k002
+# pattern): glibc leg (-DLEG_GLIBC) and MimirAlloc leg
+# (production LIBOBJS) built from tests/perf/probe_z017.c.
+# Standalone via make test-z017; NOT part of make test.
+# Recorded run: tests/perf/recorded_run_z13_z017.txt.
+$(BUILD)/probe_z017_glibc.o: tests/perf/probe_z017.c | $(BUILD)
+	$(CC) $(CFLAGS) -DLEG_GLIBC -c tests/perf/probe_z017.c -o $@
+
+$(BUILD)/probe_z017_glibc: $(BUILD)/probe_z017_glibc.o
+	$(CC) $(CFLAGS) $(BUILD)/probe_z017_glibc.o -o $@
+
+$(BUILD)/probe_z017_mimir.o: tests/perf/probe_z017.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_z017.c -o $@
+
+$(BUILD)/probe_z017_mimir: $(LIBOBJS) $(BUILD)/probe_z017_mimir.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_z017_mimir.o -o $@
+
+test-z017: $(BUILD)/probe_z017_glibc $(BUILD)/probe_z017_mimir
+	./$(BUILD)/probe_z017_glibc
+	./$(BUILD)/probe_z017_mimir
+
+.PHONY: test-z017
+
 # H-003: Phase 8 cross-thread frees evidence test -
 # the test under tests/core/ (test_h003.c) verifies
 # cross-thread frees on the span and mapping paths,
