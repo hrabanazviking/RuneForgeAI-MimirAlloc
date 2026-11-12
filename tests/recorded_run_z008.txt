@@ -1,0 +1,79 @@
+MimirAlloc Z-008 standing correctness gate recorded run
+slice: Z-008 - The standing correctness gate
+date: 2026-11-12T03:15:07-05:00 (gate run start, America/New_York; log header 2026-11-12T08:15:07Z UTC)
+base: 5ad882b0006578732c85b9bcda68977dd644b009 (branch yrsa/mimiralloc-team-08, seat founding commit; tree unmodified - the gate ran at this HEAD, and the only tree changes of this slice are the gate script itself and this recorded run, neither of which affects the suite)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+arch: x86_64 (uname -m)
+pagesize: 4096 (getconf PAGESIZE)
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (lscpu model name), nproc 32
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+compiler: gcc (Ubuntu 15.3.0-4ubuntu1) 15.3.0, repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2
+scaling_governor: performance (cpu0)
+command: scripts/z13/run_gate.sh (invoked from outside the worktree; it resolves the repo root from its own location, runs make clean, then make test as a fresh build)
+full log: hidden_files/gate_20261112T081507Z.log (team-local, not banked; header, raw suite output, counts footer and GREEN verdict all in the log)
+host note: load average 5.41 3.78 2.61 at gate start (recorded in the log header and footer); the host is SHARED - a Tensile benchmark and the Lifthrasir forge were active during the run; no interference observed, suite completed normally
+
+=== what the gate script wires ===
+scripts/z13/run_gate.sh is one bash script (native bash + coreutils, no
+Docker, no new dependencies) that runs the single `make test` target,
+which builds and runs all eight suite binaries, captures the whole
+output to a log file (default hidden_files/gate_<UTC timestamp>.log,
+or a path given as argument 1), parses the counts from the log, prints
+them, and exits nonzero with a loud stderr banner on any failure.
+The four suites, as the Makefile organises them:
+  contract    : build/test_smoke (tests/contract/test_smoke.c),
+                build/test_c007 (tests/contract/test_c007.c)
+  core        : build/test_core, build/test_b007, build/test_c005,
+                build/test_c006 (all tests/core/)
+  failure     : build/test_c006 (section 6.3 startup / error-path
+                audit) and build/test_c008 (tests/core/test_c008.c -
+                B-008 / roadmap S9.3 controlled-failure tests), both
+                inside the same make test invocation; test_c007's
+                fault-injection rows report as by-design SKIP lines
+  concurrency : build/test_d004 (tests/concurrency/test_d004.c)
+Honest scope note: the standalone Python suite tests/failure/
+test_failure_capture.py is NOT part of `make test` (no Makefile
+target runs it) and is therefore NOT wired into this gate; it keeps
+its own standalone road, unchanged by this slice.
+Gate failure conditions (any one turns the gate RED, exit 1):
+make exit nonzero; any failed check; any RESULT: FAIL line; suite
+composition mismatch (expected exactly 1 SMOKE line and 7 CHECKS
+lines - a truncated or silently shrunk log fails loudly); zero
+checks parsed; a checks collapse below the 4500 low-water mark
+(the founding total is 4988; the constant is re-baselined in the
+same commit as any intentional suite change); a skip balloon
+above 97 (by-design baseline 77 + 20). A skip count modestly
+differing from the founding tree's by-design 77 is shouted as a
+warning in the log and on stderr but does not by itself turn the
+gate red, because later slices may legitimately change the suite.
+RED path proven: before this recorded run, the script was pointed
+at a synthetic failing suite in a scratch tree (3 failed checks and
+a RESULT: FAIL with make itself exiting 0); the gate went RED with
+exit 1 and named all three reasons on stderr. Scratch tree removed
+after the test.
+
+=== per-target results (read from the gate log) ===
+./build/test_smoke  SMOKE 18/18 checks passed (no RESULT line; exit ok)
+./build/test_core   CHECKS: 29 run, 0 failed - RESULT: PASS
+./build/test_b007   CHECKS: 69 run, 0 failed - RESULT: PASS
+./build/test_c005   CHECKS: 95 run, 0 failed - RESULT: PASS
+./build/test_c006   CHECKS: 23 run, 0 failed - RESULT: PASS
+./build/test_c007   CHECKS: 122 run, 0 failed - RESULT: PASS (SUITE cases: 40 passed, 0 failed, 70 skipped, 9 inspected of 119 registered)
+./build/test_c008   CHECKS: 42 run, 0 failed, 7 skipped-not-yet - RESULT: PASS
+./build/test_d004   CHECKS: 4590 run, 0 failed - RESULT: PASS (threads=4, host_page_size=4096, allocs=2088 frees=2088)
+
+=== full-suite counts (from the gate log footer, independently recounted) ===
+targets run: 8 of 8 in the make test target
+checks run: 4988 total (18 smoke + 4970 CHECKS across the other 7 targets), 0 failed
+skips: 77 SKIP lines, all pre-existing by-design SKIPPED/NOT-YET or BLOCKED rows
+  (70 in test_c007, 7 in test_c008 - identical posture to Z-001's baseline;
+  skips are not failures and no new skip appeared)
+make exit code: 0; gate exit code: 0; gate verdict line in log: GATE RESULT: GREEN
+
+Verdict: Z-008 gate met - the gate script is green on the unmodified
+tree and the counts are in the log (hidden_files/gate_20261112T081507Z.log).
+Every later code slice on this line must pass scripts/z13/run_gate.sh.
+No source, test or Makefile changes were needed; no bug was found in
+the suite. (Transport note: the script file was landed on this host
+by hash-verified chunks after a whole-file paste corrupted in
+transit; the committed bytes are sha256 d5fa26c37dcc62fd6cfdf47d8bff37d4b9a96cbf10642d42a5866f3abb6a6f9e.)
