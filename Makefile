@@ -1508,6 +1508,23 @@ test-z066: $(BUILD)/test_z066_length
 	./$(BUILD)/test_z066_length
 
 .PHONY: test-z066
+# Z-067: INC-J006-06 live_count release-path detection
+# evidence (tests/core/test_z067_livecount.c), built
+# against the internal stats / diag / integrity / drain /
+# trim surfaces (shape (b) headers under tests/core/).
+# Standalone target `make test-z067`; NOT part of
+# `make test`.
+
+$(BUILD)/test_z067_livecount.o: tests/core/test_z067_livecount.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_diag_j007.h tests/core/mimir_integrity_j006.h tests/core/mimir_drain_h001.h tests/core/mimir_trim_i003.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z067_livecount.c -o $@
+
+$(BUILD)/test_z067_livecount: $(LIBOBJS) $(BUILD)/test_z067_livecount.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z067_livecount.o -o $@
+
+test-z067: $(BUILD)/test_z067_livecount
+	./$(BUILD)/test_z067_livecount
+
+.PHONY: test-z067
 
 # J-007: Phase 10 allocation-free diagnostics evidence
 # test - the test under tests/core/ (test_j007.c) verifies

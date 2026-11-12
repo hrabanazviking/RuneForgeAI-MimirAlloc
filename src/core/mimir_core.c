@@ -586,7 +586,7 @@ static void mimir_stats_note_unlock_failure(void)
  * failing thread; it is a cause LABEL for the report, never
  * a decision input (Invariant 8 posture). */
 static const char *const mimir_diag_op_names[] = {
-    "malloc", "calloc", "realloc", "free"
+    "malloc", "calloc", "realloc", "free", "drain", "trim"
 };
 static const char *const mimir_diag_cause_names[] = {
     "none", "backing", "arithmetic", "lock", "page-size",
@@ -2808,6 +2808,163 @@ static int span_can_serve(const struct mimir_span_header *span)
            span->carve_count < span_capacity(span);
 }
 
+/* ---- Z-067 (D-12): INC-J006-06 -- live_count trusted by
+ * release paths ------------------------------------------
+ * J-006 proved the integrity walk's span relation
+ * (free-list nodes + live_count + TLS tally == carve_count,
+ * the walked live sum equalling mimir_live_small_objects)
+ * flags a live_count corrupted to 0 under live objects,
+ * while every operational release path trusted the field:
+ * the drain unmapped the span under its live blocks
+ * (docs/PHASE_10_METADATA_INTEGRITY.md, INC-J006-06; the
+ * doc's smallest remedy is this verification on the cold
+ * release paths). The audit below is the per-span half of
+ * that relation, consulted by exactly the paths that
+ * RELEASE a span whole on the strength of live_count == 0:
+ * the shared trim walk (drain and trim enter there), the
+ * retention-overflow release in small_free_locked (both
+ * flavours), the TLS retention sweep, and the tally free
+ * course -- the sweep and the tally course wired after a
+ * reviewer pass caught the thread-exit drain releasing a
+ * live_count-corrupted span whole through the sweep (the
+ * experiment is recorded in the slice's recorded run). On
+ * a proven mismatch the release is REFUSED -- the span
+ * stays retained and mapped, its objects stay live, and
+ * nothing is unmapped on a count nobody can trust -- the
+ * refusal is tallied here and reported on the J-007 diag
+ * channel by the entry point (op free / drain / trim,
+ * cause metadata). The audit runs only on spans already
+ * selected as release candidates (live_count == 0, no TLS
+ * tally, retention exceeded or a trim/drain walk), never
+ * on the alloc/free hot path.
+ *
+ * Episode semantics (the Z-066 pattern): the first
+ * refusal for a distinct (span, walked-nodes / live_count
+ * / carve_count) signature tallies one detection; repeats
+ * of the same signature tally as collateral; a later
+ * audit of the same span that PASSES closes the episode.
+ * The tallies are atomic and ungated; the diag emission
+ * is env-gated exactly as the channel is. Scope, stated
+ * plainly: the audit proves the count relation of the
+ * candidate span only, so a corruption that preserves the
+ * relation (live_count lowered while the free list grows
+ * by the same amount -- which needs a second, list write)
+ * is outside it, and the registry-wide live sum stays the
+ * integrity walk's job. INC-J006-04 (free_head naming a
+ * live object) is NOT detected here or anywhere in this
+ * slice: it preserves this relation exactly; its
+ * undetectable-by-design record is in
+ * tests/perf/recorded_run_z13_z067.txt. Caller holds the
+ * lock. */
+static _Atomic uint64_t mimir_live_release_detections;
+static _Atomic uint64_t mimir_live_release_collateral_refusals;
+static const struct mimir_span_header *mimir_z067_bad_span;
+static size_t mimir_z067_bad_sig;
+static _Thread_local int mimir_z067_detected;
+
+static void z067_note_refusal_locked(
+    const struct mimir_span_header *span, size_t nodes)
+{
+    size_t sig = nodes ^ span->live_count ^
+                 (span->carve_count << 1);
+
+    if (mimir_z067_bad_span == span &&
+        mimir_z067_bad_sig == sig) {
+        __atomic_fetch_add(
+            &mimir_live_release_collateral_refusals, 1ULL,
+            __ATOMIC_RELAXED);
+    } else {
+        __atomic_fetch_add(&mimir_live_release_detections,
+                           1ULL, __ATOMIC_RELAXED);
+        mimir_z067_bad_span = span;
+        mimir_z067_bad_sig = sig;
+    }
+    mimir_z067_detected = 1;
+}
+
+/* The release audit: 1 = the span's count relation is
+ * proven, so a release may trust live_count == 0; 0 =
+ * proven mismatch (or a free list whose shape cannot be
+ * walked to a count), tallied at z067_note_refusal_locked.
+ * An OOL trial span is judged by its own bitmap recount,
+ * exactly as the J-006 walk judges it. */
+static int span_live_audit_locked(
+    const struct mimir_span_header *span)
+{
+    const void *node;
+    size_t nodes = 0;
+
+#ifdef MIMIR_OOL_META
+    if (ool_span_is(span)) {
+        size_t live = ool_popcount_locked(span);
+
+        if (live == span->live_count) {
+            if (mimir_z067_bad_span == span) {
+                mimir_z067_bad_span = NULL;
+                mimir_z067_bad_sig = 0;
+            }
+            return 1;
+        }
+        z067_note_refusal_locked(span, live);
+        return 0;
+    }
+#endif
+    node = span->free_head;
+    while (node != NULL) {
+        if (!span_free_node_valid(span, node)) {
+            z067_note_refusal_locked(span,
+                                     span->carve_count + 1);
+            return 0;
+        }
+        nodes += 1;
+        if (nodes > span->carve_count) {
+            z067_note_refusal_locked(span,
+                                     span->carve_count + 1);
+            return 0;
+        }
+        node = *(void *const *)node;
+    }
+    if (nodes + span->live_count +
+            tls_binned_count_locked(span) ==
+        span->carve_count) {
+        if (mimir_z067_bad_span == span) {
+            mimir_z067_bad_span = NULL;
+            mimir_z067_bad_sig = 0;
+        }
+        return 1;
+    }
+    z067_note_refusal_locked(span, nodes);
+    return 0;
+}
+
+/* Consume the detection label on an entry point that ran
+ * a release path, after the caller has unlocked (the
+ * Z-066 pattern): the diag report is the channel's own --
+ * env-gated, allocation-free, a plain no-op when the gate
+ * is closed. The tallies moved at the audit site, under
+ * the lock; only the emission is deferred to here. */
+static void z067_release_report(int op)
+{
+    if (!mimir_z067_detected) {
+        return;
+    }
+    mimir_z067_detected = 0;
+    mimir_core_diag_report(op, MIMIR_DIAG_CAUSE_METADATA, 0);
+}
+
+uint64_t mimir_core_live_release_detections(void)
+{
+    return __atomic_load_n(&mimir_live_release_detections,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_live_release_collateral_refusals(void)
+{
+    return __atomic_load_n(
+        &mimir_live_release_collateral_refusals,
+        __ATOMIC_RELAXED);
+}
+
 /*
  * J-005 (Phase 10 debug-only poisoning + quarantine of
  * freed blocks; docs/PHASE_10_POISON_QUARANTINE.md; plan:
@@ -3542,7 +3699,11 @@ static void small_free_locked(void *ptr)
         tls_binned_count_locked(span) == 0 &&
         empty_spans_of_class_locked(span->class_index) >
             mimir_retention_bound) {
-        (void)span_release_locked(span);
+        /* Z-067: the retention course releases only on a
+         * proven count relation (INC-J006-06). */
+        if (span_live_audit_locked(span)) {
+            (void)span_release_locked(span);
+        }
     }
 #else
 #ifdef MIMIR_OOL_META
@@ -3598,7 +3759,14 @@ static void small_free_locked(void *ptr)
             mimir_retention_bound
 #endif
             ) {
-        (void)span_release_locked(span);
+        /* Z-067 (D-12): the retention course is a release
+         * path that trusts live_count == 0; the span is
+         * released only when the release audit proves its
+         * count relation (INC-J006-06). A refused span
+         * stays retained, tallied at the audit. */
+        if (span_live_audit_locked(span)) {
+            (void)span_release_locked(span);
+        }
     }
 #endif
 }
@@ -4541,7 +4709,12 @@ static void tls_retention_sweep_locked(
                 mimir_retention_bound
 #endif
                 ) {
-            (void)span_release_locked(span);
+            /* Z-067: the sweep is a release path trusting
+             * live_count == 0 like any other; release only
+             * on a proven count relation (INC-J006-06). */
+            if (span_live_audit_locked(span)) {
+                (void)span_release_locked(span);
+            }
         }
     }
 }
@@ -4676,7 +4849,12 @@ static void small_free_tally_locked(void *ptr)
             mimir_retention_bound
 #endif
             ) {
-        (void)span_release_locked(span);
+        /* Z-067: the tally course's retention release
+         * trusts live_count == 0 too; release only on a
+         * proven count relation (INC-J006-06). */
+        if (span_live_audit_locked(span)) {
+            (void)span_release_locked(span);
+        }
     }
 }
 
@@ -4800,6 +4978,11 @@ static void tls_tss_destructor(void *value)
     tls_exit_drains_count += 1;
     tls_exit_drain_blocks_count += returned;
     (void)core_global_unlock();
+    /* Z-067: a retention-sweep refusal during the exit
+     * drain is reported on the trim course, after the
+     * unlock, on the exiting thread (whose detection
+     * label this is). */
+    z067_release_report(MIMIR_DIAG_OP_TRIM);
 }
 
 /* The image destructor's TLS step: the calling (main)
@@ -5118,6 +5301,10 @@ void mimir_tls_cache_drain_thread(void)
     tls_flush_locked();
     (void)tls_drain_all_locked(1);
     (void)core_global_unlock();
+    /* Z-067: a sweep refusal during the drain is reported
+     * on the trim course (the sweep is a retention
+     * release); the tallies moved at the audit. */
+    z067_release_report(MIMIR_DIAG_OP_TRIM);
 }
 #endif /* !MIMIR_DEBUG */
 
@@ -5212,7 +5399,12 @@ static size_t trim_some_locked(size_t max_spans)
                     && debug_span_quarantine_count_locked(span) == 0
 #endif
                     /* Z-029: never a bin holder. */
-                    && tls_binned_count_locked(span) == 0) {
+                    && tls_binned_count_locked(span) == 0 &&
+                    /* Z-067: never a span whose live_count
+                     * the release audit cannot prove
+                     * (INC-J006-06); a corrupt candidate is
+                     * skipped and tallied at the audit. */
+                    span_live_audit_locked(span)) {
                     victim = span;
                 }
                 span = span->list_next;
@@ -5367,6 +5559,7 @@ size_t mimir_core_drain_retained(void)
     released = trim_some_locked(SIZE_MAX);
     (void)pool_release_all_locked(); /* Z-048 trim trigger */
     (void)core_global_unlock();
+    z067_release_report(MIMIR_DIAG_OP_DRAIN); /* Z-067 */
     return released;
 }
 
@@ -5422,6 +5615,7 @@ size_t mimir_core_trim_retained(void)
     released = trim_some_locked(SIZE_MAX);
     (void)pool_release_all_locked(); /* Z-048 trim trigger */
     (void)core_global_unlock();
+    z067_release_report(MIMIR_DIAG_OP_TRIM); /* Z-067 */
     return released;
 }
 
@@ -5441,6 +5635,7 @@ size_t mimir_core_trim_retained_some(size_t max_spans)
 #endif
     released = trim_some_locked(max_spans);
     (void)core_global_unlock();
+    z067_release_report(MIMIR_DIAG_OP_TRIM); /* Z-067 */
     return released;
 }
 
@@ -5790,6 +5985,11 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
         &mimir_metadata_detections, __ATOMIC_RELAXED);
     out->metadata_collateral_refusals = __atomic_load_n(
         &mimir_metadata_collateral_refusals, __ATOMIC_RELAXED);
+    out->live_release_detections = __atomic_load_n(
+        &mimir_live_release_detections, __ATOMIC_RELAXED);
+    out->live_release_collateral_refusals = __atomic_load_n(
+        &mimir_live_release_collateral_refusals,
+        __ATOMIC_RELAXED);
     for (i = 0; i < MIMIR_SMALL_CLASS_COUNT; i++) {
         out->span_class_size[i] = (uint64_t)mimir_class_sizes[i];
     }
@@ -6771,6 +6971,11 @@ void mimir_core_free(void *ptr)
      * left by a realloc course on this thread must never be
      * reported as this call's detection. */
     mimir_z066_detected = 0;
+    /* Z-067: the detection label is per-call; a stale label
+     * left by another course on this thread must never be
+     * reported as this call's detection (the Z-066
+     * discipline). */
+    mimir_z067_detected = 0;
 
 #ifndef MIMIR_DEBUG
     /* Z-029: the owner record routes the free first: the
@@ -6785,6 +6990,7 @@ void mimir_core_free(void *ptr)
         if (tls_owner_get(ptr, &ob, &ospan) && ospan != NULL) {
             if (ob == tls_self_bits()) {
                 tls_free_local(ptr, ospan);
+                z067_release_report(MIMIR_DIAG_OP_FREE);
                 return;
             }
 #ifndef MIMIR_LOCK_SHARD
@@ -6799,6 +7005,7 @@ void mimir_core_free(void *ptr)
                     }
                     tls_owner_clear(ptr);
                     (void)core_global_unlock();
+                    z067_release_report(MIMIR_DIAG_OP_FREE);
                     tls.remote_frees_out += 1;
                     return;
                 }
@@ -6835,6 +7042,7 @@ void mimir_core_free(void *ptr)
                     }
                     tls_owner_clear(ptr);
                     (void)core_shard_unlock(fshard);
+                    z067_release_report(MIMIR_DIAG_OP_FREE);
                     tls.remote_frees_out += 1;
                     return;
                 }
@@ -6902,6 +7110,7 @@ void mimir_core_free(void *ptr)
         /* Z-066: a central free refused on a length-corrupt
          * span reports here (tallied once, diag emitted). */
         z066_free_report(1);
+        z067_release_report(MIMIR_DIAG_OP_FREE);
         return;
 #else /* MIMIR_LOCK_SHARD */
         {
@@ -6921,6 +7130,7 @@ void mimir_core_free(void *ptr)
         (void)core_global_unlock();
         /* Z-066: as the non-shard branch above. */
         z066_free_report(1);
+        z067_release_report(MIMIR_DIAG_OP_FREE);
         return;
 #endif /* MIMIR_LOCK_SHARD */
     }

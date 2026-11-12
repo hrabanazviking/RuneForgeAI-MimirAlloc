@@ -319,17 +319,39 @@ static int p_span_class_consist(void)
 static int p_span_live_zero(void)
 {
     unsigned char vec = 0;
+    struct mimir_stats s;
     void *a = mimir_malloc(32);
     void *b = mimir_malloc(32); void *S;
     size_t rel;
+    uint64_t det0, em0;
     REQ(a && b); S = span_of(a);
+    REQ(span_of(b) == S);
+    /* Z-067 host note: under Z-029 the two objects' live
+     * units may still be TLS tally units, which the drain's
+     * own flush rebuilds into live_count before the trim
+     * walk reads it -- the J-006-era probe corrupted the
+     * field before any flush and the drain then released
+     * nothing, which is why this probe failed on this host
+     * before this slice. The checker call below flushes
+     * this thread first, settling live_count == 2, and only
+     * then is the field corrupted. */
+    REQ(mimir_core_metadata_check() == 0);
+    (void)setenv("MIMIRALLOC_DIAG", "1", 1);
+    det0 = mimir_core_live_release_detections();
+    em0 = mimir_core_diag_emitted();
     wr64(S, 80, 0); /* live_count = 0 while 2 objects live */
     REQ(mimir_core_metadata_check() > 0); /* counter cross-sum */
-    rel = mimir_core_drain_retained();    /* trusts live_count */
-    REQ(rel >= 1);
-    REQ(mincore(S, PAGE, &vec) != 0);     /* span unmapped */
-    printf("    span live_count=0 with live objects: drain released the span under live blocks (mincore ENOMEM) -- checker cross-sum flagged it, no operational path did\n");
-    return SILENT;
+    rel = mimir_core_drain_retained();    /* Z-067: audited */
+    REQ(rel == 0);                        /* release refused */
+    REQ(mincore(S, PAGE, &vec) == 0);     /* span still mapped */
+    REQ(mimir_core_live_release_detections() == det0 + 1);
+    REQ(mimir_core_diag_emitted() == em0 + 1);
+    wr64(S, 80, 2); /* restore the true count */
+    REQ(mimir_core_metadata_check() == 0);
+    mimir_free(a); mimir_free(b);
+    REQ(snap(&s) == 0 && s.live_small_objects == 0);
+    printf("    span live_count=0 with live objects: Z-067 release audit refused the drain -- span stays mapped, one detection tallied, one diag line (op=drain cause=metadata) -- previously the drain released the span under live blocks\n");
+    return DETECTED;
 }
 
 static int p_span_carve_reduced(void)
@@ -447,16 +469,36 @@ static int p_span_freehead_live(void)
 {
     void *a = mimir_malloc(32);
     void *b = mimir_malloc(32); void *S; void *c;
+    uint64_t det0, col0, em0;
+    int walk;
     REQ(a && b); S = span_of(a);
-    mimir_free(b);                 /* free_head = b */
+    REQ(span_of(b) == S);
+    mimir_free(b);                 /* b enters this thread's bin */
+    /* Z-067 host note: under Z-029 the freed block sits in
+     * the TLS bin and the header's free list is empty, so
+     * the J-006-era probe corrupted a head the allocator
+     * never popped (and its checker==0 premise broke on
+     * the tally term). A drain returns the bin stock to
+     * the span's central free list -- the span itself is
+     * retained, a is live -- and only then does the
+     * corrupted head name the list the allocator pops. */
+    REQ(mimir_core_drain_retained() == 0);
+    REQ(mimir_core_metadata_check() == 0);
+    det0 = mimir_core_live_release_detections();
+    col0 = mimir_core_live_release_collateral_refusals();
+    em0 = mimir_core_diag_emitted();
     wrptr(S, 72, a);               /* head now names LIVE a */
-    REQ(mimir_core_metadata_check() == 0); /* shape-valid: blind */
+    walk = mimir_core_metadata_check();
+    printf("    checker on the live-named head: %d violation(s) -- the walk sees only the truncated node count of this populated list; in the minimal list shape (list of one, carve == live + 1) the count still balances and the walk is blind, and no operational path consults the walk either way\n", walk);
     ((unsigned char *)a)[0] = 0x11;
     c = mimir_malloc(32);
     REQ(c == a);                   /* overlap handout */
     ((unsigned char *)c)[0] = 0x22;
     REQ(((unsigned char *)a)[0] == 0x22);
-    printf("    span free_head repointed at a live object: next alloc returned the SAME live object (write via one seen via other) -- silent overlap\n");
+    REQ(mimir_core_live_release_detections() == det0 &&
+        mimir_core_live_release_collateral_refusals() == col0 &&
+        mimir_core_diag_emitted() == em0);
+    printf("    span free_head repointed at a live object: next alloc returned the SAME live object with NO operational detection, tally or report -- INC-J006-04 undetectable by design in the in-band free list (Z-067 record, tests/perf/recorded_run_z13_z067.txt)\n");
     return SILENT;
 }
 
@@ -550,7 +592,7 @@ static const struct probe PROBES[] = {
     { "span-magic",          p_span_magic,         DETECTED, 0 },
     { "span-class-mismatch", p_span_class_mismatch,DETECTED, 0 },
     { "span-class-consist",  p_span_class_consist, SILENT,   0 },
-    { "span-live-zero",      p_span_live_zero,     SILENT,   0 },
+    { "span-live-zero",      p_span_live_zero,     DETECTED, 0 },
     { "span-carve-reduced",  p_span_carve_reduced, DETECTED, 0 },
     { "span-carve-inflated", p_span_carve_inflated,DETECTED, 0 },
     { "span-len-incons",     p_span_len_incons,    DETECTED, 0 },

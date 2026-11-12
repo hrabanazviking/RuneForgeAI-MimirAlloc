@@ -1,0 +1,310 @@
+MimirAlloc Z13 recorded run - Z-067: Silent corruption classes, round 2 (D-12)
+Thu 2026-11-12 EST (host clock 18:0x-18:4x UTC during the runs)
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64, page 4096, 128 GB UMA)
+Base: seat main 457a739 (banked Z-001..Z-062), merged into
+  yrsa/mimiralloc-team-01 as be91796 (clean, no conflicts) on top of
+  5b790aa (Z-061, banked). This slice BUILDS AHEAD: it banks only
+  after Z-063..Z-066 in roadmap order.
+Load state: shared host throughout (Aesir forge, Lifthrasir forge and
+  the Tensile lab are resident on this machine). Load average moved
+  between ~0.9 and ~2.1 across the runs below. Every graded quantity
+  in this record is an exact counter or a refused/accepted outcome,
+  never a wall time; no timing baseline is claimed anywhere in this
+  slice.
+
+S1. Roadmap gate
+Gate (docs/MIMIRALLOC_Z13_ROADMAP.md Z-067): classes 3-4 (headed by
+free_head naming a live object, INC-J006-04; live_count trusted by
+release paths) -- probes flip or the undetectable-by-design reason
+is recorded per class with its compensating control.
+Class map (roadmap rounds, not INC numbers):
+  class 3 = span-freehead-live (free_head naming a live object;
+    INC-J006-04)
+  class 4 = span-live-zero (live_count trusted by release paths;
+    INC-J006-06)
+Result, one line per class:
+  class 4 (INC-J006-06): probe FLIPS -- SILENT (and FAIL on this
+    host, see S5) to DETECTED; detection wired into every whole-span
+    release path (S2), proven by S3.
+  class 3 (INC-J006-04): UNDETECTABLE BY DESIGN in the in-band
+    free-list design; the full reason and its compensating controls
+    are recorded in S6. The probe was rebuilt to the host-true setup
+    and now passes AS SILENT with the zero-operational-detection
+    facts asserted, so the suite carries the verdict instead of a
+    stale failure.
+
+S2. Mechanism (src/core/mimir_core.c/.h)
+span_live_audit_locked(): the per-span half of the J-006 integrity
+  walk's span invariant, promoted to the release paths --
+  free-list nodes (walked with span_free_node_valid, bounded by
+  carve_count) + live_count + tls_binned_count_locked(span) must
+  equal carve_count exactly. An OOL trial span is judged by its
+  bitmap recount (ool_popcount_locked == live_count), exactly as
+  the walk judges it. This is the smallest remedy named for
+  INC-J006-06 in docs/PHASE_10_METADATA_INTEGRITY.md: verify on
+  the cold release paths before trusting live_count == 0.
+Consulted at exactly the whole-span release decisions:
+  (a) trim_some_locked victim selection -- the shared walk behind
+      mimir_core_drain_retained, mimir_core_trim_retained and
+      mimir_core_trim_retained_some; a candidate that fails the
+      audit is skipped, never released.
+  (b) the retention-overflow release in small_free_locked (both
+      the production and the MIMIR_DEBUG courses): the span is
+      released only when the audit passes.
+  (c) the TLS retention sweep (tls_retention_sweep_locked):
+      the per-batch sweep that releases spans the bin drains
+      just emptied, on the same live_count == 0 trust.
+  (d) the tally free course (small_free_tally_locked): its
+      retention-overflow release, on the same trust; reached
+      only from mimir_core_free, which reports it (op free).
+  Sites (c) and (d) were wired after the slice's reviewer
+  pass named them: a scratch experiment on this host
+  (/tmp/exp67d.c against the tree with only (a)+(b) wired)
+  proved the gap was live -- a worker thread holding one
+  live object with live_count corrupted to 0 lost its whole
+  span to the thread-exit sweep (mincore: span unmapped
+  under the live block). The sweep's refusals are reported
+  by the draining entries: mimir_tls_cache_drain_thread
+  and the tss thread-exit destructor report op trim after
+  unlocking; sweep refusals inside a free entry report on
+  that entry's op free. Leg "sweep" (S3) proves (c) end to
+  end; (d) shares the audited condition shape and the free
+  entry's reporting, and is covered by the same invariant
+  (the S9 TLS-ACCT relation quoted at S2's head).
+  The audit runs only on spans already selected as release
+  candidates (live_count == 0, no TLS tally, retention exceeded
+  or a trim/drain walk). Nothing on the alloc path and no
+  non-emptying free pays for it.
+On a proven mismatch the release is REFUSED: the span stays
+  retained and mapped, its objects stay live, nothing is unmapped
+  on a count nobody can trust (the F-06 posture, by analogy).
+Tallies: Z-067 appends at the END of struct mimir_stats (the
+  Z-064 append discipline), after the point where Z-064/Z-065/
+  Z-066 append theirs in banking order (resolution pre-declared
+  in S7):
+    uint64_t live_release_detections;
+    uint64_t live_release_collateral_refusals;
+  plus lock-free getters mimir_core_live_release_detections() /
+  mimir_core_live_release_collateral_refusals() (shape (b),
+  bound local; nm -D stays exactly 4, S4). Episode semantics
+  (the Z-066 pattern): the first refusal for a distinct
+  (span, walked-nodes / live_count / carve_count) signature is
+  one detection; repeats of the same signature are collateral;
+  a later passing audit of the same span closes the episode.
+Diag wiring (J-007 channel): ops appended DRAIN=4, TRIM=5
+  (FREE=3 is Z-066's, carried identically on this branch so the
+  enum and the name tables stay index-true; resolution in S7);
+  cause METADATA=6 is shared with Z-066 (the identical line is
+  carried here; keep one at banking). The locked audit tallies
+  itself and sets a thread-local label; the entry point reports
+  after unlocking (op free / drain / trim, cause metadata).
+  Tallies are ungated; emission is env-gated exactly as the
+  channel is (proven by the gate-off leg, S3).
+Scope of the audit, stated plainly: it proves the count relation
+  of the candidate span only. A corruption that PRESERVES the
+  relation (live_count lowered while the free list grows by the
+  same amount -- which needs a second, list, write) is outside
+  it; the registry-wide live sum (walked live_count ==
+  mimir_live_small_objects) stays the integrity walk's job.
+  A candidate whose free list cannot be walked to a count
+  (invalid node, or more nodes than carve_count) is refused
+  and tallied under the same counters with a sentinel
+  signature: the count relation is unproven either way.
+
+S3. Injection proof (tests/core/test_z067_livecount.c,
+    make test-z067, standalone -- NOT part of make test;
+    log hidden_files/z067_final_z067.log)
+7 legs, each in a disposable child, all pass (legs=7 failed=0):
+  control:        valid churn + drain + trim: detections=0
+                  collateral=0 emitted=0, walk clean.
+  drain:          refusal x2 = 1 detection + 1 collateral,
+                  2 emissions "op=drain cause=metadata"; the
+                  span stays mapped (mincore) throughout;
+                  restore + free + drain then releases it
+                  legitimately with no further tally.
+  trim:           refusal on the trim entry (1 detection,
+                  1 emission "op=trim cause=metadata");
+                  restore + free + trim releases clean.
+  free-retention: retention bound tuned to 0; a cross-thread
+                  free emptying the span on the corrupted
+                  count is refused (span stays mapped,
+                  1 detection, 1 emission "op=free
+                  cause=metadata"); after restoration the
+                  last free releases the span whole (mincore
+                  proves the unmap).
+  sweep:          a worker thread allocs 3, frees 2, corrupts
+                  live_count to 0 under the third and exits;
+                  the thread-exit drain's retention sweep is
+                  refused (1 detection, 1 emission "op=trim
+                  cause=metadata", span stays mapped); after
+                  restoration a normal free releases it whole.
+                  The pre-wire experiment released this span
+                  under its live block (S2).
+  gate-off:       refusal + tally=1 with emitted=0.
+  freehead-live:  the INC-J006-04 by-design leg (S6): overlap
+                  handout with zero tally / zero emission.
+The 25-probe flip itself (tests/core/test_j006.c,
+  log hidden_files/z067_final_j006.log):
+  [ok] probe 15 span-live-zero    exit=10 DETECTED (expected 10)
+  [ok] probe 20 span-freehead-live exit=42 SILENT (expected 42,
+       host-true setup, zero-operational-detection asserted)
+Both probe setups were rebuilt for this host's Z-029/Z-048
+  reality, and the probes say so in their own comments:
+  span-live-zero settles live_count with a checker flush before
+  corrupting it (the J-006-era probe corrupted a count the
+  drain's own flush then rebuilt -- it measured nothing);
+  span-freehead-live drains the TLS bin stock back onto the
+  span's central free list before corrupting its head (the
+  J-006-era probe corrupted a head the allocator never popped).
+
+S4. Standing gate and neighbours (counts read from log files)
+Standing gate: scripts/z13/run_gate.sh hidden_files/z067_gate.log:
+  GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN
+  -- identical to the Z-001 baseline (the 77 skips are the
+  by-design set: 70 test_c007 P3-T-* + 7 test_c008 S93-*).
+test-j006 on this tree: checks=25 failed=11 (14 ok). Baseline on
+  the unmodified tree (hidden_files/z067_baseline_j006.log) was
+  failed=13 (12 ok): this slice moves exactly its two probes
+  from FAIL to ok and no other probe changes state.
+nm -D on build/libmimiralloc.so: exactly 4 defined dynamic
+  symbols (mimir_malloc, mimir_calloc, mimir_realloc, mimir_free).
+
+S5. Pre-existing suite state on this tree (recorded, not absorbed)
+The 11 remaining test-j006 failures are exactly the pre-existing
+  set Z-066 recorded (its S5 list of 12, minus this slice's two):
+  desc-len-consist (Z-066's own probe -- it flips on Z-066's
+  tree, not on this base), span-magic, span-class-mismatch,
+  span-class-consist, span-carve-reduced, span-carve-inflated,
+  span-len-incons, span-freehead-wild, span-freelist-cycle,
+  span-next-cycle, span-next-wild. Cause (Z-066's record, not
+  re-litigated here): J-006-era span expectations predate the
+  Z-029 TLS cache and the Z-048 mapping pool; reconciliation is
+  queued for the Z-068 full-suite re-run, not absorbed by this
+  slice. Expected test-j006 state on the banked merged tree:
+  15 ok / 10 FAIL (Z-066 contributes the desc-len-consist flip;
+  span-len-consist stays ok, changing SILENT to DETECTED).
+  The known standalone test-j002 / test-i004 failures from the
+  Z-048 pool era are untouched by this slice, as before.
+
+S6. Class 3 -- INC-J006-04 undetectable-by-design record
+The corruption: a span's free_head is repointed at an object of
+  the same span that is still LIVE. The next allocation from
+  that span's central list returns the live object: two owners,
+  one extent (proven on this host: experiment + leg 5 + probe
+  20 -- after a drain returns bin stock to the central list,
+  overwriting the head with the live object's pointer makes the
+  next mimir_malloc(32) return that very object; a write
+  through one alias is read through the other).
+Why no operational detection exists in this design:
+  the free list is IN-BAND -- a free node's only mark is its
+  position in the list, and a carved slot start is shape-valid
+  as a node whether the slot is live or free (span_free_node_
+  valid cannot distinguish them, and says so). Every count the
+  allocator keeps is preserved by the corruption: the walked
+  node count still equals carve_count - live_count - tally in
+  the minimal shape (the J-006-era probe: list of one, carve ==
+  live + 1 -- the integrity walk returns 0 there), because the
+  corruption changes WHICH slot the list names, never HOW MANY.
+  There is no liveness record outside the 96-byte header in
+  this design for a pop-time check to consult. Detection
+  therefore requires new state, not new wiring.
+What the walk does see here: in the populated-list shape built
+  on this host (7 central nodes after the drain), replacing the
+  head truncates the walkable list, so mimir_core_metadata_
+  check() reports 1 violation (the node count). That is
+  incidental -- it vanishes in the minimal shape -- and in any
+  case no operational path consults the walk. It is recorded
+  as an observation, not claimed as a control.
+Compensating controls (what stands instead, today):
+  1. Shape validation refuses wild, misaligned and
+     out-of-carve heads outright (span-freehead-wild is a
+     DETECTED class): the corruption must name an exact carved
+     slot start of the same span to have any effect at all.
+  2. Bounded blast radius: the overlap is exactly one object
+     of one size class in one span, and the allocator's own
+     accounting stays consistent through the handout
+     (live_count and the live-object total increment normally;
+     the two eventual frees decrement them back).
+  3. The class stays exercised: probe 20 runs in the suite in
+     its host-true shape and Z-068's full 25-probe re-run
+     re-derives this verdict on the merged tree.
+  4. The designated fix road is costed where the roadmap put
+     it: a per-span liveness record (bitmap / freelist
+     membership) is the subject of Z-069 (canary economics)
+     and Z-070 (double-free detection economics -- freed-block
+     poison + freelist membership), which own the adopt/reject
+     decision by measurement. If membership state is adopted
+     there, a pop-time liveness check becomes possible and
+     this class should be re-opened.
+  5. In MIMIR_DEBUG builds the J-005 quarantine holds freed
+     blocks out of reuse entirely, which narrows the window
+     in that flavour (no claim is made for production builds).
+
+S7. Banking resolution (pre-declared, the Z-065 pattern --
+    never clobber; keep BOTH, in slice order)
+Banking order ahead of this slice: Z-063, Z-064 (0865998),
+  Z-065 (4923013), Z-066 (17cdd47), then Z-067.
+struct mimir_stats appends -- keep ALL of them in slice order
+  after span_capacity_objects[]: unlock_failures (Z-064);
+  drain_lock_failures, trim_lock_failures, free_lock_failures
+  (Z-065); metadata_detections, metadata_collateral_refusals
+  (Z-066); live_release_detections,
+  live_release_collateral_refusals (Z-067). Keep every getter
+  set and every snapshot copy block, in the same order. No
+  earlier offset moves in any resolution.
+Diag enums -- keep: ops MALLOC=0, CALLOC=1, REALLOC=2, FREE=3
+  (Z-066), DRAIN=4, TRIM=5 (Z-067); causes NONE=0, BACKING=1,
+  ARITHMETIC=2, LOCK=3, PAGESIZE=4, INTERNAL=5, METADATA=6
+  (one copy -- Z-066 defined it; this branch carries the
+  identical line). Name tables keep the full rows:
+  ops "malloc", "calloc", "realloc", "free", "drain", "trim";
+  causes "none", "backing", "arithmetic", "lock", "page-size",
+  "internal", "metadata" (this branch already carries both
+  tables whole; Z-066's rows are a strict prefix).
+tests/core/test_j006.c -- Z-066 rewrote the desc-len-consist
+  and span-len-consist probes; Z-067 rewrote span-live-zero
+  and span-freehead-live. Disjoint regions: keep all four.
+  Both slices add the same two lines (the mimir_diag_j007.h
+  include in test_j006.c and the matching Makefile dependency):
+  identical -- keep one copy.
+mimir_core_free -- Z-066 added its per-call label clear and
+  z066_free_report(...) consumes at the central/legacy exits;
+  Z-067 added its own clear and z067_release_report(...) at
+  the same exits (and at the local-bin exit). Keep BOTH
+  consume lines at every exit where they appear; the flags
+  and tallies are disjoint (length episodes vs live_count
+  release refusals; no site touches the other's counter).
+After the banking merge, re-run on the merged tree:
+  make test-z064, make test-z065, make test-z066,
+  make test-z067 and make test-j006; expected test-j006
+  there: 15 ok / 10 FAIL (S5).
+
+S8. Review record
+Six Mythic Engineering reviewers were mustered for this slice
+  (no 429, no platform depth limit hit; the lead did not need
+  the solo-sequential fallback): roadmap/gate, Z-066 mechanism,
+  core structure, standalone-test pattern, banking composition,
+  and verification/gate reviews, all read-only on this host.
+  Their findings are folded into S1 (class map forced by the
+  roadmap's own parenthetical), S2/S7 (the Z-064..Z-066 append
+  order and the pre-declared resolution), S4/S5 (gate command,
+  by-design skip set, and the authoritative 12-name pre-existing
+  failure list). Design challenges the lead ran before building:
+  two scratch experiments (outside the tree, disposable
+  processes) proving the host-true probe setups of S3 and the
+  L1 overlap handout of S6 against the unmodified tree.
+
+S9. Files in this slice
+  src/core/mimir_core.c        (audit + wiring + tallies +
+                                diag tables + snapshot copies)
+  src/core/mimir_core.h        (stats appends + getters +
+                                diag enum appends)
+  tests/core/test_j006.c       (probe 15 flip to DETECTED,
+                                probe 20 host-true SILENT,
+                                diag include)
+  tests/core/test_z067_livecount.c (new; make test-z067)
+  Makefile                     (test-z067 target; test_j006.o
+                                gains the diag header dependency)
+  tests/perf/recorded_run_z13_z067.txt (this file)
+Bookkeeping (CAMPAIGN_STATE.md) is updated on disk only and is
+  never part of the slice commit.

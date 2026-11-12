@@ -324,6 +324,23 @@ struct mimir_stats {
      * collateral of the one episode, never new detections. */
     uint64_t metadata_detections;
     uint64_t metadata_collateral_refusals;
+    /* Z-067 (D-12): INC-J006-06 live_count release-path
+     * detection tallies, appended at the END so every
+     * earlier field keeps its offset (the Z-064 append
+     * discipline; on the banked tree these sit after
+     * Z-064's unlock_failures, Z-065's drain/trim/free
+     * lock-failure tallies and Z-066's metadata tallies,
+     * in slice order -- see the banking resolution in
+     * tests/perf/recorded_run_z13_z067.txt).
+     * live_release_detections counts detection EPISODES:
+     * one per span whose release-path audit (free-list
+     * nodes + live_count + TLS tally != carve_count)
+     * first refuses a release for a distinct corruption
+     * signature. live_release_collateral_refusals counts
+     * later refusals of an already-counted episode.
+     * Monotone. */
+    uint64_t live_release_detections;
+    uint64_t live_release_collateral_refusals;
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
 
@@ -356,6 +373,16 @@ uint64_t mimir_core_free_lock_failures(void);
  * library (nm -D stays exactly 4). */
 uint64_t mimir_core_metadata_detections(void);
 uint64_t mimir_core_metadata_collateral_refusals(void);
+
+/* Z-067 (D-12): lock-free reads of the two release-path
+ * detection tallies above (single atomic loads, the
+ * Z-064 getter pattern): the tallies stay readable even
+ * on a tree whose metadata is corrupt. Internal only,
+ * INC-E001-07 shape (b) exactly like the snapshot;
+ * bound local in the shared library (nm -D stays
+ * exactly 4). */
+uint64_t mimir_core_live_release_detections(void);
+uint64_t mimir_core_live_release_collateral_refusals(void);
 
 #ifdef MIMIR_DEBUG
 /* J-004 on-demand red-zone verification (debug builds only;
@@ -447,8 +474,12 @@ enum mimir_diag_op {
     MIMIR_DIAG_OP_MALLOC  = 0,
     MIMIR_DIAG_OP_CALLOC  = 1,
     MIMIR_DIAG_OP_REALLOC = 2,
-    MIMIR_DIAG_OP_FREE    = 3 /* Z-066: a free refused on detected
-                               * metadata corruption (INC-J006-02) */
+    MIMIR_DIAG_OP_FREE    = 3, /* Z-066: a free refused on detected
+                                * metadata corruption (INC-J006-02) */
+    MIMIR_DIAG_OP_DRAIN   = 4, /* Z-067: a drain skipped a span on
+                                * detected live_count corruption
+                                * (INC-J006-06) */
+    MIMIR_DIAG_OP_TRIM    = 5  /* Z-067: same, on a trim path */
 };
 enum mimir_diag_cause {
     MIMIR_DIAG_CAUSE_NONE       = 0,
@@ -458,7 +489,9 @@ enum mimir_diag_cause {
     MIMIR_DIAG_CAUSE_PAGESIZE   = 4, /* page-size discovery failed */
     MIMIR_DIAG_CAUSE_INTERNAL   = 5, /* layout/publication gate */
     MIMIR_DIAG_CAUSE_METADATA   = 6  /* Z-066: INC-J006-02 length
-                                      * corruption detected */
+                                      * corruption detected; Z-067
+                                      * reports INC-J006-06 under
+                                      * the same cause */
 };
 void mimir_core_diag_report(int op, int cause, uint64_t requested);
 uint64_t mimir_core_diag_emitted(void);
