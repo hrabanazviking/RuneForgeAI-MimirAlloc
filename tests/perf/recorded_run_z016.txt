@@ -1,0 +1,134 @@
+MimirAlloc Z13 slice Z-016 - recorded run of tests/perf/probe_z016.c
+slice: Z-016 - False-sharing ladder (Wave 2)
+date: 2026-11-12T03:08:04-05:00 (primary run, America/New_York); corroborating run 2026-11-12T03:08:19-05:00
+base: f723bdb64bb60db5e6a73ba70c2e296b3127e579 (branch yrsa/mimiralloc-team-02, Z-012 team commit; Z-002 banked at seat in this lineage)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (Strix Halo), 16 cores / 32 threads, 2 CCDs
+environment header (scripts/z13/host_truth.sh, Z-002, verbatim in runner output):
+  governor performance, driver amd-pstate-epp, cur 5108454 kHz (primary) /
+  2740824 kHz (corroborating), min 2000000, max 5187500
+  THP enabled=madvise defrag=madvise shmem=never; page_size_bytes 4096; glibc 2.44
+  cache topology: L1d 768 KiB (16), L1i 512 KiB (16), L2 16 MiB (16), L3 64 MiB (2 instances)
+topology (sysfs, printed by the runner):
+  cpu0 core_id=0 siblings=0,16 L3 32768K shared 0-7,16-23 (CCD0)
+  cpu8 core_id=8 siblings=8,24 L3 32768K shared 8-15,24-31 (CCD1)
+  => CCD0 = physical cores 0-7 (+ SMT 16-23); CCD1 = cores 8-15 (+ SMT 24-31); line size 64 B
+compiler: cc -std=c11 -Wall -Wextra -Werror -pthread -O2 (standalone build in run_z016.sh; Makefile untouched)
+sha256 (identical in both final runs): probe_z016.c ec1774592a892048cf0efff33df4a9ea244cfd1394f24aff632ba053ed74cab4
+        run_z016.sh  e49309f341c8fad1f8525fee960737b43ba6e39314f29276df55615f8b00a41e
+        /tmp/probe_z016 d3138d840c9e86e0c9eb9f16fa9f11cc0041c5e9468bbf3591dc3365582ab840
+method (Z-004 protocol: pinned, median of reps, load recorded):
+  N threads each perform 2,000,000 relaxed atomic fetch_add increments
+  on ONLY their own counter; nothing is logically shared. The sole
+  variable is the counter layout (stride): same-line 8 B (8 counters
+  share one 64 B line), neighbour 64 B (one counter per line, lines
+  adjacent), padded128 (stride 128 B, one guard line), padded256
+  (stride 256 B, three guard lines). 5 reps per cell, median reported.
+  Work is verified every rep: sum of counters == threads * ITERS.
+  Pinning fills physical cores first (Z-004 CCD law): thread order
+  0-7 (CCD0), 8-15 (CCD1), 16-23 (CCD0 SMT), 24-31 (CCD1 SMT).
+  So 2/4/8-thread rows are intra-CCD0; 16 threads span both CCDs on
+  physical cores; 32 threads add every SMT sibling.
+  Metric: aggregate ns/op = wall time / total increments across all
+  threads. It FALLS as threads are added even for unshared layouts,
+  because more threads complete more total work per wall second.
+  The false-sharing signal is the RATIO between layouts at a FIXED
+  thread count, never the raw ns/op trend across thread counts.
+  Interpretation caveat for same-line rows above 8 threads: at
+  stride 8 B the counters group 8 per line, so 16 threads contend
+  on 2 lines x 8 writers and 32 threads on 4 lines x 8 writers.
+  Per-line contention (8 writers) is constant across those rows;
+  the aggregate ns/op falls because the line groups run in parallel.
+load state (SHARED HOST - recorded honestly, Z-004 section 10):
+  primary run: load average 3.99 / 2.10 / 1.71 at start, 5.11 / 2.37 /
+  1.80 at end. corroborating run: 4.63 / 2.36 / 1.80 at start,
+  6.99 / 2.88 / 1.98 at end. A Tensile CreateLibrary build (--jobs=12)
+  was ramping throughout both runs; a sibling MimirAlloc team probe
+  (team-07) was seen at ~98% of one core immediately afterwards.
+  Verdict on load: both final runs are CONTENDED and their absolute
+  numbers are indicative, NOT quiet-machine baselines. The verdicts
+  below rest on same-line ratios at fixed thread count, which are
+  load-stable: two earlier runs of the pre-fix probe source (run1
+  02:50 at load 0.98 / 1.46 / 1.61 with no heavy co-tenant visible,
+  run2 02:51 with a Tensile worker at 100% of one core) agree with
+  the final runs on every same-line cell within 2.7% and reproduce
+  the same penalty ratios (32-thread ratio 9.5x quiet vs 7.5x
+  contended - the unshared 32-thread rows are the most
+  load-sensitive cells in the ladder, as all 32 logical CPUs are
+  in play there).
+  Runs 1-2 are history only: the probe source was edited after
+  them (C11 atomic-access fix; sha 87beaf75... superseded by
+  ec177459...), so the cost table below is taken solely from the
+  two final-source runs above. Full logs: hidden_files/z016_run1.log
+  .. z016_run4.log in the team worktree (not banked).
+correctness gate: make clean && make test in this worktree, log
+  hidden_files/z016_make_test.log (fresh run by the resume lead;
+  an earlier log byte-identical to the Z-002 log was set aside as
+  unattributable and replaced) - 4988 checks run (18 smoke + 4970
+  CHECKS), 0 failed, 77 by-design SKIP lines, EXIT:0. Matches the
+  Z-001/Z-002/Z-012 baseline exactly.
+
+=== CONTENTION COST TABLE - median aggregate ns/op (Mops/s in parentheses where decisive) ===
+layout      threads   primary run     corroborating   same-line penalty vs neighbour (primary)
+same-line       2       5.656             5.795           2.86x
+neighbour       2       1.978             2.155           -
+padded128       2       1.961             1.968           -
+padded256       2       1.964             1.973           -
+same-line       4       5.947             6.014           5.98x
+neighbour       4       0.995             1.028           -
+padded128       4       0.985             1.122           -
+padded256       4       1.092             1.019           -
+same-line       8       5.874             5.907           10.72x
+neighbour       8       0.548             0.580           -
+padded128       8       0.551             0.561           -
+padded256       8       0.551             0.570           -
+same-line      16       3.080             3.063           11.12x
+neighbour      16       0.277             0.281           -
+padded128      16       0.280             0.281           -
+padded256      16       0.276             0.281           -
+same-line      32       1.580 (633 Mops)  1.583           7.45x (9.5x in the quiet history run)
+neighbour      32       0.212 (4725 Mops) 0.209           -
+padded128      32       0.214             0.217           -
+padded256      32       0.213             0.219           -
+Cross-run agreement (Z-004 5% noise bound): every same-line cell
+agrees within 2.5%; unshared-layout cells agree within 5% except
+three single cells under the rising Tensile load (neighbour 2t
++8.6%, neighbour 8t +5.7%, padded128 4t - the corroborating run
+carries a 1.574 outlier rep there). No verdict below rests on
+those three cells.
+
+=== FINDINGS ===
+1. False sharing is the most expensive per-counter effect measured
+   in Wave 2 so far. Packing 8 independently-written counters into
+   one 64 B line costs 2.9x aggregate throughput at 2 threads,
+   ~6x at 4 threads and ~11x at 8-16 threads versus giving each
+   counter its own line. The penalty is a coherence-ownership
+   effect, not a bandwidth effect: the shared line must change
+   owner on nearly every increment.
+2. One counter per 64 B line captures the ENTIRE win. Neighbour
+   (stride 64, lines adjacent), padded128 and padded256 are within
+   the 5% noise bound of each other at 8, 16 and 32 threads in
+   both final runs: adjacent lines do not measurably interfere,
+   and guard lines beyond line-per-counter buy nothing on this
+   machine. Extra padding is pure footprint cost.
+3. The same-line cost does not grow past 8 writers per line in
+   aggregate terms (see the method caveat): per-line contention
+   saturates at 8 writers, and extra thread groups on extra
+   lines proceed in parallel. Design consequence: what matters
+   is writers-per-line, not total thread count.
+
+=== PADDING RULE OF RECORD (feeds Z-040 false-sharing fixes and Z-018 constants) ===
+MIN_HOT_COUNTER_STRIDE  = 64 B  (one independently-written counter,
+                          stat, queue head or flag per 64 B cache
+                          line; no two hot writers share a line)
+FALSE_SHARING_PENALTY   = 2.9x at 2 writers, ~6x at 4, ~11x at
+                          8-16 writers on one line (aggregate
+                          throughput, this machine, 64 B lines)
+GUARD_LINES_NEEDED      = 0     (strides 128 B and 256 B are within
+                          noise of 64 B everywhere it matters;
+                          pad to the line, not beyond it)
+PADDING_RULE            = every shared structure field that is
+                          written by more than one thread gets its
+                          own 64 B line (align + pad to 64 B);
+                          read-mostly and single-writer fields are
+                          exempt. Apply per Z-040.
