@@ -1,0 +1,287 @@
+MimirAlloc Z13 recorded run - Z-053 large-path fragmentation
+slice: Z-053 - Large-path fragmentation (Wave 6)
+date: 2026-11-12T07:43-05:00 (measurement window, America/New_York); gate + assembly same morning
+base: merge 084f45d of seat main f8ee668 (banked Z-001..Z-049, remote-verified) into yrsa/mimiralloc-team-07 - CLEAN merge, no conflicts. The branch's prior tip was 78384cd (Z-046); the stray tests/perf/__pycache__ untracked dir was deleted before the merge and is not a slice artifact.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below).
+load state: SHARED HOST, MODERATE co-tenant load - loadavg 2.96 / 2.00 / 1.65 at run start and end on the 32-thread host (other campaigns active). These are resident-shape measurements (RSS/PSS/VMA counts at defined phases), not timings: contention does not change what a process holds resident, legs interleave process by process, and every per-process value was identical across the 3 repetitions of each leg. Recorded honestly as a shared-machine run, not a quiet-machine baseline. Run durations: whole runner wall 3 s (checker 1 s, uniform <1 s, pinwheel <1 s, churn 1 s, warm-ups included) - deliberately bounded so the shared host is not hogged.
+artifacts: tests/perf/probe_z053.c (sha256 62f0f8034a6cd9aa15e8067986af2d4e803d7cb1b225d65eea15312f58de5174), tests/perf/run_z053.sh (83d8fc464c12ae1cf5e9b832fb3b17c2b3c888d3e13acdca5029bcc3bfde729e), tests/perf/summarize_z053.py (first summarised with de4a15b6...; after a display-only dedup fix - phases were printed twice because the phase list was built over both legs - the summary below was regenerated with the final f582a074...; every number is byte-identical before and after the fix, verified by diffing the two summaries modulo the duplicated lines). Probe binaries built by the runner from these sources: probe_mimir 36a7e9d91cfc969e7dc9164b04016913bd142a2dfd31843ec5d6d9f478c3e0d0, probe_glibc 62ada8e643e8a99a40fb2b1e8601c075ae4859ca6f0642bef7f457c34405fe15. Built with the repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2 into build/z53/ (standalone, no Makefile target, NOT part of make test). No production code is changed by this slice.
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z053_gate_final.log (team-local, not banked): GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN - identical to the Z-001 baseline.
+
+=== METHOD ===
+One probe source, two legs (mimir = this tree's banked allocator with the Z-048 mapping cache and Z-049 THP posture live; glibc = host malloc/free). Every pattern allocates ONLY large-path sizes (all requests above the 1024-byte small cutoff) and dense-touches every block (memset of the whole extent) so RSS is real resident memory, not reservation. At each defined phase the probe reads its own /proc/self/smaps_rollup (Rss + Pss - the Z-006 method; VmRSS spot readings are NOT used anywhere, per the Z-047 census lesson) and /proc/self/maps in the same instant.
+Patterns (roadmap: interleaved large sizes over long runs):
+  checker   192 blocks alternating 64 KiB / 256 KiB. Phases FULL, HOLED (the 256 KiB blocks freed - size-mismatched holes), REFILL (the same 256 KiB blocks re-allocated), DRAINED (all freed).
+  uniform   256 blocks of 128 KiB (control). FULL, HOLED (every second block freed - exact-size holes), REFILL, DRAINED.
+  pinwheel  128 blocks cycling 16 KiB / 1 MiB / 32 KiB / 512 KiB. FULL, THIRD1 (every 3rd freed), THIRD2 (the next third freed), DRAINED.
+  churn     the long run: a 96-slot live window, 6000 replace operations (free one slot, allocate a fresh size from {16 KiB, 32 KiB, 64 KiB, 128 KiB, 256 KiB, 512 KiB, 1 MiB, 2 MiB}, dense-touch). Checkpoints OP0 / OP1500 / OP3000 / OP4500 / OP6000, then DRAINED. Slot and size choices come from one fixed-seed xorshift PRNG, so both legs execute the identical operation sequence.
+Metrics per phase: live_count / live_bytes (requested bytes held live); vma_count and vma_delta vs the same process's BASE phase; Rss / Pss (smaps_rollup); allocation VMAs (VMAs holding at least one live block) and their total bytes; holes = unmapped-or-pooled address gaps between consecutive allocation VMAs (gaps of 64 MiB or more separate distinct regions - heap vs mmap area - and are excluded); the truly-unmapped part of those gaps (pooled mappings inside a gap are mapped, not holes in the address space); gap_bytes = address gaps between consecutive live blocks (capped at 64 MiB for the same reason).
+Fragmentation factors (the roadmap gate quantity), per process then median across processes (Z-004 headline discipline): rss_factor = Rss / live_bytes (gross blow-up); net_factor = (Rss - Rss_BASE) / live_bytes (resident bytes the allocator holds per live byte - the headline factor); win_factor = allocation-VMA bytes / live_bytes; hole_frac = hole bytes / (allocation-VMA bytes + hole bytes). The worst-case factor per pattern is the maximum median net_factor over live phases; the absolute worst single process is printed beside it. Processes: 3 measured per leg per pattern + 1 warm-up per leg per pattern discarded, pinned taskset -c 2, legs interleaved within each round (run_z053.sh).
+Workload equivalence: the probe verifies the first and last stored byte of every live block at every phase (a mismatch aborts the process), and the checksum (sum of those bytes over live blocks) is a deterministic function of the operation sequence. The summariser proves ALL (pattern, phase) checksums identical across legs and processes - see the first line of the summary below.
+Definitions caveat (kernel VMA merging): adjacent anonymous mappings with identical permissions merge into one VMA. A FULL phase of 96-256 sequential large allocations therefore shows vma_delta of only about +1 for BOTH allocators - VMA count growth appears when frees break the merged region apart, which is exactly what the HOLED / THIRD / OP phases measure. FULL-phase vma_delta varied 0..+1 across smoke runs of both legs (merge-layout nondeterminism); all recorded-run values below are the medians of the run of record.
+
+=== SUMMARY (tests/perf/summarize_z053.py on the raw data, verbatim) ===
+checksum proof: ALL (pattern,phase) checksums identical across legs/processes
+
+=== pattern checker ===
+mimir  BASE     n=3 live=         0 vma_d=    0 rss=    2008KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+mimir  FULL     n=3 live=  31457280 vma_d=    1 rss=   33700KiB holes=  1 holeB=   2297856 gapB=   3080192 unmapB=     40960 rss_f=1.097 net_f=1.032 worst_net=1.032 win_f=1.026 hole_frac=0.066
+mimir  HOLED    n=3 live=   6291456 vma_d=   32 rss=   25380KiB holes= 32 holeB=  10551296 gapB=  27979776 unmapB=   8294400 rss_f=4.131 net_f=3.804 worst_net=3.804 win_f=3.775 hole_frac=0.308
+mimir  REFILL   n=3 live=  31457280 vma_d=    1 rss=   33700KiB holes=  1 holeB=   2297856 gapB=   3080192 unmapB=     40960 rss_f=1.097 net_f=1.032 worst_net=1.032 win_f=1.026 hole_frac=0.066
+mimir  DRAINED  n=3 live=         0 vma_d=   61 rss=    6564KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=4556KiB
+glibc  BASE     n=3 live=         0 vma_d=    0 rss=    1980KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+glibc  FULL     n=3 live=  31457280 vma_d=    1 rss=   33276KiB holes=  1 holeB=   2281472 gapB=   2672112 unmapB=     24576 rss_f=1.083 net_f=1.019 worst_net=1.019 win_f=1.018 hole_frac=0.067
+glibc  HOLED    n=3 live=   6291456 vma_d=    0 rss=    8316KiB holes=  0 holeB=         0 gapB=      1520 unmapB=         0 rss_f=1.354 net_f=1.031 worst_net=1.031 win_f=1.022 hole_frac=0.000
+glibc  REFILL   n=3 live=  31457280 vma_d=    0 rss=   32896KiB holes=  0 holeB=         0 gapB=      3056 unmapB=         0 rss_f=1.071 net_f=1.006 worst_net=1.006 win_f=1.005 hole_frac=0.000
+glibc  DRAINED  n=3 live=         0 vma_d=    0 rss=    2300KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=320KiB
+
+=== pattern uniform ===
+mimir  BASE     n=3 live=         0 vma_d=    0 rss=    2004KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+mimir  FULL     n=3 live=  33554432 vma_d=    1 rss=   36000KiB holes=  1 holeB=   2342912 gapB=   3387392 unmapB=     86016 rss_f=1.099 net_f=1.037 worst_net=1.037 win_f=1.032 hole_frac=0.063
+mimir  HOLED    n=3 live=  16777216 vma_d=   64 rss=   27552KiB holes= 64 holeB=  10858496 gapB=  20029440 unmapB=   8601600 rss_f=1.682 net_f=1.559 worst_net=1.559 win_f=1.548 hole_frac=0.295
+mimir  REFILL   n=3 live=  33554432 vma_d=    1 rss=   36000KiB holes=  1 holeB=   2342912 gapB=   3387392 unmapB=     86016 rss_f=1.099 net_f=1.037 worst_net=1.037 win_f=1.032 hole_frac=0.063
+mimir  DRAINED  n=3 live=         0 vma_d=   63 rss=   10656KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=8652KiB
+glibc  BASE     n=3 live=         0 vma_d=    0 rss=    1980KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+glibc  FULL     n=3 live=  33554432 vma_d=    1 rss=   35960KiB holes=  1 holeB=   2306048 gapB=   3346432 unmapB=     49152 rss_f=1.097 net_f=1.037 worst_net=1.037 win_f=1.032 hole_frac=0.062
+glibc  HOLED    n=3 live=  16777216 vma_d=  127 rss=   19064KiB holes=126 holeB=  19337216 gapB=  19853312 unmapB=  17080320 rss_f=1.164 net_f=1.043 worst_net=1.043 win_f=1.031 hole_frac=0.528
+glibc  REFILL   n=3 live=  33554432 vma_d=  127 rss=   35452KiB holes=126 holeB=  19337216 gapB=  19855360 unmapB=  17080320 rss_f=1.082 net_f=1.021 worst_net=1.021 win_f=1.020 hole_frac=0.361
+glibc  DRAINED  n=3 live=         0 vma_d=    0 rss=    2300KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=320KiB
+
+=== pattern pinwheel ===
+mimir  BASE     n=3 live=         0 vma_d=    0 rss=    2000KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+mimir  FULL     n=3 live=  51904512 vma_d=    1 rss=   53404KiB holes=  1 holeB=   2265088 gapB=   2785280 unmapB=      8192 rss_f=1.054 net_f=1.014 worst_net=1.014 win_f=1.011 hole_frac=0.041
+mimir  THIRD1   n=3 live=  35110912 vma_d=    1 rss=   53404KiB holes=  1 holeB=   2265088 gapB=  19558400 unmapB=      8192 rss_f=1.558 net_f=1.499 worst_net=1.499 win_f=1.494 hole_frac=0.041
+mimir  THIRD2   n=3 live=  17301504 vma_d=   22 rss=   44868KiB holes= 22 holeB=  10477568 gapB=  35749888 unmapB=   8220672 rss_f=2.656 net_f=2.537 worst_net=2.537 win_f=2.527 hole_frac=0.193
+mimir  DRAINED  n=3 live=         0 vma_d=   43 rss=   27804KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=25804KiB
+glibc  BASE     n=3 live=         0 vma_d=    0 rss=    1980KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+glibc  FULL     n=3 live=  51904512 vma_d=    1 rss=   53116KiB holes=  1 holeB=   2301952 gapB=   2561008 unmapB=     45056 rss_f=1.048 net_f=1.009 worst_net=1.009 win_f=1.006 hole_frac=0.042
+glibc  THIRD1   n=3 live=  35110912 vma_d=   21 rss=   37160KiB holes= 20 holeB=  15810560 gapB=  16475088 unmapB=  15810560 rss_f=1.084 net_f=1.026 worst_net=1.026 win_f=1.022 hole_frac=0.306
+glibc  THIRD2   n=3 live=  17301504 vma_d=   21 rss=   20176KiB holes= 20 holeB=  31621120 gapB=  32687040 unmapB=  31621120 rss_f=1.194 net_f=1.077 worst_net=1.077 win_f=1.068 hole_frac=0.631
+glibc  DRAINED  n=3 live=         0 vma_d=    0 rss=    3708KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=1728KiB
+
+=== pattern churn ===
+mimir  BASE     n=3 live=         0 vma_d=    0 rss=    2000KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+mimir  OP0      n=3 live=  58261504 vma_d=    1 rss=   59484KiB holes=  1 holeB=   2269184 gapB=   2658304 unmapB=     12288 rss_f=1.045 net_f=1.010 worst_net=1.010 win_f=1.007 hole_frac=0.037
+mimir  OP1500   n=3 live=  45236224 vma_d=    6 rss=   73964KiB holes=  5 holeB=   7925760 gapB=  35397632 unmapB=   7925760 rss_f=1.674 net_f=1.629 worst_net=1.629 win_f=1.619 hole_frac=0.098
+mimir  OP3000   n=3 live=  47284224 vma_d=   23 rss=   75336KiB holes= 21 holeB=  21544960 gapB=  48947200 unmapB=  19140608 rss_f=1.631 net_f=1.588 worst_net=1.588 win_f=1.581 hole_frac=0.224
+mimir  OP4500   n=3 live=  59195392 vma_d=   31 rss=   87448KiB holes= 26 holeB=  21573632 gapB=  47591424 unmapB=  17244160 rss_f=1.513 net_f=1.478 worst_net=1.478 win_f=1.440 hole_frac=0.202
+mimir  OP6000   n=3 live=  47104000 vma_d=   35 rss=   77172KiB holes= 29 holeB=  33800192 gapB=  57569280 unmapB=  25665536 rss_f=1.678 net_f=1.634 worst_net=1.634 win_f=1.505 hole_frac=0.323
+mimir  DRAINED  n=3 live=         0 vma_d=   45 rss=   30956KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=28956KiB
+glibc  BASE     n=3 live=         0 vma_d=    0 rss=    1984KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=0KiB
+glibc  OP0      n=3 live=  58261504 vma_d=    1 rss=   59328KiB holes=  1 holeB=   2330624 gapB=   2589168 unmapB=     73728 rss_f=1.043 net_f=1.008 worst_net=1.008 win_f=1.007 hole_frac=0.038
+glibc  OP1500   n=3 live=  45236224 vma_d=    0 rss=   62480KiB holes=  0 holeB=         0 gapB=  14402880 unmapB=         0 rss_f=1.414 net_f=1.369 worst_net=1.369 win_f=1.368 hole_frac=0.000
+glibc  OP3000   n=3 live=  47284224 vma_d=    0 rss=   66864KiB holes=  0 holeB=         0 gapB=  15549888 unmapB=         0 rss_f=1.448 net_f=1.405 worst_net=1.405 win_f=1.404 hole_frac=0.000
+glibc  OP4500   n=3 live=  59195392 vma_d=    0 rss=   81220KiB holes=  0 holeB=         0 gapB=  21743424 unmapB=         0 rss_f=1.405 net_f=1.371 worst_net=1.371 win_f=1.370 hole_frac=0.000
+glibc  OP6000   n=3 live=  47104000 vma_d=    0 rss=   70052KiB holes=  0 holeB=         0 gapB=  20301840 unmapB=         0 rss_f=1.523 net_f=1.480 worst_net=1.480 win_f=1.479 hole_frac=0.000
+glibc  DRAINED  n=3 live=         0 vma_d=    0 rss=    2304KiB holes=  0 holeB=         0 gapB=         0 unmapB=         0 retained_net=320KiB
+
+=== worst-case fragmentation factor per pattern (max over live phases of the median net_factor; absolute worst single process in brackets) ===
+mimir  checker   worst median net_f=3.804 at HOLED [worst process 3.804]
+glibc  checker   worst median net_f=1.031 at HOLED [worst process 1.031]
+mimir  uniform   worst median net_f=1.559 at HOLED [worst process 1.559]
+glibc  uniform   worst median net_f=1.043 at HOLED [worst process 1.043]
+mimir  pinwheel  worst median net_f=2.537 at THIRD2 [worst process 2.537]
+glibc  pinwheel  worst median net_f=1.077 at THIRD2 [worst process 1.077]
+mimir  churn     worst median net_f=1.634 at OP6000 [worst process 1.634]
+glibc  churn     worst median net_f=1.480 at OP6000 [worst process 1.480]
+
+=== READING - FRAGMENTATION FACTORS PER PATTERN (roadmap gate) ===
+Gate: "fragmentation factors recorded per pattern" - MET. The factors of record (median net_factor = resident bytes held per live byte, worst live phase; gross rss_factor beside it):
+  checker   mimir 3.804 at HOLED (gross 4.131)   glibc 1.031 at HOLED (gross 1.354)
+  uniform   mimir 1.559 at HOLED (gross 1.682)   glibc 1.043 at HOLED (gross 1.164)
+  pinwheel  mimir 2.537 at THIRD2 (gross 2.656)  glibc 1.077 at THIRD2 (gross 1.194)
+  churn     mimir 1.634 at OP6000 (gross 1.678)  glibc 1.480 at OP6000 (gross 1.523)
+At every FULL / OP0 phase both allocators sit at net 1.006..1.037 - an interleaved large live set, densely touched, costs essentially its own bytes under either allocator. Fragmentation is a property of the FREE pattern, not the allocation pattern.
+
+F1 - The holed-phase blow-up is the Z-048 pool's retention price, and it is bounded by the pool's own design bounds. When checker frees its 256 KiB blocks, MimirAlloc does not unmap them: exact-length mappings go to the mapping cache (up to 64 mappings / 32 MiB) with their dense-touched pages still resident. The live set that remains is the small 64 KiB half (6 MiB), so resident-per-live peaks at 3.804x. glibc, which unmaps freed mmap chunks and returns arena memory differently, peaks at 1.031x on the same phase. Grade on this phase, in roadmap words: LOSS for MimirAlloc - a real, measured RSS blow-up, bought deliberately at Z-048 for the 42.3x large_batch win, capped by construction, and spendable by Z-050's trim policy (the very next Wave 6 policy slice). It is not unbounded growth: see F4.
+F2 - Address-space holes and RSS holes are different quantities, and the two allocators trade them. In uniform HOLED, glibc shows the worse ADDRESS fragmentation (127 allocation VMAs, 126 holes, hole_frac 0.528, 17.0 MiB truly unmapped between live blocks) but the better RSS factor (1.043 - unmapped holes are not resident). MimirAlloc shows fewer unmapped holes (8.6 MiB; the rest of its gaps are still-mapped pooled entries) but holds the resident bytes (1.559). Any future fragmentation fix must name which quantity it is buying down; Z-058's split/coalesce audit inherits this distinction.
+F3 - Refill is exact for MimirAlloc. In both checker and uniform, REFILL reproduces FULL to the KiB on every metric (RSS 33700 / 36000 KiB, vma_delta back to +1, one hole of the FULL size): the holes the free pattern made - pooled or unmapped - are fully reusable by the same sizes, and no residue accumulates across a free/refill cycle. glibc's uniform REFILL keeps its 126-hole address fragmentation (hole_frac 0.361 at REFILL vs 0.000 in its checker REFILL) while its RSS also recovers - address fragmentation can persist across refills under glibc where MimirAlloc's does not.
+F4 - The long run grows, then is capped by the same pool bounds. Across churn's 6000 ops, MimirAlloc's vma_delta climbs +1 -> +6 -> +23 -> +31 -> +35 and its net factor settles in a 1.48..1.63 band from OP1500 on (no runaway trend in the last three checkpoints: 1.588, 1.478, 1.634 against a changing live set). At DRAINED it retains 28956 KiB net RSS across 45 VMAs - under the pool's 32 MiB / 64-VMA bounds, i.e. the retention ceiling is the design bound, not the workload size. Checker DRAINED retains only 4556 KiB / 61 VMAs (its pool fills by count with small mappings), pinwheel 25804 KiB / 43 VMAs. glibc retains 320 KiB (checker/uniform/churn) to 1728 KiB (pinwheel) at DRAINED - glibc returns nearly everything; MimirAlloc's DRAINED retention is the pool, held for reuse until trim or drain (Z-048's accounting: Q-RELEASED moves only at an actual munmap).
+F5 - Pinwheel's staircase shows the pool absorbing the first release wave whole: at THIRD1 MimirAlloc's RSS does not move at all (53404 KiB, identical to FULL; unmapped hole bytes just 8192) while live bytes fall by a third - every first-third free was pooled. The cost lands at THIRD2 (net 2.537) once the pool is full and later frees both unmap and strand resident neighbours. glibc's staircase is the mirror image: RSS falls at every step (net stays ~1.03..1.08) while its unmapped holes grow to 31.6 MiB (hole_frac 0.631).
+
+Bugs found in this slice's own tooling, fixed before the recorded run (no production code touched; no production bug discovered): (1) the first window definition (address span from lowest to highest live block) charged the heap-to-mmap region distance (tens of TB on glibc legs, whose small-large blocks live in two regions) to "holes" - replaced by the allocation-VMA gap definition above, with the 64 MiB region cap applied to block gaps as well; (2) the gap metric originally could not distinguish pooled (still-mapped) gap bytes from truly unmapped holes - the unmapped-part walk was added, which is what makes finding F2 stateable; (3) the summariser printed every phase twice (its phase list was built over both legs) - fixed after the run; display only, numbers byte-identical.
+Team structure: 1 lead running all six Mythic Engineering roles SEQUENTIALLY (solo-sequential per the keeper's dispatch - no sub-agents spawned): design (patterns / phases / factor definitions), implementation (probe / runner / summariser), measurement (Z-004 process discipline, smaps_rollup per Z-006, load recorded), gate verification (standing gate GREEN on the final tree), ledger audit (merge base, queue position, commit scope), risk review (bounded runs on the shared host; retention findings stated with their design bounds, not as unbounded-growth alarms).
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T12:43:39Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 4059757
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 74%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 2.96 2.00 1.65
+=== RAW DATA (run_z053.sh output, verbatim) ===
+PROC,mimir,checker
+CKPT,mimir,checker,BASE,0,0,26,0,2008,167,0,0,0,0,0,0,0,0
+CKPT,mimir,checker,FULL,192,31457280,27,1,33700,31689,2,31512,1,2314240,2314240,57344,3096576,47168
+CKPT,mimir,checker,HOLED,96,6291456,58,32,25380,23369,33,23192,32,10567680,2314240,8310784,27996160,23936
+CKPT,mimir,checker,REFILL,192,31457280,27,1,33700,31689,2,31512,1,2314240,2314240,57344,3096576,48192
+CKPT,mimir,checker,DRAINED,0,0,89,63,6564,4553,0,0,0,0,0,0,0,0
+PROC,glibc,checker
+CKPT,glibc,checker,BASE,0,0,26,0,1980,139,0,0,0,0,0,0,0,0
+CKPT,glibc,checker,FULL,192,31457280,27,1,33276,31265,2,31240,0,0,0,0,390640,47168
+CKPT,glibc,checker,HOLED,96,6291456,26,0,8316,6305,1,6280,0,0,0,0,1520,23936
+CKPT,glibc,checker,REFILL,192,31457280,26,0,32896,30885,1,30860,0,0,0,0,3056,48192
+CKPT,glibc,checker,DRAINED,0,0,26,0,2300,289,0,0,0,0,0,0,0,0
+PROC,mimir,checker
+CKPT,mimir,checker,BASE,0,0,26,0,2008,167,0,0,0,0,0,0,0,0
+CKPT,mimir,checker,FULL,192,31457280,27,1,33700,31689,2,31512,1,2297856,2297856,40960,3080192,47168
+CKPT,mimir,checker,HOLED,96,6291456,58,32,25380,23369,33,23192,32,10551296,2297856,8294400,27979776,23936
+CKPT,mimir,checker,REFILL,192,31457280,27,1,33700,31689,2,31512,1,2297856,2297856,40960,3080192,48192
+CKPT,mimir,checker,DRAINED,0,0,87,61,6564,4553,0,0,0,0,0,0,0,0
+PROC,glibc,checker
+CKPT,glibc,checker,BASE,0,0,26,0,1984,143,0,0,0,0,0,0,0,0
+CKPT,glibc,checker,FULL,192,31457280,27,1,33280,31269,3,31260,1,2281472,2281472,24576,2672112,47168
+CKPT,glibc,checker,HOLED,96,6291456,26,0,8320,6309,1,6280,0,0,0,0,1520,23936
+CKPT,glibc,checker,REFILL,192,31457280,26,0,32900,30889,1,30860,0,0,0,0,3056,48192
+CKPT,glibc,checker,DRAINED,0,0,26,0,2304,293,0,0,0,0,0,0,0,0
+PROC,mimir,checker
+CKPT,mimir,checker,BASE,0,0,26,0,2008,167,0,0,0,0,0,0,0,0
+CKPT,mimir,checker,FULL,192,31457280,27,1,33700,31689,2,31512,1,2297856,2297856,40960,3080192,47168
+CKPT,mimir,checker,HOLED,96,6291456,58,32,25380,23369,33,23192,32,10551296,2297856,8294400,27979776,23936
+CKPT,mimir,checker,REFILL,192,31457280,27,1,33700,31689,2,31512,1,2297856,2297856,40960,3080192,48192
+CKPT,mimir,checker,DRAINED,0,0,87,61,6564,4553,0,0,0,0,0,0,0,0
+PROC,glibc,checker
+CKPT,glibc,checker,BASE,0,0,26,0,1980,139,0,0,0,0,0,0,0,0
+CKPT,glibc,checker,FULL,192,31457280,27,1,33276,31265,3,31260,1,2408448,2408448,151552,2799088,47168
+CKPT,glibc,checker,HOLED,96,6291456,26,0,8316,6305,1,6280,0,0,0,0,1520,23936
+CKPT,glibc,checker,REFILL,192,31457280,26,0,32896,30885,1,30860,0,0,0,0,3056,48192
+CKPT,glibc,checker,DRAINED,0,0,26,0,2300,289,0,0,0,0,0,0,0,0
+PROC,mimir,uniform
+CKPT,mimir,uniform,BASE,0,0,26,0,2004,163,0,0,0,0,0,0,0,0
+CKPT,mimir,uniform,FULL,256,33554432,27,1,36000,33989,2,33816,1,2265088,2265088,8192,3309568,65280
+CKPT,mimir,uniform,HOLED,128,16777216,90,64,27552,25541,65,25368,64,10780672,2265088,8523776,19951616,32768
+CKPT,mimir,uniform,REFILL,256,33554432,27,1,36000,33989,2,33816,1,2265088,2265088,8192,3309568,65280
+CKPT,mimir,uniform,DRAINED,0,0,89,63,10656,8645,0,0,0,0,0,0,0,0
+PROC,glibc,uniform
+CKPT,glibc,uniform,BASE,0,0,26,0,1980,139,0,0,0,0,0,0,0,0
+CKPT,glibc,uniform,FULL,256,33554432,27,1,35960,33949,3,33816,1,2269184,2269184,12288,3309568,65280
+CKPT,glibc,uniform,HOLED,128,16777216,153,127,19064,17053,128,16900,126,19300352,2404352,17043456,19816448,32768
+CKPT,glibc,uniform,REFILL,256,33554432,153,127,35452,33441,128,33416,126,19300352,2404352,17043456,19818496,65280
+CKPT,glibc,uniform,DRAINED,0,0,26,0,2300,289,0,0,0,0,0,0,0,0
+PROC,mimir,uniform
+CKPT,mimir,uniform,BASE,0,0,26,0,2004,163,0,0,0,0,0,0,0,0
+CKPT,mimir,uniform,FULL,256,33554432,27,1,36000,33989,2,33816,1,2355200,2355200,98304,3399680,65280
+CKPT,mimir,uniform,HOLED,128,16777216,90,64,27552,25541,65,25368,64,10870784,2355200,8613888,20041728,32768
+CKPT,mimir,uniform,REFILL,256,33554432,27,1,36000,33989,2,33816,1,2355200,2355200,98304,3399680,65280
+CKPT,mimir,uniform,DRAINED,0,0,89,63,10656,8645,0,0,0,0,0,0,0,0
+PROC,glibc,uniform
+CKPT,glibc,uniform,BASE,0,0,26,0,1976,139,0,0,0,0,0,0,0,0
+CKPT,glibc,uniform,FULL,256,33554432,27,1,35956,33949,3,33816,1,2363392,2363392,106496,3403776,65280
+CKPT,glibc,uniform,HOLED,128,16777216,153,127,19060,17053,128,16900,126,19394560,2498560,17137664,19910656,32768
+CKPT,glibc,uniform,REFILL,256,33554432,153,127,35448,33441,128,33416,126,19394560,2498560,17137664,19912704,65280
+CKPT,glibc,uniform,DRAINED,0,0,26,0,2296,289,0,0,0,0,0,0,0,0
+PROC,mimir,uniform
+CKPT,mimir,uniform,BASE,0,0,26,0,2004,163,0,0,0,0,0,0,0,0
+CKPT,mimir,uniform,FULL,256,33554432,27,1,36000,33989,2,33816,1,2342912,2342912,86016,3387392,65280
+CKPT,mimir,uniform,HOLED,128,16777216,90,64,27552,25541,65,25368,64,10858496,2342912,8601600,20029440,32768
+CKPT,mimir,uniform,REFILL,256,33554432,27,1,36000,33989,2,33816,1,2342912,2342912,86016,3387392,65280
+CKPT,mimir,uniform,DRAINED,0,0,89,63,10656,8645,0,0,0,0,0,0,0,0
+PROC,glibc,uniform
+CKPT,glibc,uniform,BASE,0,0,26,0,1984,143,0,0,0,0,0,0,0,0
+CKPT,glibc,uniform,FULL,256,33554432,27,1,35964,33953,3,33816,1,2306048,2306048,49152,3346432,65280
+CKPT,glibc,uniform,HOLED,128,16777216,153,127,19068,17057,128,16900,126,19337216,2441216,17080320,19853312,32768
+CKPT,glibc,uniform,REFILL,256,33554432,153,127,35456,33445,128,33416,126,19337216,2441216,17080320,19855360,65280
+CKPT,glibc,uniform,DRAINED,0,0,26,0,2304,293,0,0,0,0,0,0,0,0
+PROC,mimir,pinwheel
+CKPT,mimir,pinwheel,BASE,0,0,26,0,2004,162,0,0,0,0,0,0,0,0
+CKPT,mimir,pinwheel,FULL,128,51904512,27,1,53408,51396,2,51224,1,2269184,2269184,12288,2789376,30080
+CKPT,mimir,pinwheel,THIRD1,85,35110912,27,1,53408,51396,2,51224,1,2269184,2269184,12288,19562496,19716
+CKPT,mimir,pinwheel,THIRD2,42,17301504,48,22,44872,42860,23,42688,22,10481664,2269184,8224768,35753984,9774
+CKPT,mimir,pinwheel,DRAINED,0,0,69,43,27808,25796,0,0,0,0,0,0,0,0
+PROC,glibc,pinwheel
+CKPT,glibc,pinwheel,BASE,0,0,26,0,1976,138,0,0,0,0,0,0,0,0
+CKPT,glibc,pinwheel,FULL,128,51904512,27,1,53112,51103,3,51004,1,2301952,2301952,45056,2561008,30080
+CKPT,glibc,pinwheel,THIRD1,85,35110912,47,21,37156,35147,22,35028,20,15810560,1052672,15810560,16475088,19716
+CKPT,glibc,pinwheel,THIRD2,42,17301504,47,21,20172,18163,22,18044,20,31621120,1581056,31621120,32687040,9774
+CKPT,glibc,pinwheel,DRAINED,0,0,26,0,3704,1695,0,0,0,0,0,0,0,0
+PROC,mimir,pinwheel
+CKPT,mimir,pinwheel,BASE,0,0,26,0,2000,158,0,0,0,0,0,0,0,0
+CKPT,mimir,pinwheel,FULL,128,51904512,27,1,53404,51392,2,51224,1,2265088,2265088,8192,2785280,30080
+CKPT,mimir,pinwheel,THIRD1,85,35110912,27,1,53404,51392,2,51224,1,2265088,2265088,8192,19558400,19716
+CKPT,mimir,pinwheel,THIRD2,42,17301504,48,22,44868,42856,23,42688,22,10477568,2265088,8220672,35749888,9774
+CKPT,mimir,pinwheel,DRAINED,0,0,69,43,27804,25792,0,0,0,0,0,0,0,0
+PROC,glibc,pinwheel
+CKPT,glibc,pinwheel,BASE,0,0,26,0,1980,138,0,0,0,0,0,0,0,0
+CKPT,glibc,pinwheel,FULL,128,51904512,27,1,53116,51104,2,50984,0,0,0,0,259056,30080
+CKPT,glibc,pinwheel,THIRD1,85,35110912,48,22,37160,35147,23,35028,21,16338944,1052672,16338944,17003472,19716
+CKPT,glibc,pinwheel,THIRD2,42,17301504,47,21,20176,18164,22,18044,20,31621120,1581056,31621120,32687040,9774
+CKPT,glibc,pinwheel,DRAINED,0,0,26,0,3708,1696,0,0,0,0,0,0,0,0
+PROC,mimir,pinwheel
+CKPT,mimir,pinwheel,BASE,0,0,26,0,2000,158,0,0,0,0,0,0,0,0
+CKPT,mimir,pinwheel,FULL,128,51904512,27,1,53404,51392,2,51224,1,2260992,2260992,4096,2781184,30080
+CKPT,mimir,pinwheel,THIRD1,85,35110912,27,1,53404,51392,2,51224,1,2260992,2260992,4096,19554304,19716
+CKPT,mimir,pinwheel,THIRD2,42,17301504,48,22,44868,42856,23,42688,22,10473472,2260992,8216576,35745792,9774
+CKPT,mimir,pinwheel,DRAINED,0,0,68,42,27804,25792,0,0,0,0,0,0,0,0
+PROC,glibc,pinwheel
+CKPT,glibc,pinwheel,BASE,0,0,26,0,1980,138,0,0,0,0,0,0,0,0
+CKPT,glibc,pinwheel,FULL,128,51904512,27,1,53116,51103,3,51004,1,2732032,2732032,475136,2991088,30080
+CKPT,glibc,pinwheel,THIRD1,85,35110912,47,21,37160,35147,22,35028,20,15810560,1052672,15810560,16475088,19716
+CKPT,glibc,pinwheel,THIRD2,42,17301504,47,21,20176,18163,22,18044,20,31621120,1581056,31621120,32687040,9774
+CKPT,glibc,pinwheel,DRAINED,0,0,26,0,3708,1695,0,0,0,0,0,0,0,0
+PROC,mimir,churn
+CKPT,mimir,churn,BASE,0,0,26,0,2000,163,0,0,0,0,0,0,0,0
+CKPT,mimir,churn,OP0,96,58261504,27,1,59484,57477,3,57356,1,2203648,2203648,0,2646016,22048
+CKPT,mimir,churn,OP1500,96,45236224,32,6,73964,71957,6,71524,5,7925760,2101248,7925760,35397632,24048
+CKPT,mimir,churn,OP3000,96,47284224,49,23,75336,73329,22,72880,21,21667840,3149824,19128320,48947200,23356
+CKPT,mimir,churn,OP4500,96,59195392,56,30,87448,85441,27,83296,26,21508096,2236416,17231872,47579136,24160
+CKPT,mimir,churn,OP6000,96,47104000,60,34,77172,75165,30,69252,29,33787904,9494528,25653248,57569280,24494
+CKPT,mimir,churn,DRAINED,0,0,71,45,30956,28949,0,0,0,0,0,0,0,0
+PROC,glibc,churn
+CKPT,glibc,churn,BASE,0,0,26,0,1984,143,0,0,0,0,0,0,0,0
+CKPT,glibc,churn,OP0,96,58261504,27,1,59328,57317,3,57308,1,2330624,2330624,73728,2589168,22048
+CKPT,glibc,churn,OP1500,96,45236224,26,0,62480,60469,1,60440,0,0,0,0,14402880,24048
+CKPT,glibc,churn,OP3000,96,47284224,26,0,66864,64853,1,64824,0,0,0,0,15549888,23356
+CKPT,glibc,churn,OP4500,96,59195392,26,0,81220,79209,1,79180,0,0,0,0,21743424,24160
+CKPT,glibc,churn,OP6000,96,47104000,26,0,70052,68041,1,68012,0,0,0,0,20301840,24494
+CKPT,glibc,churn,DRAINED,0,0,26,0,2304,293,0,0,0,0,0,0,0,0
+PROC,mimir,churn
+CKPT,mimir,churn,BASE,0,0,26,0,2008,167,0,0,0,0,0,0,0,0
+CKPT,mimir,churn,OP0,96,58261504,27,1,59492,57481,2,57304,1,2269184,2269184,12288,2658304,22048
+CKPT,mimir,churn,OP1500,96,45236224,32,6,73972,71961,6,71524,5,7925760,2101248,7925760,35397632,24048
+CKPT,mimir,churn,OP3000,96,47284224,49,23,75344,73333,22,73012,21,21544960,3149824,19140608,48959488,23356
+CKPT,mimir,churn,OP4500,96,59195392,57,31,87456,85445,27,83244,26,21573632,2269184,17244160,47591424,24160
+CKPT,mimir,churn,OP6000,96,47104000,61,35,77180,75169,30,69252,29,33800192,9494528,25665536,57581568,24494
+CKPT,mimir,churn,DRAINED,0,0,72,46,30964,28953,0,0,0,0,0,0,0,0
+PROC,glibc,churn
+CKPT,glibc,churn,BASE,0,0,26,0,1984,143,0,0,0,0,0,0,0,0
+CKPT,glibc,churn,OP0,96,58261504,27,1,59328,57317,3,57308,1,2301952,2301952,45056,2560496,22048
+CKPT,glibc,churn,OP1500,96,45236224,26,0,62480,60469,1,60440,0,0,0,0,14402880,24048
+CKPT,glibc,churn,OP3000,96,47284224,26,0,66864,64853,1,64824,0,0,0,0,15549888,23356
+CKPT,glibc,churn,OP4500,96,59195392,26,0,81220,79209,1,79180,0,0,0,0,21743424,24160
+CKPT,glibc,churn,OP6000,96,47104000,26,0,70052,68041,1,68012,0,0,0,0,20301840,24494
+CKPT,glibc,churn,DRAINED,0,0,26,0,2304,293,0,0,0,0,0,0,0,0
+PROC,mimir,churn
+CKPT,mimir,churn,BASE,0,0,26,0,2000,159,0,0,0,0,0,0,0,0
+CKPT,mimir,churn,OP0,96,58261504,27,1,59484,57473,2,57304,1,2269184,2269184,12288,2658304,22048
+CKPT,mimir,churn,OP1500,96,45236224,32,6,73964,71953,7,71784,6,10194944,2269184,7938048,37908480,24048
+CKPT,mimir,churn,OP3000,96,47284224,49,23,75336,73325,22,73012,21,21544960,3149824,19140608,48467968,23356
+CKPT,mimir,churn,OP4500,96,59195392,58,32,87448,85437,28,83244,27,21573632,2269184,17244160,47591424,24160
+CKPT,mimir,churn,OP6000,96,47104000,61,35,77172,75161,30,69252,29,33800192,9494528,25665536,57053184,24494
+CKPT,mimir,churn,DRAINED,0,0,71,45,30956,28945,0,0,0,0,0,0,0,0
+PROC,glibc,churn
+CKPT,glibc,churn,BASE,0,0,26,0,1976,135,0,0,0,0,0,0,0,0
+CKPT,glibc,churn,OP0,96,58261504,27,1,59320,57309,3,57308,1,2347008,2347008,90112,2605552,22048
+CKPT,glibc,churn,OP1500,96,45236224,26,0,62472,60461,1,60440,0,0,0,0,14402880,24048
+CKPT,glibc,churn,OP3000,96,47284224,26,0,66856,64845,1,64824,0,0,0,0,15549888,23356
+CKPT,glibc,churn,OP4500,96,59195392,26,0,81212,79201,1,79180,0,0,0,0,21743424,24160
+CKPT,glibc,churn,OP6000,96,47104000,26,0,70044,68033,1,68012,0,0,0,0,20301840,24494
+CKPT,glibc,churn,DRAINED,0,0,26,0,2296,285,0,0,0,0,0,0,0,0
