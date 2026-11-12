@@ -1,0 +1,255 @@
+Z-044 - Fork posture proof on this host - RECORDED RUN
+STATUS: POSTURE RE-CONFIRMED AND EXTENDED ON THIS HOST
+FORK-QUIESCENT: PROVEN (Q1 single-thread, Q2 multithread)
+FORK+EXEC: PROVEN (E1 quiescent, E2 under churn)
+FORK-WHILE-BUSY: MEASURED UNSUPPORTED (B0a stages the
+mechanism deterministically; B1 counts are observations)
+L-08: CORE VERDICT UNCHANGED, EXTENDED BY CLAUSE 2
+(INC-Z044-01 SPAN STRANDING) AND AN ACCOUNTING NOTE
+PRODUCTION CODE CHANGED: NONE
+STANDING GATE: GREEN - 4988 checks / 0 failed / 77
+by-design skips (counts read from hidden_files/
+z044_gate.log)
+
+== WHAT WAS BUILT ==
+- tests/perf/probe_z044.c (sha256 e790534f72cf1488bf311
+  e6142ab2e8579503477019d60e9b287d26a26068397): one C11
+  probe, two legs from one source - mimir (links
+  build/libmimiralloc.a) and glibc (-DLEG_GLIBC,
+  same-shape context only, not parity, not part of the
+  verdict). All allocator calls go through volatile
+  function pointers; block patterns are a pure function
+  of (salt, index), so parent and child verify the same
+  bytes after fork with no shared table.
+- tests/perf/run_z044.sh (sha256 e48caa3f91547bd1fff8
+  16ebbe6593b20dfb34bf7b5d5986a6ff8208fb0f2317):
+  fails closed, fresh builds (stale outputs deleted),
+  host_truth.sh header, load + top-CPU processes at
+  start and end, source sha256 lines, mimir leg run
+  TWICE (A and B) + glibc ONCE under
+  nice -n 10 taskset -c 2-5 timeout --kill-after=5s 300,
+  ulimit -c 0, raw outputs kept in
+  hidden_files/z044_raw/, post-run orphan sweep
+  (pgrep -a -f probe_z044 must be empty - it was).
+- tests/perf/summarize_z044.py (sha256 5fafee9b4e9b4
+  0ed194a6e44e1ed4249a561b46dfdde465019e673e81a10519b):
+  fails closed on evidence completeness ONLY (every
+  expected phase line present, per-try counts exact,
+  END failures=0, churn delta > 0); tabulates busy
+  outcomes as counts; never converts to rates.
+- No Makefile change; the standing-gate delta is
+  exactly 0 by construction (git diff -- Makefile
+  empty, verified).
+
+== METHOD AND DISCIPLINE (H-006 carried forward) ==
+"Quiescent" is operational: no thread inside an
+allocator call and the global lock not held at the fork
+instant. Deadlockable shapes run ONLY in disposable
+children under a parent watchdog: poll()+waitpid
+(WNOHANG), 500 ms per staged child, then SIGKILL of the
+exact pid + reap; every child sets PR_SET_PDEATHSIG;
+children use only write()+_exit (the parent fflushes
+before every fork); the /proc/<pid>/stat state char is
+captured at kill time. "HUNG" in this record means only
+"no completion within the 500 ms window" - nothing
+stronger is claimed from any single try. Hang outcomes
+are quoted as counts, never rates (INC-H006-05).
+
+The staged phases pin the mechanism deterministically:
+the core's one global lock IS
+mimir_platform_global_lock() (src/platform/
+mimir_platform.c, a single static pthread_mutex;
+exported in libmimiralloc.a). B0a takes that very lock
+in the parent across fork(); B0b takes and releases it
+before fork(). There is no pthread_atfork anywhere in
+src/ (grep-verified at build time).
+
+== HOST AND LOAD STATE ==
+purpleraider (device homelink-775910), x86_64, AMD
+Ryzen AI Max+ 395, 32 CPUs, kernel 7.3.0-10-generic,
+Ubuntu 26.10, glibc 2.44. Run at 2026-11-12T05:44:12
+-05:00 on team-02 worktree HEAD bfa95e5 (seat main
+04427c5 merged in). Load average 0.65 1.01 1.51 at
+start, 0.77 1.00 1.49 at end. The host is SHARED:
+another team's test_z043_free_storm process was the
+top CPU consumer (126%) when the run started; the
+Aesir/Lifthrasir forges and the Tensile lab also share
+this machine. All numbers below were measured under
+that shared load and are recorded with it.
+
+== RESULTS (mimir runs A and B identical in every
+count; glibc is context only) ==
+Q1 quiescent single-thread fork: PASS (A and B).
+  Parent primed its TLS bins (16 cached), held patterned
+  64/128/2048/4096 B blocks. Child inherited 14 cached
+  blocks, its first small alloc was a bin HIT, it freed
+  its own small+large and one inherited block, verified
+  all patterns, _exit(0). Child end stats EXACT:
+  live_small=1 live_mappings=2 (s1, l1, l2 still live
+  in the child copy, as constructed). Parent afterwards:
+  patterns intact, stats counters unmoved by the child.
+Q2 quiescent multithread fork: PASS (A and B).
+  3 workers parked OUTSIDE allocator calls, each holding
+  4x64 B + 2x128 B patterned blocks (18 blocks) + 1 held
+  block in main = 19 live small. Child verified every
+  pattern, allocated/freed its own blocks, drained its
+  own (main-thread) bins, freed ALL 19 inherited blocks
+  including the vanished workers', exited 0. Parent then
+  freed everything itself; its settled counters read
+  exactly live_small=0 live_mappings=0.
+  Stranding (INC-Z044-01): child retained_before=2,
+  drain_released=0, retained_after=2 in BOTH runs -
+  after the child freed every inherited live block and
+  drained, 2 spans stayed retained because their binned
+  tally belongs to worker threads that do not exist in
+  the child. Bounded by the vanished threads' binned
+  blocks; no pattern corruption, no crash.
+  Accounting note: the child read live_small_before=16,
+  not 19, and live_small_after=2^64-1 (-1) after freeing
+  all 19. Stats counters reflect FLUSHED accounting
+  only; the parked workers' pending Z-029 transitions
+  (one net per worker: -3 at entry) never flush in the
+  child, and the residual -1 is the same lazy-flush
+  visibility effect at exit. Contrast Q1, where the
+  single-thread child's counters are exact, and the
+  parent, whose settled counters are exact. This is an
+  accounting-visibility property of the child copy,
+  not corruption: every free completed, patterns held.
+E1 fork+exec quiescent: 16/16 PASS (A, B, glibc).
+B0b staged control (lock taken and RELEASED before
+  fork): 3/3 BOTH_OK, PASS - the forked child allocates
+  small (bin hit) and large normally when the lock is
+  not held at the fork instant.
+B0a staged hazard (parent holds the core's own global
+  lock across fork): 3/3 SMALL_OK_LARGE_HUNG in both
+  runs - every child completed its small alloc from the
+  inherited TLS bin WITHOUT the lock (hit=H), then did
+  not complete its large (locked-path) alloc within
+  500 ms; state at kill S (sleeping, futex). This is
+  the H-006 mechanism, staged deterministically on the
+  current Z-029/Z-030 core.
+E2 fork+exec under churn (4 churner threads; child only
+  execve): 32/32 PASS (A, B, glibc). Churn progress
+  proven by iteration-counter delta (A 383728, B 443872
+  iterations per 100 ms sample; glibc leg 61003762,
+  context only).
+B1 fork-while-busy (4 churners hammering; child does
+  small alloc, then large alloc): mimir A 24 tries -
+  both_ok=0 small_ok_large_hung=24 small_hung=0
+  crash=0 anomaly=0, hit evidence 24/24; mimir B
+  identical counts (24/24 small_ok_large_hung). Every
+  busy child got its small block from the inherited bin
+  (no lock) and did not complete the large alloc within
+  500 ms (state S at kill). Under this churn the lock's
+  duty cycle is effectively saturated, so 24/24 is the
+  honest observation for THIS churn shape - it is a
+  count, not a rate and not a probability. glibc, same
+  shape: 24/24 BOTH_OK (context: a different allocator
+  with no single global lock on this path; not parity,
+  not part of the verdict).
+B2 busy control (churners running; child _exit(0)
+  immediately, no allocator call, no exec): 8/8 PASS
+  (A, B, glibc) - fork itself is never the problem.
+
+== THE BOUNDARY - L-08 AS EXTENDED BY THIS RUN ==
+POSTURE RE-CONFIRMED AND EXTENDED. The L-08 core is
+unchanged: fork is supported ONLY (1) quiescent and
+(2) fork+exec promptly; fork-while-busy is unsupported.
+Clause 1 (mutex hazard, INC-Z044-02 = H-006 /
+INC-H006-01 re-measured on the current core): if the
+core's global lock is held at the fork instant - by any
+thread, including one that will not exist in the
+child - the child's first locked-path allocator call
+does not complete (B0a stages this deterministically,
+3/3 in both runs; B1 observes it 24/24 under saturated
+churn in both runs). New since H-006: the Z-029 TLS bin
+hit path does NOT take the lock, so a busy child whose
+bins are primed completes small allocs and still hangs
+on the first locked-path call - "the small one worked"
+is not evidence of safety.
+Clause 2 (span stranding, INC-Z044-01, NEW in Z-044):
+in a multithread-quiescent fork, spans whose binned
+tally belongs to threads that do not exist in the child
+cannot be released in the child even after every
+inherited live block is freed and the child's own bins
+are drained (Q2: 2 spans stranded of the workers'
+spans, drain_released=0, in both runs). The child's
+memory floor is bounded below by those spans for the
+child's whole life. No corruption was observed: the
+integrity claim is scoped to the checks performed
+(pattern verification of every inherited block, all
+frees completing, clean exits).
+Accounting note (same root as Clause 2's visibility):
+the child's stats counters inherit the flushed view;
+vanished threads' unflushed pending transitions make
+the child's counters inexact by small bounded amounts
+(Q2: -3 at entry, -1 residual). The parent is wholly
+unaffected (settled 0/0).
+Practical rule, unchanged in shape, sharper in detail:
+a forked child of a mimir process may only exec or
+_exit without calling any allocator entry point, unless
+the fork was quiescent - and a quiescent multithread
+child that allocates must tolerate stranded spans and
+inexact counters. A BOTH_OK busy child (none occurred
+for mimir in this run; 24/24 for glibc) would mean only
+"no hang observed in that child within the window" -
+not support, not a fix, not safety.
+
+== INCIDENTS ==
+INC-Z044-01 (NEW): span stranding in multithread
+  quiescent fork children, Clause 2 above. Severity:
+  bounded memory retention in the child only; parent
+  unaffected. Disposition: recorded as an L-08
+  extension; any fix (e.g. an atfork prepare/parent/
+  child discipline or a child-side tally reset) is a
+  design change beyond this proof slice and is entered
+  as immediate next work in CAMPAIGN_STATE.md.
+INC-Z044-02: the H-006 global-mutex fork hazard
+  (INC-H006-01) re-measured and staged on the current
+  core; behaviour unchanged in kind, refined in detail
+  by the lock-free TLS hit path. No new defect.
+
+== STANDING GATE ==
+scripts/z13/run_gate.sh: GREEN. GATE COUNTS:
+checks=4988 failed=0 skips=77 (baseline held exactly;
+delta 0 - this slice changes no production code and
+no Makefile). Log: hidden_files/z044_gate.log. Run
+log: hidden_files/z044_run.log; raw probe outputs:
+hidden_files/z044_raw/.
+
+== RUNNER SUMMARY (verbatim from
+hidden_files/z044_run.log; per-try B1 lines in the
+raw outputs are uniform and tabulated here) ==
+== Z-044 SUMMARY (counts only; no rates) ==
+mimir A Q1: PASS
+mimir A Q2: PASS
+mimir A Q1 child: inherited-bin cached=14 small-alloc hit=1
+mimir A Q1 child end stats: live_small=1 live_mappings=2 (expect 1/2: s1,l1,l2 still live in the child copy)
+mimir A Q2 child: live_small 16 -> 18446744073709551615 after freeing every inherited block; retained_before_drain=2 drain_released=0 retained_after_drain=2 (retained_after > 0 = spans stranded by vanished threads' binned tally, INC-Z044-01)
+mimir A Q2 parent end stats: live_small=0 live_mappings=0 (expect 0/0: parent freed everything itself)
+mimir A E1: 16/16 PASS
+mimir A E2: 32/32 PASS
+mimir A B2: 8/8 PASS
+mimir A B0b (lock released before fork): 3/3 BOTH_OK PASS
+mimir A B0a (lock provably HELD at fork): counts,both_ok=0 small_ok_large_hung=3 small_hung=0 crash=0 anomaly=0 hit_evidence=3 tries=3
+mimir A B1 (fork-while-busy, 500 ms window): counts,both_ok=0 small_ok_large_hung=24 small_hung=0 crash=0 anomaly=0 hit_evidence=24 tries=24
+mimir A churn progress during busy window: 383728 iterations per 100 ms sample
+mimir B Q1: PASS
+mimir B Q2: PASS
+mimir B Q1 child: inherited-bin cached=14 small-alloc hit=1
+mimir B Q1 child end stats: live_small=1 live_mappings=2 (expect 1/2: s1,l1,l2 still live in the child copy)
+mimir B Q2 child: live_small 16 -> 18446744073709551615 after freeing every inherited block; retained_before_drain=2 drain_released=0 retained_after_drain=2 (retained_after > 0 = spans stranded by vanished threads' binned tally, INC-Z044-01)
+mimir B Q2 parent end stats: live_small=0 live_mappings=0 (expect 0/0: parent freed everything itself)
+mimir B E1: 16/16 PASS
+mimir B E2: 32/32 PASS
+mimir B B2: 8/8 PASS
+mimir B B0b (lock released before fork): 3/3 BOTH_OK PASS
+mimir B B0a (lock provably HELD at fork): counts,both_ok=0 small_ok_large_hung=3 small_hung=0 crash=0 anomaly=0 hit_evidence=3 tries=3
+mimir B B1 (fork-while-busy, 500 ms window): counts,both_ok=0 small_ok_large_hung=24 small_hung=0 crash=0 anomaly=0 hit_evidence=24 tries=24
+mimir B churn progress during busy window: 443872 iterations per 100 ms sample
+glibc E1: 16/16 PASS (context leg)
+glibc E2: 32/32 PASS (context leg)
+glibc B2: 8/8 PASS (context leg)
+glibc B1 (same shape, context only): counts,both_ok=24 small_ok_large_hung=0 small_hung=0 crash=0 anomaly=0 hit_evidence=0 tries=24
+SUMMARY: evidence complete; all EXECUTED proof phases PASS in both mimir runs; busy outcomes tabulated as counts.
+orphan sweep: no probe processes remain
