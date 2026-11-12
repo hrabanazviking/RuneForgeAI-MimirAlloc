@@ -548,6 +548,13 @@ _Alignas(64) static uint64_t mimir_stats_drain_lock_failures; /* Z-065: own 64 B
 _Alignas(64) static uint64_t mimir_stats_trim_lock_failures; /* Z-065: own 64 B line - pre-lock atomic (Z-016 rule) */
 _Alignas(64) static uint64_t mimir_stats_free_lock_failures; /* Z-065: own 64 B line - pre-lock atomic (Z-016 rule) */
 static uint64_t mimir_stats_cross_thread_frees;
+/* Z-076: small-path cross-thread half (INC-J002-01) and
+ * the unrecorded residual. Both move only under the one
+ * global lock, at the mimir_core_free courses named in
+ * mimir_core.h; the snapshot sums the small half into
+ * cross_thread_frees and reports both verbatim. */
+static uint64_t mimir_stats_cross_thread_small;
+static uint64_t mimir_stats_small_unrecorded;
 
 static void mimir_stats_peak_update_locked(void);
 
@@ -6361,11 +6368,18 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
         &mimir_stats_trim_lock_failures, __ATOMIC_RELAXED);
     out->free_lock_failures = __atomic_load_n(
         &mimir_stats_free_lock_failures, __ATOMIC_RELAXED);
-    out->cross_thread_frees = mimir_stats_cross_thread_frees;
+    out->cross_thread_frees = mimir_stats_cross_thread_frees +
+        mimir_stats_cross_thread_small; /* Z-076: both paths */
+    out->cross_thread_small_frees =
+        mimir_stats_cross_thread_small;
+    out->small_frees_unrecorded = mimir_stats_small_unrecorded;
+    out->live_requested_bytes = 0;     /* PRICED: INC-J002-05 */
+    out->live_requested_measured = 0;  /* PRICED: INC-J002-05 */
     out->unlock_failures = __atomic_load_n(
         &mimir_stats_unlock_failures, __ATOMIC_RELAXED);
-    out->lock_contention = 0;          /* ABSENT: INC-J002-02 */
-    out->lock_contention_measured = 0; /* ABSENT: INC-J002-02 */
+    out->lock_contention =
+        mimir_platform_lock_contention(); /* Z-076: INC-J002-02 */
+    out->lock_contention_measured = 1;    /* Z-076: INC-J002-02 */
     out->live_mappings = (uint64_t)mimir_live_mappings;
     out->live_spans = (uint64_t)mimir_live_spans;
     out->live_small_objects = (uint64_t)mimir_live_small_objects;
@@ -6435,6 +6449,20 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
  * tests/core/mimir_stats_j002.h's inclusion of
  * src/core/mimir_core.h; bound local in the shared library
  * (nm -D stays exactly 4). */
+/* Z-076: lock-free reads of the two small-free tallies
+ * (single atomic loads, the Z-064 getter pattern). */
+uint64_t mimir_core_cross_thread_small_frees(void)
+{
+    return __atomic_load_n(&mimir_stats_cross_thread_small,
+                           __ATOMIC_RELAXED);
+}
+
+uint64_t mimir_core_small_frees_unrecorded(void)
+{
+    return __atomic_load_n(&mimir_stats_small_unrecorded,
+                           __ATOMIC_RELAXED);
+}
+
 uint64_t mimir_core_drain_lock_failures(void)
 {
     return __atomic_load_n(&mimir_stats_drain_lock_failures,
@@ -7556,6 +7584,12 @@ void mimir_core_free(void *ptr)
                     } else {
                         small_free_locked(ptr);
                     }
+                    /* Z-076 (INC-J002-01): this free's
+                     * recorded owner is another thread and
+                     * the block was a live span object --
+                     * the small-path cross-thread event,
+                     * counted exactly once, under the lock. */
+                    mimir_stats_cross_thread_small += 1;
                     tls_owner_clear(ptr);
                     (void)core_global_unlock();
                     z067_release_report(MIMIR_DIAG_OP_FREE);
@@ -7593,6 +7627,9 @@ void mimir_core_free(void *ptr)
                     } else {
                         small_free_locked(ptr);
                     }
+                    /* Z-076 (INC-J002-01): as the
+                     * non-shard course above. */
+                    mimir_stats_cross_thread_small += 1;
                     tls_owner_clear(ptr);
                     (void)core_shard_unlock(fshard);
                     z067_release_report(MIMIR_DIAG_OP_FREE);
@@ -7651,6 +7688,11 @@ void mimir_core_free(void *ptr)
 #ifndef MIMIR_LOCK_SHARD
         if (find_span_for_free_locked(ptr) != NULL) {
             small_free_locked(ptr);
+            /* Z-076 (INC-J002-01 residual): no owner
+             * record classified this free, so its thread
+             * relation is unknown -- counted as unrecorded,
+             * never as cross-thread. */
+            mimir_stats_small_unrecorded += 1;
 #ifndef MIMIR_DEBUG
             /* Z-029 fallback accounting: a small block
              * with no owner record (table pressure; slice
@@ -7676,6 +7718,9 @@ void mimir_core_free(void *ptr)
                 mimir_shard_hint = sh;
                 if (find_span_for_free_locked(ptr) != NULL) {
                     small_free_locked(ptr);
+                    /* Z-076: unrecorded residual, as the
+                     * non-shard course above. */
+                    mimir_stats_small_unrecorded += 1;
                     tls.remote_frees_out += 1;
                     found = 1;
                 }
@@ -7702,8 +7747,9 @@ void mimir_core_free(void *ptr)
      * bookkeeping still describes actual memory
      * (Invariant 2), and this call simply returns with the
      * block still LIVE. */
-    {   /* J-002 cross_thread_frees (PARTIAL, INC-J002-01):
-         * mapping-path blocks only -- the reserve page
+    {   /* J-002 cross_thread_frees, mapping half (the
+         * small half is counted at the Z-076 courses above;
+         * INC-J002-01) -- the reserve page
          * past the descriptor recorded the allocating
          * thread at publication; the realloc transfer retire does NOT
          * pass through here and is never counted as a free. */

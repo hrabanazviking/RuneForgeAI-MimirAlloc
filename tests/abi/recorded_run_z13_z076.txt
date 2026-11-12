@@ -1,0 +1,138 @@
+Z-076 -- Public statistics, coverage completed (Wave 9)
+Roadmap gate: stats API tests green; per-counter disposition table.
+Slice doc: docs/Z13_PUBLIC_STATISTICS.md (design, closures,
+disposition table S3, INC-J002-05 pricing S4, test-j002
+reconciliation S6). Decision: docs/DECISION_LEDGER.md D-012.
+
+SURFACE: include/mimir_alloc.h gains struct mimir_stats_v1
+(versioned: struct_version/struct_size leading pair,
+MIMIR_STATS_VERSION 1) and mimir_stats_snapshot; the .so
+export list is exactly 7 on this base (Z-075 banks ahead of
+Z-076 and takes it to 8, composed in slice order at banking).
+
+COVERAGE: INC-J002-01 CLOSED for recorded blocks (Z-029
+owner record classifies small frees; the unrecorded residual
+is counted separately, never folded in). INC-J002-02 CLOSED
+(L6 trylock probe counts acquisitions that found the lock
+held; measured 1). INC-J002-05 PRICED (explicit 0 /
+measured-0 pair carried in the struct; prices in slice doc S4).
+
+LOAD STATE: purpleraider quiet window (loadavg about 0.1-0.5
+across the run, no cross-campaign benchmark active); pricing
+microbench numbers in the slice doc are this-machine
+measurements taken in the same window, not portable baselines.
+
+FILES (this slice's commit):
+  docs/Z13_PUBLIC_STATISTICS.md (new)
+  docs/DECISION_LEDGER.md (D-012 row + section)
+  include/mimir_alloc.h (public v1 struct + entry point)
+  src/api/mimir_alloc.c (L1 forwarder + audit counter)
+  src/api/mimir_alloc.map (+mimir_stats_snapshot export)
+  src/core/mimir_core.c (small-free tallies, snapshot wiring)
+  src/core/mimir_core.h (struct appends in slice order, getters)
+  src/platform/mimir_platform.c (trylock probe + contention tally)
+  src/platform/mimir_platform.h (tally declaration)
+  tests/abi/mimir_audit_e005.h (+stats audit declaration)
+  tests/abi/test_z076.c (new, static legs)
+  tests/abi/test_z076_dyn.c (new, .so consumer)
+  tests/abi/test_z076_cpp.cpp (new, C++ consumer)
+  tests/abi/header_only_z076.c (new, compile-only)
+  tests/abi/header_only_z076.cpp (new, compile-only)
+  tests/abi/run_z076.sh (new, this runner)
+  tests/core/test_j002.c (ABSENT/PARTIAL assertions updated
+    to the Z-076 semantics; see slice doc S6)
+  Makefile (test-z076 standalone block)
+  tests/abi/recorded_run_z13_z076.txt (this file)
+CAMPAIGN_STATE.md is never committed.
+
+=== ABI RUN (tests/abi/run_z076.sh, verbatim) ===
+=== Z-076 ABI recorded run ===
+date_utc: 2026-11-12T21:17:07Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: 6f70c57f009f50c3bedc15bc07a4a63754a44c07
+branch: yrsa/mimiralloc-team-04
+loadavg: 0.12 0.36 0.48 1/1212 1874407
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + z076 consumers (log hidden_files/z076_build.log)
+=== S2 shared library exports (nm -D) - exactly the 7 public symbols ===
+00000000000063a0 T mimir_aligned_alloc
+0000000000005790 T mimir_calloc
+0000000000004e60 T mimir_free
+0000000000004e40 T mimir_malloc
+00000000000063c0 T mimir_posix_memalign
+0000000000005920 T mimir_realloc
+0000000000006440 T mimir_stats_snapshot
+defined dynamic symbol count: 7
+  [ok] count == 7
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_stats_snapshot
+=== S3 absence proofs - no internal symbol is exported ===
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+=== S4 consumers bind to the .so (DT_NEEDED + undefined symbols) ===
+-- test_z076_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z076_dyn DT_NEEDED names libmimiralloc.so
+                 U mimir_stats_snapshot
+  [ok] test_z076_dyn references mimir_stats_snapshot as undefined (U)
+  [ok] test_z076_dyn does not define mimir_stats_snapshot (not statically absorbed)
+-- test_z076_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z076_cpp DT_NEEDED names libmimiralloc.so
+                 U mimir_stats_snapshot
+  [ok] test_z076_cpp references mimir_stats_snapshot as undefined (U)
+  [ok] test_z076_cpp does not define mimir_stats_snapshot (not statically absorbed)
+-- C++ consumer object: unmangled reference --
+                 U mimir_stats_snapshot
+  [ok] test_z076_cpp.o undefined reference is unmangled (extern C guards cover the new declaration)
+=== S5 header-only translation units (compile-only) ===
+-rw-r--r-- 1 volmarr volmarr 3728 Nov 12 16:17 build/header_only_z076_c.o
+-rw-r--r-- 1 volmarr volmarr 1392 Nov 12 16:17 build/header_only_z076_cpp.o
+  [ok] header-only C and C++ objects built (header self-contained, exact prototype)
+=== S6 static statistics test ===
+Z-076 public statistics test (static link)
+Z076 STATIC: 181 checks, 0 failed
+RESULT: PASS
+  [ok] test_z076 exit 0
+=== S7 dynamic C consumer ===
+Z-076 dynamic consumer (libmimiralloc.so only)
+Z076 DYN: 22 checks, 0 failed
+RESULT: PASS
+  [ok] test_z076_dyn exit 0
+=== S8 C++ consumer ===
+Z-076 C++ consumer (libmimiralloc.so only)
+Z076 CPP: 8 checks, 0 failed
+RESULT: PASS
+  [ok] test_z076_cpp exit 0
+=== S9 neighbour suites ===
+  [ok] make test-z074 still passes (log hidden_files/z076_test_z074.log)
+  [ok] make test-z065 still passes (log hidden_files/z076_test_z065.log)
+  [ok] make test-z064 still passes (log hidden_files/z076_test_z064.log)
+-- test-j002 (internal snapshot proof; PRE-EXISTING failures, see slice doc) --
+checks: 550, failures: 113
+RESULT: FAIL
+j002 status recorded verbatim above: 113 failures at the
+Z-076 base (480459e) and 113 after this slice, with the
+failure SET identical after the Z-076 semantic updates
+to the ABSENT/PARTIAL assertions (docs/Z13_PUBLIC_STATISTICS.md S6).
+=== Z-076 ABI RUN RESULT: PASS ===
+
+=== Z1 standing correctness gate (final tree) ===
+# GATE COUNTS: checks=4988 failed=0 skips=77
+# GATE RESULT: GREEN
+gate log: hidden_files/z076_gate_final.log
+GATE RESULT: GREEN (gate script exit 0)
+
+=== Z2 variant compiles (patched core, -Werror) ===
+MIMIR_LOCK_SHARD OK; MIMIR_DEBUG OK; MIMIR_ARENA_CCD OK;
+MIMIR_LOCK_HIST OK; MIMIR_OOL_META OK; platform shard OK.
+Static test repeated 5x: PASS every run (181/0).

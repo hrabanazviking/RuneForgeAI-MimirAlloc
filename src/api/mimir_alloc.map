@@ -33,6 +33,7 @@
     mimir_aligned_alloc;
     mimir_posix_memalign;
     mimir_usable_size;
+    mimir_stats_snapshot;
   local:
     *;
 };

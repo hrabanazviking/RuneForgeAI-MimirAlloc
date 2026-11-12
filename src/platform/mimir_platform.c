@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <errno.h>
 #include <pthread.h>
 #ifdef MIMIR_ARENA_CCD
 #include <sched.h>
@@ -188,9 +189,34 @@ int mimir_platform_map_grow(void *base, size_t old_length,
  */
 static pthread_mutex_t mimir_global_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* Z-076 (INC-J002-02): contention tally for the probe in
+ * mimir_platform_global_lock below -- incremented ONLY on
+ * the contended path (an acquisition that found the mutex
+ * held), so an uncontended acquisition pays one trylock
+ * and no atomic traffic. Own cache line (the Z-016 rule),
+ * relaxed atomics (the E-005 / Z-039 discipline). */
+_Alignas(64) static uint64_t mimir_lock_contention;
+
+uint64_t mimir_platform_lock_contention(void)
+{
+    return __atomic_load_n(&mimir_lock_contention,
+                           __ATOMIC_RELAXED);
+}
+
 int mimir_platform_global_lock(void)
 {
-    if (pthread_mutex_lock(&mimir_global_lock) != 0) {
+    int rc = pthread_mutex_trylock(&mimir_global_lock);
+
+    if (rc == EBUSY) {
+        /* Z-076: this acquisition found the lock held by
+         * another thread -- the one truthful contention
+         * event this layer can observe. Count it, then
+         * block exactly as before. */
+        __atomic_fetch_add(&mimir_lock_contention, 1ULL,
+                           __ATOMIC_RELAXED);
+        rc = pthread_mutex_lock(&mimir_global_lock);
+    }
+    if (rc != 0) {
         return MIMIR_PLATFORM_ERR_LOCK;
     }
     return MIMIR_PLATFORM_OK;

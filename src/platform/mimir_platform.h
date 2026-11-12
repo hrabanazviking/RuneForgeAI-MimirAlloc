@@ -34,6 +34,7 @@
 #define MIMIR_PLATFORM_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 /* Status codes returned by every function in this interface. */
 enum mimir_platform_status {
@@ -132,6 +133,22 @@ int mimir_platform_map_grow(void *base, size_t old_length,
  */
 int mimir_platform_global_lock(void);
 int mimir_platform_global_unlock(void);
+
+/*
+ * Z-076 (INC-J002-02 closure): the contention tally of the
+ * one global lock. mimir_platform_global_lock probes with
+ * a trylock first; an acquisition that finds the mutex
+ * already held increments this tally (a single relaxed
+ * atomic add, on the contended path only) and then takes
+ * the lock by the ordinary blocking call, so the return
+ * contract above is unchanged in every case. The tally
+ * therefore counts exactly the acquisitions that arrived
+ * while another thread held the lock -- never a duration,
+ * never a fabricated figure. The counting precedent in
+ * this layer is the Z-039 shard acquisition counters
+ * below. Lock-free read: a single atomic load.
+ */
+uint64_t mimir_platform_lock_contention(void);
 
 #ifdef MIMIR_LOCK_SHARD
 /*

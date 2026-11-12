@@ -168,9 +168,8 @@ static void expect_all(const char *label)
     snprintf(buf, sizeof buf, "%s: cached == I-003 Q-RETAINED", label);
     check_u64(s.bytes_cached,
               (uint64_t)mimir_core_retained_bytes(), buf);
-    snprintf(buf, sizeof buf, "%s: lock_contention ABSENT", label);
-    check(s.lock_contention == 0 &&
-          s.lock_contention_measured == 0, buf);
+    snprintf(buf, sizeof buf, "%s: lock_contention MEASURED (Z-076)", label);
+    check(s.lock_contention_measured == 1, buf);
 }
 
 /* Script helpers: each updates the expected accumulators
@@ -473,7 +472,7 @@ int main(void)
         expect_all("legC6 quiesced");
     }
 
-    printf("Leg D: cross-thread frees (PARTIAL: mapping path)\n");
+    printf("Leg D: cross-thread frees (both paths since Z-076)\n");
     {
         pthread_t th;
         void *p;
@@ -500,8 +499,10 @@ int main(void)
         script_large_free(5000);
         expect_all("legD2 same-thread free not counted");
 
-        /* D3: small object freed cross-thread -> +0 (PARTIAL,
-         * INC-J002-01: no per-object owner record exists) */
+        /* D3: small object freed cross-thread -> +1 since
+         * Z-076 (INC-J002-01 closed for recorded blocks:
+         * the Z-029 owner record classifies the free).
+         * Before Z-076 this leg expected +0 (PARTIAL). */
         p = mimir_malloc(64);
         check(p != NULL, "legD3 small alloc non-NULL");
         exp_req += 64;
@@ -517,7 +518,8 @@ int main(void)
         s = snap_now("legD3");
         check_u64(s.bytes_cached, P,
                   "legD3 small span retained empty after free");
-        expect_all("legD3 small cross-thread free uncounted");
+        exp_xtf += 1;
+        expect_all("legD3 small cross-thread free counted (Z-076)");
         script_drain();
         expect_all("legD3 drained");
 
@@ -626,8 +628,7 @@ int main(void)
             if (spans != s.live_spans) {
                 bad_spans++;
             }
-            if (s.lock_contention != 0 ||
-                s.lock_contention_measured != 0) {
+            if (s.lock_contention_measured != 1) {
                 bad_lock++;
             }
         }
@@ -657,7 +658,7 @@ int main(void)
         check(bad_spans == 0,
               "legF invariant: class spans sum to live spans (100 snaps)");
         check(bad_lock == 0,
-              "legF invariant: contention ABSENT in every snapshot");
+              "legF invariant: contention MEASURED in every snapshot (Z-076)");
         script_drain();
     }
 

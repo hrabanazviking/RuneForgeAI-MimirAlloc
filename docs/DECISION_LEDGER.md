@@ -53,6 +53,7 @@ leaves open. Statuses in this ledger mean:
 | D-010 | Z13 silent courses (D-02): COUNTER chosen over sentinel for drain/trim/free lock-failure outcomes | Adopted | Z13 roadmap Z-065; defect register D-02 (INC-M002-02) | Z-065 (settler) |
 | D-011 | Z13 diagnostics emission gate (L-07): the opt-in gate stands as the permanent posture; INC-J007-01 discharged | Adopted | Z13 roadmap Z-071; INC-J007-01 (docs/PHASE_10_DIAGNOSTICS.md S5) | Z-071 (settler) |
 | D-012 | Z13 usable size: namespaced mimir_usable_size taken (malloc_usable_size shape NOT declared/exported); exact per-class semantics defined for this target (V-05) | Adopted | Z13 roadmap Z-075; contracts.md S2.9 (MA-COND-USABLE-01..04) | Z-075 (settler) |
+| D-012 | Z13 public statistics (L-04): mimir_stats_snapshot + versioned struct mimir_stats_v1; INC-J002-01 and INC-J002-02 CLOSED, INC-J002-05 PRICED | Adopted | Z13 roadmap Z-076; INC-J002-01/-02/-05; docs/Z13_PUBLIC_STATISTICS.md | Z-076 (settler) |
 
 ---
 
@@ -499,6 +500,63 @@ leaves open. Statuses in this ledger mean:
   case and exact values everywhere a closed form
   exists.
 - **Supersedes:** None. **Status of entry:** Current.
+## D-012 - Z13 public statistics at Z-076: versioned promotion, two gaps closed, one priced
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice
+  Z-076 (Wave 9), which requires the J-002 internal
+  snapshot promoted to a public versioned struct and the
+  L-04 gaps (INC-J002-01, INC-J002-02, INC-J002-05)
+  closed per counter or re-documented as priced; the
+  items themselves are docs/PHASE_10_STATISTICS.md S6
+  and limitation L-04 in
+  docs/LIMITATIONS_AND_KNOWN_DEFECTS.md.
+- **Decision:** (1) Naming and shape: the public entry
+  point is mimir_stats_snapshot and its struct is
+  struct mimir_stats_v1 in include/mimir_alloc.h,
+  versioned by a leading struct_version / struct_size
+  pair (MIMIR_STATS_VERSION 1). Future versions APPEND
+  fields and bump the version; the v1 entry point always
+  writes exactly the v1 layout. The L1 forwarder copies
+  the internal locked snapshot field by field (never a
+  cross-boundary memcpy). (2) INC-J002-01 CLOSED for
+  recorded blocks: the Z-029 per-object owner record
+  classifies small frees; cross_thread_frees is the sum
+  over both paths, cross_thread_small_frees is the small
+  half, and small frees served with no owner record are
+  counted as small_frees_unrecorded (thread relation
+  unknown), never folded in. (3) INC-J002-02 CLOSED:
+  the L6 global lock probes with a trylock and counts
+  acquisitions that found the lock already held;
+  lock_contention is that count (events, never a
+  duration) and lock_contention_measured is 1; measured
+  probe price about +2 to +3 ns per uncontended
+  acquisition on purpleraider. (4) INC-J002-05 PRICED,
+  not adopted: live requested bytes stay the explicit
+  0 / measured-0 pair (live_requested_bytes /
+  live_requested_measured) in the struct; the three
+  closure roads are priced in docs/Z13_PUBLIC_STATISTICS.md
+  S4 (inline header +50.0% at the 16 B class; owner-table
+  coverage capped at 65536 blocks against unbounded live
+  small objects, with MIMIR_DEBUG bypassing the table, so
+  a running counter would drift; snapshot derivation
+  holds the lock at least the measured 22-23 us table
+  walk and stays inexact). Re-open when a per-object
+  record exists for another reason.
+- **Evidence:** docs/Z13_PUBLIC_STATISTICS.md;
+  tests/abi/recorded_run_z13_z076.txt (make test-z076:
+  static 181/0, dyn 22/0, cpp 8/0; exports exactly 7 on
+  the Z-074 base, 8 once Z-075 banks ahead of this
+  slice), with the standing gate green (4988/0/77) on
+  the final tree. The test-j002 reconciliation is
+  recorded in the slice doc S6: 113 failures pre-existing
+  at the base and after, zero attributable to Z-076.
+- **Supersedes:** the PARTIAL grading of
+  cross_thread_frees (INC-J002-01) and the ABSENT
+  grading of lock_contention (INC-J002-02) in
+  docs/PHASE_10_STATISTICS.md S2/S6, and the
+  internal-only half of limitation L-04.
+  **Status of entry:** Current.
 
 ---
 

@@ -19,6 +19,10 @@
  * else is declared: no standard-name malloc/free
  * replacement, no statistics, trim, or
  * reallocarray entry point. Absent symbols are the
+ * replacement, no usable-size, trim, or reallocarray
+ * entry point -- plus, from Z-076 (Wave 9), the public
+ * statistics entry point mimir_stats_snapshot below,
+ * which promotes the J-002 internal snapshot. Absent symbols are the
  * documented unsupported behaviour for those facilities
  * (B-008 S6.1: not present - absence at link time, never a
  * runtime refusal and never a silent fallback to another
@@ -133,6 +137,7 @@
 #define MIMIR_ALLOC_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -248,6 +253,74 @@ int mimir_posix_memalign(void **memptr, size_t alignment,
  * the NULL answer, by design -- a live block's usable
  * extent is never 0. */
 size_t mimir_usable_size(const void *ptr);
+/* Z-076: public statistics (the J-002 internal snapshot
+ * promoted; docs/Z13_PUBLIC_STATISTICS.md has the full
+ * per-counter disposition table). The struct is VERSIONED:
+ * struct_version is MIMIR_STATS_VERSION (1) and
+ * struct_size is sizeof(struct mimir_stats_v1) as written
+ * by this entry point; future versions APPEND fields and
+ * bump the version, and this v1 entry point always writes
+ * exactly the v1 layout below, so a v1 caller is never
+ * overrun. Field meanings are the J-002 definitions
+ * (docs/PHASE_10_STATISTICS.md S2) carried unchanged,
+ * with the Z-076 dispositions: cross_thread_frees covers
+ * both paths for recorded blocks (its small half is
+ * cross_thread_small_frees; small frees with no owner
+ * record are counted honestly as small_frees_unrecorded,
+ * never folded in); lock_contention counts central-lock
+ * acquisitions that found the lock already held and
+ * lock_contention_measured is 1; live_requested_bytes is
+ * a PRICED gap (INC-J002-05): live_requested_measured is
+ * 0 and the value is 0 -- no truthful value exists while
+ * small objects carry no per-object requested-size
+ * record. mimir_stats_snapshot returns 0 on success and
+ * -1 (with *out untouched) when out is NULL or the
+ * snapshot lock cannot be taken. By analogy under U-03,
+ * like every entry point in this header. */
+#define MIMIR_STATS_VERSION 1u
+#define MIMIR_PUBLIC_STATS_CLASS_COUNT 20u
+struct mimir_stats_v1 {
+    uint32_t struct_version;
+    uint32_t struct_size;
+    uint64_t bytes_requested;
+    uint64_t bytes_allocated;
+    uint64_t bytes_cached;
+    uint64_t bytes_mapped;
+    uint64_t bytes_released;
+    uint64_t peak_mapped;
+    uint64_t alloc_failures;
+    uint64_t alloc_posture_nulls;
+    uint64_t cross_thread_frees;
+    uint64_t lock_contention;
+    uint64_t lock_contention_measured;
+    uint64_t live_mappings;
+    uint64_t live_spans;
+    uint64_t live_small_objects;
+    uint64_t live_mapping_bytes;
+    uint64_t live_span_bytes;
+    uint64_t page_size_bytes;
+    uint64_t span_class_size[MIMIR_PUBLIC_STATS_CLASS_COUNT];
+    uint64_t span_live_objects[MIMIR_PUBLIC_STATS_CLASS_COUNT];
+    uint64_t span_total_spans[MIMIR_PUBLIC_STATS_CLASS_COUNT];
+    uint64_t span_empty_spans[MIMIR_PUBLIC_STATS_CLASS_COUNT];
+    uint64_t span_capacity_objects[MIMIR_PUBLIC_STATS_CLASS_COUNT];
+    uint64_t unlock_failures;
+    uint64_t drain_lock_failures;
+    uint64_t trim_lock_failures;
+    uint64_t free_lock_failures;
+    uint64_t metadata_detections;
+    uint64_t metadata_collateral_refusals;
+    uint64_t live_release_detections;
+    uint64_t live_release_collateral_refusals;
+    uint64_t double_free_detections;
+    uint64_t poison_detections;
+    /* Z-076 appends (end of struct, the house discipline): */
+    uint64_t cross_thread_small_frees;
+    uint64_t small_frees_unrecorded;
+    uint64_t live_requested_bytes;
+    uint64_t live_requested_measured;
+};
+int mimir_stats_snapshot(struct mimir_stats_v1 *out);
 
 #ifdef __cplusplus
 }

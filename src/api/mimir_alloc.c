@@ -155,7 +155,7 @@ void *mimir_realloc(void *ptr, size_t size)
  * declarations are appended to tests/abi/mimir_audit_e005.h),
  * and bound local in the shared library by the version
  * script's local: * -- the .so export count is exactly the
- * seven public entry points after Z-075, never these.
+ * six public entry points after Z-074, never these.
  */
 _Alignas(64) unsigned long mimir_audit_call_aligned_alloc;
 _Alignas(64) unsigned long mimir_audit_call_posix_memalign;
@@ -196,4 +196,91 @@ size_t mimir_usable_size(const void *ptr)
     __atomic_fetch_add(&mimir_audit_call_usable_size, 1UL,
                        __ATOMIC_RELAXED);
     return mimir_core_usable_size(ptr);
+}
+
+/*
+ * Z-076 audit counter: the E-005 shape carried to the
+ * statistics entry point -- counts CALLS at this L1
+ * boundary, exactly once per invocation, whatever the
+ * outcome. Appended after the Z-074 counters; declared in
+ * no installed header, read only by a test-only static
+ * build (tests/abi/mimir_audit_e005.h carries the
+ * declaration), and bound local in the shared library by
+ * the version script's local: * -- the .so export count is
+ * exactly the seven public entry points after Z-076,
+ * never this.
+ */
+_Alignas(64) unsigned long mimir_audit_call_stats_snapshot;
+
+/*
+ * Z-076: the public statistics forwarder. It owns no
+ * statistics logic: it takes the one locked internal
+ * snapshot (mimir_core_stats_snapshot, J-002) and copies
+ * it field by field into the public versioned struct,
+ * stamping the version pair first. The copy is explicit
+ * (never a struct memcpy across the boundary) so the
+ * public layout stays an independent, versioned record
+ * even as the internal struct grows by appends. On a NULL
+ * out or a failed snapshot it returns -1 and *out is
+ * untouched -- the internal snapshot already guarantees
+ * the untouched half; the NULL half is checked here
+ * before anything is written.
+ */
+int mimir_stats_snapshot(struct mimir_stats_v1 *out)
+{
+    struct mimir_stats s;
+    size_t i;
+
+    __atomic_fetch_add(&mimir_audit_call_stats_snapshot, 1UL,
+                       __ATOMIC_RELAXED);
+    if (out == NULL) {
+        return -1;
+    }
+    if (mimir_core_stats_snapshot(&s) != 0) {
+        return -1;
+    }
+    out->struct_version = MIMIR_STATS_VERSION;
+    out->struct_size = (uint32_t)sizeof(struct mimir_stats_v1);
+    out->bytes_requested = s.bytes_requested;
+    out->bytes_allocated = s.bytes_allocated;
+    out->bytes_cached = s.bytes_cached;
+    out->bytes_mapped = s.bytes_mapped;
+    out->bytes_released = s.bytes_released;
+    out->peak_mapped = s.peak_mapped;
+    out->alloc_failures = s.alloc_failures;
+    out->alloc_posture_nulls = s.alloc_posture_nulls;
+    out->cross_thread_frees = s.cross_thread_frees;
+    out->lock_contention = s.lock_contention;
+    out->lock_contention_measured = s.lock_contention_measured;
+    out->live_mappings = s.live_mappings;
+    out->live_spans = s.live_spans;
+    out->live_small_objects = s.live_small_objects;
+    out->live_mapping_bytes = s.live_mapping_bytes;
+    out->live_span_bytes = s.live_span_bytes;
+    out->page_size_bytes = s.page_size_bytes;
+    for (i = 0; i < MIMIR_PUBLIC_STATS_CLASS_COUNT; i++) {
+        out->span_class_size[i] = s.span_class_size[i];
+        out->span_live_objects[i] = s.span_live_objects[i];
+        out->span_total_spans[i] = s.span_total_spans[i];
+        out->span_empty_spans[i] = s.span_empty_spans[i];
+        out->span_capacity_objects[i] =
+            s.span_capacity_objects[i];
+    }
+    out->unlock_failures = s.unlock_failures;
+    out->drain_lock_failures = s.drain_lock_failures;
+    out->trim_lock_failures = s.trim_lock_failures;
+    out->free_lock_failures = s.free_lock_failures;
+    out->metadata_detections = s.metadata_detections;
+    out->metadata_collateral_refusals =
+        s.metadata_collateral_refusals;
+    out->live_release_detections = s.live_release_detections;
+    out->live_release_collateral_refusals =
+        s.live_release_collateral_refusals;
+    out->double_free_detections = s.double_free_detections;
+    out->poison_detections = s.poison_detections;
+    out->cross_thread_small_frees = s.cross_thread_small_frees;
+    out->small_frees_unrecorded = s.small_frees_unrecorded;
+    out->live_requested_bytes = s.live_requested_bytes;
+    out->live_requested_measured = s.live_requested_measured;
+    return 0;
 }

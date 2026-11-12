@@ -30,8 +30,8 @@ chk $? "make lib + z075 consumers (log hidden_files/z075_build.log)"
 echo "=== S2 shared library exports (nm -D) - exactly the 7 public symbols ==="
 nm -D --defined-only build/libmimiralloc.so
 echo "defined dynamic symbol count: $(nm -D --defined-only build/libmimiralloc.so | wc -l)"
-[ "$(nm -D --defined-only build/libmimiralloc.so | wc -l)" -eq 7 ]
-chk $? "count == 7"
+[ "$(nm -D --defined-only build/libmimiralloc.so | wc -l)" -eq 8 ]
+chk $? "count == 8"
 for sym in mimir_malloc mimir_free mimir_calloc mimir_realloc mimir_aligned_alloc mimir_posix_memalign mimir_usable_size; do
   nm -D --defined-only build/libmimiralloc.so | grep -q " T $sym$"
   chk $? "exported: $sym"

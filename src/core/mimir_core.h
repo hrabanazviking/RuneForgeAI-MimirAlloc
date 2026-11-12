@@ -274,16 +274,31 @@ size_t mimir_tune_get_retention_bound(void);
  *   held when it moves), monotone, and disjoint from the
  *   neighbouring Z-064 unlock_failures tally (D-01), which
  *   counts the opposite direction of the same lock.
- * - cross_thread_frees: PARTIAL (INC-J002-01) -- frees of
- *   MAPPING-path blocks whose allocating thread (recorded
- *   in the mapping's reserve page past the 96-byte
- *   descriptor at publication; the descriptor's own flags
- *   and reserved bytes stay zero per B-007 C1.4) differs
- *   from the freeing thread. Small-object frees are not
- *   counted: no per-object owner record exists.
+ * - cross_thread_frees: frees whose allocating thread
+ *   differs from the freeing thread, over BOTH paths
+ *   since Z-076 (INC-J002-01 closed for recorded blocks):
+ *   MAPPING-path blocks (owner recorded in the mapping's
+ *   reserve page past the 96-byte descriptor at
+ *   publication; the descriptor's own flags and reserved
+ *   bytes stay zero per B-007 C1.4) plus SMALL-path blocks
+ *   carrying a Z-029 TLS owner record (the
+ *   cross_thread_small_frees append below is the small
+ *   half; this field is the sum). The one residual: a
+ *   small free served with NO owner record (TLS table
+ *   probe exhaustion, or a MIMIR_DEBUG build, which
+ *   bypasses the cache) cannot be classified and is
+ *   counted in small_frees_unrecorded instead -- the true
+ *   small cross-thread total lies in [the counted value,
+ *   counted + unrecorded]. Before Z-076 this field was
+ *   PARTIAL (mapping path only).
  * - lock_contention / lock_contention_measured:
- *   ABSENT (INC-J002-02) -- always 0 / 0; no truthful cheap
- *   measure exists under the one L6 global lock.
+ *   COUNTED since Z-076 (INC-J002-02 closed): the L6
+ *   global lock probes with a trylock first and counts
+ *   every acquisition that found the mutex already held
+ *   (mimir_platform_lock_contention); measured is 1 in
+ *   every snapshot. The count is of contended
+ *   ACQUISITIONS, never a duration. Before Z-076 this
+ *   pair was the explicit ABSENT marker 0 / 0.
  * - live_* and span_* fields: occupancy at the snapshot
  *   instant (per-class live objects, span counts, empty
  *   span counts and summed per-span capacities). */
@@ -389,6 +404,38 @@ struct mimir_stats {
      * free getters below read them without any lock. */
     uint64_t double_free_detections;
     uint64_t poison_detections;
+    /* Z-076: public-statistics completion tallies,
+     * appended at the END so every earlier field keeps
+     * its offset (the Z-064 append discipline; on the
+     * banked tree these sit after Z-064 unlock_failures,
+     * Z-065 drain/trim/free lock failures, Z-066 metadata
+     * tallies, Z-067 live-release tallies and Z-070
+     * double-free / poison tallies, in slice order).
+     * cross_thread_small_frees is the small-path half of
+     * cross_thread_frees (INC-J002-01, closed for blocks
+     * carrying a Z-029 owner record): a small free routed
+     * to the central core because its recorded owner is
+     * another thread, counted under the lock at the free
+     * course, exactly once per free. Monotone.
+     * small_frees_unrecorded counts small frees the
+     * central core served for a live span object with NO
+     * owner record to classify (probe exhaustion, or any
+     * small free in a MIMIR_DEBUG build): their thread
+     * relation is honestly UNKNOWN, so they are never
+     * folded into the cross-thread count; they bound its
+     * residual. Monotone.
+     * live_requested_bytes / live_requested_measured are
+     * the Q-LIVEREQ pair (INC-J002-05), carried as an
+     * explicit PRICED gap, not a silent absence: always
+     * 0 / 0 in this slice -- no truthful value exists
+     * while small objects carry no per-object requested-
+     * size record (INC-G003-03); the measured closure
+     * costs and the exactness failure are recorded in
+     * docs/Z13_PUBLIC_STATISTICS.md. */
+    uint64_t cross_thread_small_frees;
+    uint64_t small_frees_unrecorded;
+    uint64_t live_requested_bytes;
+    uint64_t live_requested_measured;
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
 
@@ -439,6 +486,17 @@ uint64_t mimir_core_live_release_collateral_refusals(void);
  * local in the shared library (nm -D stays exactly 4). */
 uint64_t mimir_core_double_free_detections(void);
 uint64_t mimir_core_double_free_poison_detections(void);
+
+/* Z-076: lock-free reads of the two small-free tallies
+ * above (single atomic loads, the Z-064 getter pattern):
+ * the cross-thread course is routed under the lock, but
+ * the tallies stay readable without taking it. Internal
+ * only, INC-E001-07 shape (b) exactly like the snapshot;
+ * bound local in the shared library (the public surface
+ * is mimir_stats_snapshot in include/mimir_alloc.h,
+ * which reads the locked snapshot, not these getters). */
+uint64_t mimir_core_cross_thread_small_frees(void);
+uint64_t mimir_core_small_frees_unrecorded(void);
 
 #ifdef MIMIR_DEBUG
 /* J-004 on-demand red-zone verification (debug builds only;
