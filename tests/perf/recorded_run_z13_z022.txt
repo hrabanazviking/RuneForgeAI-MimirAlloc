@@ -1,0 +1,129 @@
+MimirAlloc Z13 recorded run - Z-022 small-path anatomy
+slice: Z-022 - Small-path anatomy (perf record/report of the mimir leg on small_churn: the top hot spots by cycles, each mapped to a source line region)
+date: 2026-11-12T03:41:17-05:00 (America/New_York); gate suite run minutes later the same morning
+base: team branch yrsa/mimiralloc-team-08 at 14b024f (banked Z-008) merged with seat main 0b6c20f (banked Z-001..Z-019) as merge commit 4b275f3 before the build; the profiled sources are exactly the banked tree at 0b6c20f
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: tests/perf/probe_z022.c, tests/perf/run_anatomy_z022.sh, tests/perf/summarize_z022.py, this recorded run. No production source is touched by this slice; the standing gate is unchanged.
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004 banked at the seat): only the mimir leg exists here (the roadmap scopes Z-022 to the mimir leg), so there is no leg interleave; repetitions are separate PROCESSES and headlines are MEDIANS across processes. The probe drives the banked K-002 small_churn workload (bench_k002.c included UNMODIFIED, its main renamed away; sizes cycle 16,32,48,64,96,128,192,256 - one alloc, pattern touch, one free per op) in chunks of the bench's own 100000-op scale. TIMING legs: pinned taskset -c 2 (CCD0 physical core), 3 warm-up processes discarded plus one untimed in-process warm-up chunk, 7 measured processes of 2,000,000 ops. PERF legs: 3 separate perf record processes, pinned taskset -c 2, cycles event at -F 4000 via sudo -n perf (perf_event_paranoid=4 blocks unprivileged perf on this host, Z-005 precedent; no host setting changed), 50,000,000 ops each (7K/8K/8K samples, 0 lost samples in every report header). Reports are FLAT (--no-children): a cycle is charged to the function and source line executing it. Shares below the 0.3% report limit do not appear. Checksum discipline (K-002): exactly one checksum across the 7 timing processes and exactly one across the 3 perf processes - both OK in the summariser output below (the two sets differ from each other because the chunk counts differ, as the probe header states).
+build proof: the anatomy build compiles the production sources with the production flags (-O2, Makefile CFLAGS) plus -g into build/z22/ (production build/ objects never touched). The -g core object's .text section is BYTE-IDENTICAL to the no-g build (sha256 944ac79d92a8bb3de65b170fd8dae9111c1b4cd8a94d6fe6d6182afa178ee4f3 both, in the summariser output below): -g changes no code, so the profile describes the production allocator exactly, and the srcline table names its true lines.
+load state: /proc/loadavg 6.18 / 3.13 / 2.53 at run start, 12.60 / 5.00 / 3.17 just after the perf legs - HEAVY SHARED-HOST contention, not a quiet window: a Tensile library build (TensileCreateLibrary --jobs=12, observed in ps during the window) plus sibling campaign work shared the machine. The run is therefore labelled SHARED-HOST / CONTENDED. Its defence is the protocol's own: pinning to one physical core, median-of-processes, split-half drift 2.84% against the 8% bound, a tight timing spread (47.48..51.21 ns/op), and perf shares whose rep-to-rep spread is small (the leader moves 37.86..43.37% across the 3 records). The timing median (48.67 ns/op) is a contended steady-state figure for orientation only - it is NOT a baseline and NOT comparable to the Z-009 baseline's 93.43 ns/op (a different harness shape under its own recorded contention); Z-031 owns verdict re-runs. No performance verdict (WIN/TIE/LOSS) is claimed by this slice: it is an anatomy, and its product is the ranked hot-spot list below.
+correctness gate: scripts/z13/run_gate.sh (the standing gate, Z-008) in this worktree after the anatomy run, log hidden_files/gate_z022.log (team-local, not banked): 4,988 checks / 0 failed / 77 by-design skips, make exit 0, GATE RESULT: GREEN - identical counts to the standing gate. This slice adds no tests.
+
+=== VERDICT - WHERE THE SMALL-PATH CYCLES GO ===
+One function owns nearly half the small path. find_span_live_locked (the free path's span search + validation, src/core/mimir_core.c:1800-1916) takes a 43.14% median share of ALL cycles on small_churn, and the validation helper it inlines, span_header_is_live (:1279-1310), adds a further 4.27% in its non-inlined calls: the free-path validation complex is ~47% of the path. The reason is structural, and it is the headline Wave 4 must burn down: a small free searches for its span TWICE - mimir_core_free calls find_span_live_locked, and small_free_locked then calls it again on the same pointer (mimir_core.c:3117 and :2014) - and on every walk, every span visited is fully revalidated (the six-field header check plus the J-006 relation set, including a 64-bit DIVISION in span_capacity at :1250, 3.29% of all cycles by itself) before the free-list double-free walk even starts. The lock complex is second: pthread_mutex_lock + unlock + the L6 wrapper pair + PLT stubs sum to ~19.2% of cycles, for a lock Z-019 measured held only 60-86 cycles uncontended on this path - the per-op lock tax is paid in call overhead and atomic traffic, not in waiting. The alloc side is comparatively lean (small_alloc_locked 10.75%: the class_index_for linear scan over up to 20 classes inlined at its head, the active-span hit, the free-list pop / carve) and small_free_locked's own body is 9.46%, inside which the retention walk empty_spans_of_class_locked (:1507-1528) fires on EVERY small_churn free - single-block churn takes its span to live_count 0 every time, so the walk over all spans of the class runs per free (srcline :1512/:1513/:1523 sum to ~6.1%). The mapping-registry walk that mimir_core_free performs first (find_candidate_locked) does not appear above the 0.3% limit on this workload: with no large blocks live its list is empty and the walk is one NULL check - it is NOT a small-path cost, whatever it costs the large path (Z-023's question).
+
+=== GATE TABLE - ANNOTATED HOT-SPOT LIST (TOP 10, median share of cycles, flat) ===
+ 1. 43.14%  find_span_live_locked - src/core/mimir_core.c:1800-1916. Free-path span search: registry walk, per-span span_header_is_live revalidation (inlined), free-list double-free walk. Called twice per small free (see verdict). WAVE 4 BURN-DOWN #1.
+ 2. 10.75%  small_alloc_locked - mimir_core.c:1917-2010. Alloc serve: class_index_for linear scan (inlined, :1226-1238), active-span check + registry scan fallback, free-list pop (span_free_node_valid inlined) or carve.
+ 3.  9.46%  small_free_locked - mimir_core.c:2012-2078. Free serve: the SECOND find_span_live_locked call, free-list threading, live counters, and the retention trigger (empty_spans_of_class_locked walk when the span empties).
+ 4.  6.12%  pthread_mutex_lock (glibc) - via mimir_platform_global_lock, src/platform/mimir_platform.c (global lock wrapper). One global lock per public call (Z-019's KL-A/KL-B lock).
+ 5.  5.48%  pthread_mutex_unlock (glibc) - via mimir_platform_global_unlock, same wrapper pair.
+ 6.  5.18%  mimir_core_free - mimir_core.c:3068-3162. Free entry: NULL gate, lock, mapping-registry walk first (find_candidate_locked), then the span path.
+ 7.  4.66%  mimir_core_alloc - mimir_core.c:2747-2810. Alloc entry: zero-size posture gate, lock, alloc_any_locked dispatch (:2719, 1.26% by line).
+ 8.  4.27%  span_header_is_live - mimir_core.c:1279-1310. The six-field header check + J-006 relations incl. span_capacity division; non-inlined calls only - the same code inlined inside #1 is charged there. Combined validation complex ~47% with #1.
+ 9.  3.29%  mimir_platform_global_unlock - src/platform/mimir_platform.c. L6 unlock wrapper (return-code translation around pthread_mutex_unlock).
+10.  3.15%  mimir_platform_global_lock - src/platform/mimir_platform.c. L6 lock wrapper (same, around pthread_mutex_lock).
+Top-10 median share sum: 95.50%. Just outside: the harness's own w_small_churn loop 2.92% (bench code, not allocator), pthread PLT stubs 0.78% + 0.41%, mimir_malloc / mimir_free API shims 0.49% / 0.35%.
+
+=== SOURCE-LINE REGIONS (srcline medians, the line map for the table above) ===
+- span_header_is_live first condition, mimir_core.c:1281-1285 (magic/state/base/offset/class checks): 4.76 + 5.97 + 2.07 + 2.09 + 2.28 = 17.17% of all cycles.
+- span_header_is_live J-006 relations, :1302-1305: 2.28 + 2.18 + 2.05 = 6.51%.
+- span_capacity division, :1250 ((mapping_length - HEADER) / class_size, a 64-bit divide inside every validation): 3.29%.
+- find_span_live_locked walk head, :1823 (J-006 walk bound), :1826 (base), :1829 (the is_live + range gate): 2.28 + 1.81 + 2.79 = 6.90%.
+- empty_spans_of_class_locked retention walk, :1512/:1513/:1523: 2.03 + 2.36 + 1.69 = 6.08% - fires per free in single-block churn (see verdict).
+- L6 lock/unlock call sites, src/platform/mimir_platform.c:148/:151 region: 1.65 + 1.71 = 3.36% (the pthread calls themselves are rows 4/5 of the gate table).
+Line attributions at function entry/exit (e.g. :1901, :1919) are sample-skid artefacts of the neighbouring regions and are not separately annotated.
+
+=== WHAT WAVE 4 OWNS FROM THIS TABLE ===
+- Z-028/Z-029 (TLS cache): a cache hit removes rows 1, 3, 6, 8 AND the lock rows 4, 5, 9, 10 from the per-op path at once - ~76% of the measured cycles are lock-or-validation work a TLS hit never performs. This table is the before-picture the TLS verdict (Z-031) is judged against.
+- The double span search (verdict, finding 1) is a plain defect of economy inside the current core, independent of the TLS redesign: any core-level free-path cleanup must keep the two walks' combined share as its regression measure.
+- span_capacity's division (:1250) and the full J-006 revalidation per visited span are correctness armour priced per call; a redesign that validates once per span-state change, or caches capacity, retires 3.29% + most of the 23.68% line-region validation share - at a proof burden Z-026 must price honestly (the armour exists because J-006 corruption cases are real).
+Gate status: the roadmap gate for Z-022 is "annotated hot-spot list (top 10) filed for Wave 4 to burn down" - MET: the table above, every row mapped to its source line region, shares as medians of 3 independent perf records under the Z-004 protocol.
+Bugs: none discovered in the allocator. One defect in this slice's own tooling was found and fixed before the canonical run: the first summariser draft misread this host's perf report column order (symbol shares came out empty) and pooled the timing and perf probe rows (two checksum sets); both were fixed in summarize_z022.py and the runner's perf legs were raised from 20M to 50M ops for sample depth, then the whole run was repeated - the outputs below are that canonical run, end to end.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh at the seat, Z-002, run verbatim at run start) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T08:38:17Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5113586
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 91%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.70 2.16 2.21
+
+=== SUMMARISER OUTPUT (summarize_z022.py on the raw file, verbatim) ===
+=== BUILD PROOF ===
+core object (-g) bytes: 90528
+core object (no -g) bytes: 21192
+core .text sha256 (-g):    944ac79d92a8bb3de65b170fd8dae9111c1b4cd8a94d6fe6d6182afa178ee4f3
+core .text sha256 (no -g): 944ac79d92a8bb3de65b170fd8dae9111c1b4cd8a94d6fe6d6182afa178ee4f3
+text_identity: IDENTICAL (-g changes no code)
+
+=== TIMING (separate processes, taskset -c 2) ===
+perf probe rows: 3  checksums: [6391084656] (OK - exactly one)
+processes: 7  ops each: 2000000
+ns/op per process: 48.43, 47.48, 48.49, 49.30, 50.35, 51.21, 48.67
+median ns/op: 48.67  min: 47.48  max: 51.21
+split-half drift: 2.84% (protocol bound 8%)
+timing checksums: [267889776] (OK - exactly one)
+
+=== PERF SYMBOL SHARES (flat, cycles; median of 3) ===
+samples per rep: {1: '7K', 2: '8K', 3: '8K'}
+rank  median%  (rep1/rep2/rep3)  symbol
+   1   43.14  (43.37/37.86/43.14)  find_span_live_locked
+   2   10.75  (10.59/11.65/10.75)  small_alloc_locked
+   3    9.46  (8.60/10.08/9.46)  small_free_locked
+   4    6.12  (6.12/6.31/5.91)  pthread_mutex_lock@@GLIBC_2.2.5
+   5    5.48  (5.91/5.48/5.36)  pthread_mutex_unlock@@GLIBC_2.2.5
+   6    5.18  (5.18/5.92/4.67)  mimir_core_free
+   7    4.66  (4.44/4.95/4.66)  mimir_core_alloc
+   8    4.27  (4.04/4.70/4.27)  span_header_is_live
+   9    3.29  (3.16/3.85/3.29)  mimir_platform_global_unlock
+  10    3.15  (3.15/3.58/3.09)  mimir_platform_global_lock
+  11    2.92  (3.30/2.92/2.84)  w_small_churn
+  12    0.78  (0.78/0.93/0.73)  pthread_mutex_unlock@plt
+  13    0.49  (0.49/0.57/0.45)  mimir_malloc
+  14    0.41  (0.32/0.41/0.50)  pthread_mutex_lock@plt
+  15    0.35  (0.34/0.35/0.35)  mimir_free
+top-10 median share sum: 95.50%
+
+=== PERF SOURCE-LINE SHARES (srcline; median of 3) ===
+rank  median%  (rep1/rep2/rep3)  source:line
+   1    5.97  (5.97/4.85/6.26)  mimir_core.c:1282
+   2    4.76  (4.70/4.96/4.76)  mimir_core.c:1281
+   3    3.29  (3.29/2.66/3.89)  mimir_core.c:1250
+   4    2.79  (2.96/2.02/2.79)  mimir_core.c:1829
+   5    2.36  (2.33/2.81/2.36)  mimir_core.c:1513
+   6    2.28  (2.45/2.10/2.28)  mimir_core.c:1302
+   7    2.28  (2.83/2.28/2.21)  mimir_core.c:1823
+   8    2.28  (2.15/2.28/2.44)  mimir_core.c:1285
+   9    2.18  (2.18/2.06/2.27)  mimir_core.c:1303
+  10    2.09  (2.36/2.09/2.02)  mimir_core.c:1284
+  11    2.07  (2.41/2.01/2.07)  mimir_core.c:1283
+  12    2.05  (1.80/2.05/2.17)  mimir_core.c:1305
+  13    2.03  (1.98/2.27/2.03)  mimir_core.c:1512
+  14    2.03  (2.13/1.81/2.03)  mimir_core.c:1901
+  15    1.81  (2.10/1.38/1.81)  mimir_core.c:1826
+  16    1.78  (1.78/1.93/1.72)  mimir_core.c:1919
+  17    1.71  (1.70/2.21/1.71)  mimir_platform.c:151
+  18    1.69  (1.51/1.99/1.69)  mimir_core.c:1523
+  19    1.65  (1.65/2.02/1.60)  mimir_platform.c:148
+  20    1.53  (1.43/1.58/1.53)  pthread_mutex_unlock.c:357
