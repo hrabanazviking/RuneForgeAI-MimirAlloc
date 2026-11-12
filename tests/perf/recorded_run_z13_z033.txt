@@ -2334,3 +2334,135 @@ glibc,LAT,LIVESET,1024,67,9728
 glibc,LAT,CHURN,1025,2,432000
 glibc,LAT,LIVESET,1025,67,147456
 glibc,DONE,230356736
+
+== Z-033 CLOSURE (second commit - recorded two-commit exception) ==
+STATUS: CLOSED - RECORDED NO-OP, NOT A RETUNE
+DATE: 2026-11-12 (closure session, America/New_York)
+DECISION PRECONDITION: SATISFIED - Z-032 BANKED
+RETUNE TRIGGER: NOT MET - NO TABLE ADOPTED
+PRODUCTION CODE CHANGED IN THIS CLOSURE: NONE
+AFTER RUN EXECUTED: NONE (see CLOSURE below)
+This section is appended to the banked part-1 run
+(seat 6c156d0; team e5489d0) and closes Z-033. It
+adds to the part-1 record; nothing above is altered:
+the BEFORE evidence stands byte-for-byte as banked.
+
+== CONDITION, AS IT NOW STANDS ==
+Part 1 recorded the condition as missing exactly:
+(a) Z-032 banked at the seat with its class-by-class
+table; (b) its retune proposal or no-change verdict;
+(c) the adoption decision recorded at the seat, with
+a no-change verdict satisfying (c) by itself.
+All three are now on disk at the seat:
+- Z-032 banked as seat commit 8fbe7af
+  (Z-032: Size-class spacing study), recorded run
+  tests/perf/recorded_run_z13_z032.txt, inside seat
+  main 35f7f55 (banked Z-001..Z-035), merged into
+  this branch as 3ecab10 before this closure.
+- Its verdict, verbatim from the banked Z-032 run:
+  DECISION: NO-CHANGE. The current 20-class table
+  (16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224,
+  256, 320, 384, 448, 512, 640, 768, 896, 1024)
+  remains in force; no candidate table is adopted,
+  and the conditional trigger of Z-033 (implement
+  the adopted table of Z-032) is NOT met.
+  And: Z-033 is closable as a recorded no-op citing
+  this run; it must not be left dangling as
+  conditional.
+So the decision precondition is satisfied by banked
+Z-032 (seat 8fbe7af), and the substantive retune
+trigger is not met: there was nothing to implement.
+Per the rule part 1 itself recorded, a no-change
+verdict self-closes: the adopted table IS the
+current table.
+
+== BASIS (every figure from the banked Z-032 run) ==
+Adoption bar set by Z-032: a candidate is adopted
+only if it cuts the uniform-model span-effective
+mapped bytes per request by at least 10%, keeps the
+landed workload cycles at zero internal waste, adds
+no more than 12 classes, and regresses no band
+worst-case waste. Priced under identical span
+geometry and models (banked Z-032 run, section 4;
+values cited exactly as printed there): C0 current
+(20 classes): mapped 638.79 B/request, mean
+internal waste 42.50 B/request. C2 step-16 (64
+classes): 582.99 B/request, -8.74% - the best finer
+candidate, and it FAILS the 10% bar while tripling
+the class count (retention ceiling 524288 B vs C0
+163840 B). C3 (+midpoints above 256, 28 classes):
+611.41 B/request, -4.29%. C4 (+midpoints above 128,
+32 classes): 610.27 B/request, -4.47%. C1
+powers-of-two: 874.18 B/request, +36.85%, rejected
+outright. Cache defects are not spacing: class 48
+splits 49.41%, class 64 splits 100.00%, both fixed
+by the 96 B span header / carve offset 96, which no
+class table changes (banked Z-032 run, section 2).
+
+== CLOSURE ==
+- No retune adopted; no table implemented or
+  reverted; mimir_class_sizes[] untouched (verified
+  in the merged tree: the 20 classes above, in
+  src/core/mimir_core.c).
+- AFTER is identical to BEFORE BY CONSTRUCTION - a
+  logical identity, not a measurement: the
+  post-Z-032 configuration is the same code and
+  table the BEFORE legs measured. No AFTER run was
+  executed; no AFTER latencies exist; fragmentation
+  and latency deltas: NOT MEASURED / N/A. (The
+  roadmap gate asks for deltas recorded; for a
+  no-change closure the honest record is this
+  identity, stated as such - never as a measured
+  zero.)
+- The BEFORE legs in part 1 above therefore stand,
+  under their original run conditions (quiet window,
+  load 0.30 start/end, run of 2026-11-12T04:32-05:00),
+  as the final latency record of this slice for the
+  unchanged configuration: TABLECHECK OK 7/7;
+  fragmentation uniform-mean waste 42.50 B/request
+  (total waste 43520 B = 8.29% of requested bytes,
+  7.66% of class bytes); CHURN LOSS at every
+  boundary size (at 1025: mimir 1934.0 ns vs glibc
+  2.0 ns); LIVESET LOSS at every measured size.
+
+== STANDING GATE (this closure) ==
+scripts/z13/run_gate.sh on the merged tree (3ecab10
+= this branch plus seat 35f7f55), log
+hidden_files/z033_closure_gate.log: GATE COUNTS
+checks=4988 failed=0 skips=77, GATE RESULT GREEN,
+exit 0 - identical to the Z-001 baseline and to the
+gate of part 1 (delta 0, as designed: this closure
+changes no production code, no Makefile, no test).
+Merge note: the one merge conflict (Makefile)
+resolved to the seat version byte-for-byte - the
+seat already carried the banked Z-025 block and the
+team side added nothing in the conflicted hunk; the
+gate above, run after the merge, is the proof the
+resolution is sound. Load at closure gate: quiet
+(0.18 at start, 0.30 at end, from the gate log).
+
+== AUDIT ==
+This closure was audited by 6 Mythic Engineering
+sub-agents (condition-evidence, citation, honesty,
+gate verification, commit-scope review, risk
+review); findings folded in. Condition-evidence,
+gate, commit-scope and risk audits: PASS. Citation
+audit traced every figure to the banked Z-032 or
+part-1 runs; its one flag (the C4 percentage
+recomputes to -4.46% from the rounded endpoints) is
+met by citing the values exactly as printed in the
+banked Z-032 run, as done above. Honesty audit
+rulings applied verbatim in this section: the
+precondition / trigger split, the identity glossed
+as construction and not measurement, deltas
+recorded as NOT MEASURED / N/A, and no AFTER column
+or restated AFTER table anywhere.
+
+== FILES ==
+This append only. NO production change, NO Makefile
+change, NO test change. CAMPAIGN_STATE.md not
+committed. This is the slice-closing commit (the
+recorded second Z-033 commit); part 1 is already
+banked at the seat as 6c156d0. Banking of this
+commit happens only at the seat, only as
+@yrsafreydisdottir. Z-033 CLOSED.
