@@ -1,0 +1,133 @@
+MimirAlloc Z13 recorded run - Z-054 Wave 6 verdict standings
+slice: Z-054 - Wave 6 verdict (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md: large_batch + mixed_lifecycle standings vs Z-009 and glibc; KL-C restated; the cutoff of record (if changed) justified; gate: verdict doc traceable to recorded runs)
+date: 2026-11-12 (run 1 window ~08:14-08:16 EST / 13:14-13:16 UTC, executed by the previous team-08 lead before its timeout interruption; run 2 window 08:26 EST / 13:26 UTC and standing gate 08:27 EST, executed by the fresh restart lead; the synthesis is docs/Z13_WAVE06_VERDICT.md)
+base: merge db1cea1 of seat main 8df68e8 (banked Z-001..Z-053, ls-remote verified by the keeper) into yrsa/mimiralloc-team-08 - clean merge, no conflicts. The allocator under test is the banked Wave 6 core exactly as the seat holds it: Z-048 mapping cache live, Z-049 THP posture, Z-050 trim policy, Z-052 mremap growth. No production source is changed by this slice.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed at the end of this file, captured 2026-11-12T13:27:56Z).
+artifacts: tests/perf/run_z054.sh (sha256 2458d5aadee1434758cf53d5fe7fc19c63a9214511b717146c5781956b05db08), tests/perf/summarize_z054.py (sha256 e683d1e4f5866e532d9e4bfcc8df53a0942143a457746882f8d077ddf435a9df), docs/Z13_WAVE06_VERDICT.md, this recorded run. The harness is tests/perf/bench_k002.c UNMODIFIED (sha256 30dd0d9a8da12b03aa511fd35a4a098cf593b79c0e9ad352026ecb11eacc7d37 - byte-identical to the Z-003/Z-009 harness of record), so these standings price exactly the work Z-009 graded.
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004): every measured value is a separate PROCESS pinned taskset -c 2 (CCD0 physical core); 3 warm-up processes per leg discarded; 7 measured processes per leg; legs interleaved round-robin within each round (glibc, mimiralloc, ...); headline = MEDIAN of per-process ns/op (summarize_z054.py); split-half drift bound 8% (s.8), DRIFT-REJECT rows are indicative only; checksum proof (s.9): exactly one distinct checksum per workload across both legs, equal to the K-002 checksum of record; tie band +/-5% on the median ratio.
+load state: run 2 ran in a QUIET window: /proc/loadavg 0.09 / 0.14 / 0.33 immediately before, 0.24 / 0.17 / 0.34 immediately after; no co-tenant heavy run observed. Run 1 load was NOT captured by the interrupted lead (its summary carries no load stamp); run 1 is therefore the corroborating run and run 2, fully load-stamped, is the run OF RECORD. The standing gate ran after run 2 and overlapped no measurement.
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/gate_z054.log: GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN, make exit 0 - identical counts to the Z-001 baseline. This slice adds no tests to make test; the count is unchanged because no production source and no suite file changed (verdict slice: docs + tests/perf only).
+
+=== RUN 1 (corroborating; previous lead, inherited on disk) ===
+raw: hidden_files/z054_raw.csv (56 lines = 7 reps x 2 legs x 4 workloads; team-local, not banked)
+summary: hidden_files/z054_summary.txt, reproduced verbatim:
+Z-054 standings summary (ns/op; headline = median of processes, Z-004 protocol)
+drift bound 8% (Z-004 s.8); DRIFT-REJECT = indicative only; tie band +/-5%
+
+=== per-leg medians ===
+  glibc       small_churn      n=7 median       3.35 min       3.32 max       3.37 drift  1.04%
+  mimiralloc  small_churn      n=7 median      28.25 min      27.66 max      28.87 drift  1.35%
+  glibc       mixed_batch      n=7 median       3.68 min       3.68 max       3.80 drift  1.63%
+  mimiralloc  mixed_batch      n=7 median      27.07 min      26.81 max      28.12 drift  0.30%
+  glibc       large_batch      n=7 median     547.70 min     536.45 max     680.50 drift 11.73%  DRIFT-REJECT
+  mimiralloc  large_batch      n=7 median      63.77 min      63.38 max      85.29 drift  1.93%
+  glibc       mixed_lifecycle  n=7 median       7.10 min       6.95 max       7.15 drift  0.07%
+  mimiralloc  mixed_lifecycle  n=7 median     507.31 min     505.72 max     510.88 drift  0.13%
+
+=== checksum proof (Z-004 s.9) ===
+  small_churn      distinct=[12756656] expected=[12756656] OK
+  mixed_batch      distinct=[34727552] expected=[34727552] OK
+  large_batch      distinct=[1106008] expected=[1106008] OK
+  mixed_lifecycle  distinct=[40359936] expected=[40359936] OK
+  checksum proof: OK - one checksum per workload across both legs
+
+=== grades ===
+  small_churn      mimir/glibc   8.433x -> LOSS (same window)
+  small_churn      mimir now      28.25 vs Z-009 mimir     93.43: ratio   0.302x -> WIN (cross-window)
+  small_churn      glibc gauge: now      3.35 vs Z-009 glibc     9.02: ratio   0.371x (window comparability only)
+  mixed_batch      mimir/glibc   7.356x -> LOSS (same window)
+  mixed_batch      mimir now      27.07 vs Z-009 mimir    398.42: ratio   0.068x -> WIN (cross-window)
+  mixed_batch      glibc gauge: now      3.68 vs Z-009 glibc     9.90: ratio   0.372x (window comparability only)
+  large_batch      mimir/glibc   0.116x -> WIN (same window)
+  large_batch      mimir now      63.77 vs Z-009 mimir   3064.69: ratio   0.021x -> WIN (cross-window)
+  large_batch      glibc gauge: now    547.70 vs Z-009 glibc  1295.68: ratio   0.423x (window comparability only)
+  mixed_lifecycle  mimir/glibc  71.452x -> LOSS (same window)
+  mixed_lifecycle  mimir now     507.31 vs Z-009 mimir    898.76: ratio   0.564x -> WIN (cross-window)
+  mixed_lifecycle  glibc gauge: now      7.10 vs Z-009 glibc    13.38: ratio   0.531x (window comparability only)
+
+=== RUN 2 (run OF RECORD; fresh lead, quiet window) ===
+raw: hidden_files/z054_raw_run2.csv (56 lines; team-local, not banked)
+summary: hidden_files/z054_summary_run2.txt, reproduced verbatim:
+Z-054 standings summary (ns/op; headline = median of processes, Z-004 protocol)
+drift bound 8% (Z-004 s.8); DRIFT-REJECT = indicative only; tie band +/-5%
+
+=== per-leg medians ===
+  glibc       small_churn      n=7 median       3.32 min       3.32 max       3.35 drift  0.30%
+  mimiralloc  small_churn      n=7 median      28.52 min      27.69 max      28.83 drift  1.51%
+  glibc       mixed_batch      n=7 median       3.68 min       3.68 max       3.70 drift  0.14%
+  mimiralloc  mixed_batch      n=7 median      27.15 min      26.79 max      27.66 drift  0.41%
+  glibc       large_batch      n=7 median     658.29 min     535.49 max     665.21 drift  9.88%  DRIFT-REJECT
+  mimiralloc  large_batch      n=7 median      63.48 min      63.01 max      67.96 drift  0.23%
+  glibc       mixed_lifecycle  n=7 median       7.03 min       6.93 max       7.12 drift  0.50%
+  mimiralloc  mixed_lifecycle  n=7 median     505.65 min     497.70 max     510.68 drift  0.09%
+
+=== checksum proof (Z-004 s.9) ===
+  small_churn      distinct=[12756656] expected=[12756656] OK
+  mixed_batch      distinct=[34727552] expected=[34727552] OK
+  large_batch      distinct=[1106008] expected=[1106008] OK
+  mixed_lifecycle  distinct=[40359936] expected=[40359936] OK
+  checksum proof: OK - one checksum per workload across both legs
+
+=== grades ===
+  small_churn      mimir/glibc   8.590x -> LOSS (same window)
+  small_churn      mimir now      28.52 vs Z-009 mimir     93.43: ratio   0.305x -> WIN (cross-window)
+  small_churn      glibc gauge: now      3.32 vs Z-009 glibc     9.02: ratio   0.368x (window comparability only)
+  mixed_batch      mimir/glibc   7.378x -> LOSS (same window)
+  mixed_batch      mimir now      27.15 vs Z-009 mimir    398.42: ratio   0.068x -> WIN (cross-window)
+  mixed_batch      glibc gauge: now      3.68 vs Z-009 glibc     9.90: ratio   0.372x (window comparability only)
+  large_batch      mimir/glibc   0.096x -> WIN (same window)
+  large_batch      mimir now      63.48 vs Z-009 mimir   3064.69: ratio   0.021x -> WIN (cross-window)
+  large_batch      glibc gauge: now    658.29 vs Z-009 glibc  1295.68: ratio   0.508x (window comparability only)
+  mixed_lifecycle  mimir/glibc  71.927x -> LOSS (same window)
+  mixed_lifecycle  mimir now     505.65 vs Z-009 mimir    898.76: ratio   0.563x -> WIN (cross-window)
+  mixed_lifecycle  glibc gauge: now      7.03 vs Z-009 glibc    13.38: ratio   0.525x (window comparability only)
+
+=== AGREEMENT AND THE DRIFT-REJECTED LEG ===
+- The mimir leg agrees across the two independent runs to within 1.0% on every workload median: small_churn 28.25 / 28.52, mixed_batch 27.07 / 27.15, large_batch 63.77 / 63.48, mixed_lifecycle 507.31 / 505.65 ns/op (run 1 / run 2). It also agrees with Z-048 same-window pool median (64.95 ns/op, tests/perf/recorded_run_z13_z048.txt) to within 2.3%.
+- The glibc large_batch leg is DRIFT-REJECT in BOTH runs (11.73% run 1, 9.88% run 2; bound 8%): the leg is BIMODAL - in each run its seven reps split five-and-two between a ~540 ns/op band and a ~660 ns/op band (run 1 in order: 536.45, 540.46, 559.50, 547.70, 680.50, 538.37, 661.75, median 547.70 in the fast band; run 2: 665.21, 661.20, 658.29, 537.70, 654.63, 659.85, 535.49, median 658.29 in the slow band). Two glibc states, not measurement noise: the mimir leg in the same processes is tight (run 2 reps 63.01-67.96, drift 0.23%; run 1 drift 1.93%). Note the drift statistic compares split-half medians, so a bimodal leg trips the 8% bound by construction whichever band its median lands in; the rejection therefore retires the glibc MEDIAN as a precise quantity, not the comparison itself.
+- Consequence, stated plainly: the large_batch FACTOR against glibc is indicative in both Z-054 runs (0.116x on run 1 medians, 0.096x on run 2 medians; quoted in the verdict as ~0.10x INDICATIVE). The GRADE does not rest on the rejected median: against glibc fastest single rep in either run (535.49) the mimir median is 0.119x, against its slowest (680.50) it is 0.093x - a WIN of roughly tenfold under every summary choice - and Z-048 drift-clean same-window A/B already graded pool vs glibc 0.13x WIN with the pre-pool base leg as its control (2747.67 ns/op).
+
+=== VERDICT - THE STANDINGS OF RECORD ===
+Same-window grades (mimir/glibc on run 2 medians; run 1 ratio beside):
+  small_churn      28.52 vs 3.32 ns/op    8.590x  LOSS  (run 1: 8.433x LOSS)
+  mixed_batch      27.15 vs 3.68 ns/op    7.378x  LOSS  (run 1: 7.356x LOSS)
+  large_batch      63.48 vs 658.29 ns/op  0.096x  WIN, factor INDICATIVE (see above; run 1: 0.116x)
+  mixed_lifecycle  505.65 vs 7.03 ns/op  71.927x  LOSS  (run 1: 71.452x LOSS)
+Cross-window vs Z-009 mimir of record (docs/Z13_WAVE01_BASELINE.md s.2; run 2 medians):
+  small_churn      28.52 vs 93.43    0.305x  WIN   (glibc gauge 3.32 vs 9.02 = 0.368x)
+  mixed_batch      27.15 vs 398.42   0.068x  WIN   (glibc gauge 3.68 vs 9.90 = 0.372x)
+  large_batch      63.48 vs 3064.69  0.021x  WIN   (glibc gauge 658.29 vs 1295.68 = 0.508x)
+  mixed_lifecycle  505.65 vs 898.76  0.563x  WIN   (glibc gauge 7.03 vs 13.38 = 0.525x)
+Window discipline: the Z-009 window ran under named Tensile contention (its own record says so), so the cross-window factors flatter everyone and are the wave-movement record only, gauge printed beside each per house discipline; the same-window grades above govern the KL standings. Note the honest consequence for mixed_lifecycle: its same-window LOSS factor (71.9x) is WORSE than its Z-009 factor (67.2x) even though the mimir absolute improved 898.76 -> 505.65, because glibc absolute improved more between the windows. The factor of record is the same-window one.
+Checksum proof: OK on both runs - one distinct checksum per workload across both legs, equal to the K-002 checksums of record (12756656 / 34727552 / 1106008 / 40359936). The standings price identical work.
+
+Bugs found/fixed: none in the allocator or the suite. The only defect encountered is documentary: run 1 load state was never captured by the interrupted lead; repaired by taking run 2 in a stamped quiet window and demoting run 1 to corroborating, rather than by inventing a load figure for it.
+Team structure: fresh restart lead (the previous lead timed out mid-slice with no commit; restart note in CAMPAIGN_STATE.md) + six Mythic Engineering sub-agents spawned as reviewers (inspector / measurement reviewer / KL-C and cutoff analyst / wave completeness / failure and honesty analyst / recorder-verifier); their memos were folded into docs/Z13_WAVE06_VERDICT.md and this run. All device-side work was executed by the lead alone, sequentially, in this worktree only.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T13:27:56Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 59%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.15 0.16 0.32
