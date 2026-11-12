@@ -59,6 +59,11 @@ extern unsigned long mimir_audit_call_posix_memalign;
  * declarations above are unchanged. */
 extern unsigned long mimir_audit_call_usable_size;
 extern unsigned long mimir_audit_call_stats_snapshot; /* Z-076 */
+/* Z-077: appended for the two Wave 9 trim / reallocarray
+ * entry points; every declaration above is unchanged. */
+extern unsigned long mimir_audit_call_trim;
+extern unsigned long mimir_audit_call_reallocarray;
+
 extern unsigned long mimir_audit_alloc_published;
 extern unsigned long mimir_audit_mapping_retired;
 

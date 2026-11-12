@@ -2066,3 +2066,47 @@ test-z076: $(BUILD)/test_z076 $(BUILD)/test_z076_dyn $(BUILD)/test_z076_cpp $(BU
 	./$(BUILD)/test_z076_cpp
 
 .PHONY: test-z076
+# Z-077: trim and reallocarray ABI + contract evidence -- the
+# static contract test (tests/abi/test_z077.c, LIBOBJS link
+# so the appended E-005 audit counters and the internal
+# trim/pool/stats queries are readable), the dynamic C
+# consumer (test_z077_dyn.c) and the C++ consumer
+# (test_z077_cpp.cpp), both linked ONLY against
+# build/libmimiralloc.so in the E-002/E-007 route, and the
+# header-only self-containment objects (C and C++).
+# Standalone via `make test-z077`; NOT part of `make test`
+# (standing gate counts untouched). The full ABI recorded
+# run (nm -D, DT_NEEDED, undefined-symbol and absence
+# proofs) is tests/abi/run_z077.sh, filed as
+# tests/abi/recorded_run_z13_z077.txt.
+# ------------------------------------------------------------------
+$(BUILD)/test_z077.o: tests/abi/test_z077.c include/mimir_alloc.h tests/abi/mimir_audit_e005.h tests/core/mimir_trim_i003.h tests/core/mimir_pool_z048.h tests/core/mimir_stats_j002.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/abi -Itests/core -c tests/abi/test_z077.c -o $@
+
+$(BUILD)/test_z077: $(LIBOBJS) $(BUILD)/test_z077.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z077.o -o $@
+
+$(BUILD)/test_z077_dyn.o: tests/abi/test_z077_dyn.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_z077_dyn.c -o $@
+
+$(BUILD)/test_z077_dyn: $(BUILD)/libmimiralloc.so $(BUILD)/test_z077_dyn.o
+	$(CC) $(CFLAGS) $(BUILD)/test_z077_dyn.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/test_z077_cpp.o: tests/abi/test_z077_cpp.cpp include/mimir_alloc.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c tests/abi/test_z077_cpp.cpp -o $@
+
+$(BUILD)/test_z077_cpp: $(BUILD)/libmimiralloc.so $(BUILD)/test_z077_cpp.o
+	$(CXX) $(CXXFLAGS) $(BUILD)/test_z077_cpp.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/header_only_z077_c.o: tests/abi/header_only_z077.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/header_only_z077.c -o $@
+
+$(BUILD)/header_only_z077_cpp.o: tests/abi/header_only_z077.cpp include/mimir_alloc.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c tests/abi/header_only_z077.cpp -o $@
+
+test-z077: $(BUILD)/test_z077 $(BUILD)/test_z077_dyn $(BUILD)/test_z077_cpp $(BUILD)/header_only_z077_c.o $(BUILD)/header_only_z077_cpp.o
+	./$(BUILD)/test_z077
+	./$(BUILD)/test_z077_dyn
+	./$(BUILD)/test_z077_cpp
+
+.PHONY: test-z077

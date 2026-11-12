@@ -7,9 +7,13 @@
  * Z-075, which added mimir_usable_size as an explicit
  * contract change (decision D-012, recorded in
  * tests/abi/recorded_run_z13_z075.txt) after Z-074 added
+ * exported (four through Z-073; eight from Z-077 (six from Z-074, which added
  * the two aligned-allocation entry points of the Z-073
  * contract as an explicit contract change, recorded in
- * tests/abi/recorded_run_z13_z074.txt); every other symbol defined by the library objects
+ * tests/abi/recorded_run_z13_z074.txt, and two more from
+ * Z-077 -- mimir_trim and mimir_reallocarray, recorded in
+ * tests/abi/recorded_run_z13_z077.txt); every other symbol
+ * defined by the library objects
  * (the internal mimir_core_* and mimir_platform_* functions) is
  * bound locally and never appears in .dynsym as an exported
  * global.
@@ -34,6 +38,8 @@
     mimir_posix_memalign;
     mimir_usable_size;
     mimir_stats_snapshot;
+    mimir_trim;
+    mimir_reallocarray;
   local:
     *;
 };

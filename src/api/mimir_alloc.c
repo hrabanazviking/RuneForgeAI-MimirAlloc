@@ -1,6 +1,7 @@
 /* mimir_alloc.c - MimirAlloc L1 public boundary (slice C-003;
  * calloc/realloc forwarders added by slice C-005;
- * aligned forwarders added by slice Z-074).
+ * aligned forwarders added by slice Z-074; trim and
+ * reallocarray forwarders added by slice Z-077).
  *
  * This translation unit is the L1 public boundary of the
  * Phase 3 minimal allocator (B-006 S4). It implements no
@@ -283,4 +284,34 @@ int mimir_stats_snapshot(struct mimir_stats_v1 *out)
     out->live_requested_bytes = s.live_requested_bytes;
     out->live_requested_measured = s.live_requested_measured;
     return 0;
+}
+
+/*
+ * Z-077 audit counters: the E-005 shape carried to the two
+ * Wave 9 trim / reallocarray entry points -- each counts
+ * CALLS at this L1 boundary, exactly once per invocation,
+ * whatever the outcome. They are APPENDED after the Z-074
+ * counters so every existing reader is undisturbed; like
+ * them they are declared in no installed header, read only
+ * by a test-only static build (the declarations are
+ * appended to tests/abi/mimir_audit_e005.h), and bound
+ * local in the shared library by the version script's
+ * local: * -- the .so export count is exactly the eight
+ * public entry points after Z-077, never these.
+ */
+_Alignas(64) unsigned long mimir_audit_call_trim;
+_Alignas(64) unsigned long mimir_audit_call_reallocarray;
+
+int mimir_trim(size_t pad)
+{
+    __atomic_fetch_add(&mimir_audit_call_trim, 1UL,
+                       __ATOMIC_RELAXED);
+    return mimir_core_trim(pad);
+}
+
+void *mimir_reallocarray(void *ptr, size_t nmemb, size_t size)
+{
+    __atomic_fetch_add(&mimir_audit_call_reallocarray, 1UL,
+                       __ATOMIC_RELAXED);
+    return mimir_core_reallocarray(ptr, nmemb, size);
 }

@@ -6040,6 +6040,62 @@ size_t mimir_core_trim_retained_some(size_t max_spans)
     return released;
 }
 
+/*
+ * Z-077 public-trim core (roadmap Z-077; the composition
+ * behind public mimir_trim in include/mimir_alloc.h, over
+ * the I-003 machinery above and the Z-048 pool). One lock,
+ * the same steps as mimir_core_trim_retained (TLS flush and
+ * drain, Z-065 lock-failure tally, Z-067 release report):
+ * the retained-span snapshot is taken under the lock, pad
+ * is priced in whole spans (pad rounded UP -- a partial
+ * span cannot be kept, and the rounding never keeps less
+ * than pad), and trim_some_locked releases exactly the
+ * surplus. pad == 0 keeps nothing and additionally
+ * releases the whole mapping pool (the full-trim
+ * composition of mimir_core_trim_retained); pad > 0 never
+ * touches the pool (the _some contract). If the page size
+ * cannot be read, pad cannot be priced and nothing is
+ * released -- fail-calm, never fail-trim. Returns 1 iff at
+ * least one span or pooled mapping was actually released.
+ */
+int mimir_core_trim(size_t pad)
+{
+    size_t spans;
+    size_t keep;
+    size_t released;
+    size_t pool_released = 0;
+    size_t page_size;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        /* Z-065 (D-02): counted, as in the forms above. */
+        __atomic_fetch_add(&mimir_stats_trim_lock_failures,
+                           1ULL, __ATOMIC_RELAXED);
+        return 0;
+    }
+    tls_flush_locked(); /* Z-029 */
+#ifndef MIMIR_DEBUG
+    (void)tls_drain_all_locked(1);
+#endif
+    retained_snapshot_locked(&spans, NULL);
+    if (pad == 0) {
+        keep = 0;
+    } else if (mimir_platform_page_size(&page_size) !=
+                   MIMIR_PLATFORM_OK ||
+               page_size == 0) {
+        keep = spans; /* unpriceable pad: release nothing */
+    } else {
+        keep = pad / page_size + (pad % page_size != 0);
+    }
+    released = (spans > keep) ? trim_some_locked(spans - keep)
+                              : 0;
+    if (pad == 0) {
+        pool_released = pool_release_all_locked(); /* Z-048 */
+    }
+    (void)core_global_unlock();
+    z067_release_report(MIMIR_DIAG_OP_TRIM); /* Z-067 */
+    return (released > 0 || pool_released > 0) ? 1 : 0;
+}
+
 size_t mimir_core_retained_spans(void)
 {
     size_t spans;
@@ -7533,6 +7589,59 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         (void)core_global_unlock();
         return new_ptr;
     }
+}
+
+/*
+ * mimir_core_reallocarray -- Z-077 (Wave 9; roadmap Z-077),
+ * per the contracts.md S2.8 conditional rows
+ * MA-COND-REALLOCARRAY-01/-02/-03 (the namespaced surface
+ * under U-03 takes them up directly, as Z-073/Z-074 did for
+ * the aligned rows). The requested size is the product
+ * nmemb * size, contracted exactly as in
+ * mimir_core_calloc:
+ *   step 0: zero-factor gate before any arithmetic -- a
+ *     zero factor makes the product zero, which is the
+ *     U-09 case with a null ptr and the U-12 case with a
+ *     live one; BOTH are posture here (NULL, original
+ *     block live and untouched, counted as a posture null,
+ *     never routed into mimir_core_realloc) and NEITHER is
+ *     settled by this slice -- Z-078 owns the closure.
+ *   step 1: the product is checked before the
+ *     multiplication is relied on (nmemb <= SIZE_MAX / size,
+ *     with size > 0 guaranteed by step 0).
+ *   step 2: overflow is a Defined genuine failure -- NULL,
+ *     no wrapped allocation, nothing published, the
+ *     original block (if any) live, unchanged in contents
+ *     and ownership and freeable exactly as before
+ *     (MA-COND-REALLOCARRAY-02/-03 with MA-6.1-REALLOC-02).
+ *     It is counted as a genuine failure (Q-FAILED-OS) and
+ *     reported on the J-007 channel as op REALLOC / cause
+ *     ARITHMETIC with req = SIZE_MAX, the calloc overflow
+ *     shape verbatim (no product value exists to report).
+ *   step 3: any other call is exactly
+ *     mimir_core_realloc(ptr, product): NULL ptr as alloc,
+ *     same-size / shrink / grow, and failure preservation
+ *     all inherit the realloc case order above.
+ * errno is not promised (U-10).
+ */
+void *mimir_core_reallocarray(void *ptr, size_t nmemb,
+                              size_t size)
+{
+#ifdef MIMIR_LOCK_HIST
+    z19_set_op(MIMIR_LH_OP_REALLOC);
+#endif
+    if (nmemb == 0 || size == 0) {
+        mimir_stats_note_posture(); /* J-002: U-09/U-12 */
+        return NULL;
+    }
+    if (nmemb > SIZE_MAX / size) {
+        mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
+        mimir_core_diag_report(MIMIR_DIAG_OP_REALLOC,
+                               MIMIR_DIAG_CAUSE_ARITHMETIC,
+                               (uint64_t)SIZE_MAX);
+        return NULL;
+    }
+    return mimir_core_realloc(ptr, nmemb * size);
 }
 
 void mimir_core_free(void *ptr)

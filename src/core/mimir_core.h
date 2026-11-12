@@ -48,6 +48,29 @@ void *mimir_core_calloc(size_t nmemb, size_t size);
  * Invalid pointers are undefined behaviour with no defined
  * error (MA-6.1-REALLOC-05). */
 void *mimir_core_realloc(void *ptr, size_t new_size);
+/* Reallocarray (Z-077, Wave 9; roadmap Z-077): the
+ * realloc contract above with the requested size given as
+ * the checked product nmemb * size, honouring the
+ * contracts.md S2.8 conditional rows MA-COND-REALLOCARRAY-
+ * 01/-02/-03. The product is checked before the
+ * multiplication is relied on (the mimir_core_calloc step-1
+ * form): overflow is a genuine failure -- NULL, counted in
+ * alloc_failures, reported on the J-007 channel as op
+ * REALLOC / cause ARITHMETIC with req = SIZE_MAX, no wrapped
+ * allocation, and the original block (if any) live,
+ * unchanged and caller-owned. A zero factor is a posture
+ * NULL exactly like the calloc zero-factor gate (counted in
+ * alloc_posture_nulls, original untouched): [UNRESOLVED:
+ * U-09] for the product-zero case and U-12 where a live ptr
+ * meets a zero product -- neither is settled here; Z-078
+ * owns the closure. Non-overflow calls forward to
+ * mimir_core_realloc(ptr, product) unchanged, so every
+ * realloc case above (NULL ptr as alloc, same-size, shrink,
+ * grow, failure preservation) applies verbatim. errno is
+ * not promised (U-10). */
+void *mimir_core_reallocarray(void *ptr, size_t nmemb,
+                              size_t size);
+
 
 /* Aligned allocation (Z-074, Wave 9; the Z-073 contract's
  * surface, by analogy under U-03): an alignment is valid
@@ -122,6 +145,26 @@ size_t mimir_core_trim_retained_some(size_t max_spans);
 size_t mimir_core_retained_spans(void);
 size_t mimir_core_retained_bytes(void);
 size_t mimir_core_mapped_bytes(void);
+/* Public-trim core (Z-077, Wave 9; roadmap Z-077): the
+ * single-lock composition behind public mimir_trim, over
+ * the I-003 machinery above. pad is a byte count the caller
+ * asks to KEEP in retained empty spans: spans are exactly
+ * one page, so the kept count is pad rounded UP to whole
+ * spans (a partial span cannot be retained; the rounding
+ * never keeps less than pad). pad == 0 is the full trim:
+ * every retained empty span plus the whole Z-048 mapping
+ * pool (the trim_retained composition). pad > 0 is the
+ * span-budget form only (trim_retained_some's contract):
+ * the mapping pool is never touched. Returns 1 if any span
+ * or pooled mapping was actually released, else 0 -- a lock
+ * failure releases nothing, counts the Z-065 trim tally,
+ * and returns 0. Non-terminal and idempotent, exactly like
+ * the forms above. Internal only, like them: the PUBLIC
+ * declaration is include/mimir_alloc.h's mimir_trim
+ * (Z-077); this entry stays bound local in the shared
+ * library. */
+int mimir_core_trim(size_t pad);
+
 /* Z-048 mapping-cache queries (internal only, shape (b)
  * like the trim queries above): pooled dead large mappings
  * now / their total bytes; (size_t)-1 on lock failure. The

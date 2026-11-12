@@ -1,0 +1,82 @@
+=== Z-077 ABI recorded run ===
+date_utc: 2026-11-12T21:28:05Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: 5e842fcbb19c724eda36ca0fac897caa3a9d369b
+branch: yrsa/mimiralloc-team-05
+loadavg: 2.15 1.17 0.80 1/1221 1878079
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + z077 consumers (log hidden_files/z077_build.log)
+=== S2 shared library exports (nm -D) - exactly the 8 public symbols ===
+0000000000006200 T mimir_aligned_alloc
+0000000000006080 T mimir_calloc
+0000000000005800 T mimir_free
+00000000000057e0 T mimir_malloc
+0000000000006220 T mimir_posix_memalign
+00000000000061e0 T mimir_realloc
+0000000000006430 T mimir_reallocarray
+00000000000062a0 T mimir_trim
+defined dynamic symbol count: 8
+  [ok] count == 8
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_trim
+  [ok] exported: mimir_reallocarray
+=== S3 absence proofs - no internal symbol is exported ===
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+=== S4 consumers bind to the .so (DT_NEEDED + undefined symbols) ===
+-- test_z077_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z077_dyn DT_NEEDED names libmimiralloc.so
+                 U mimir_reallocarray
+                 U mimir_trim
+  [ok] test_z077_dyn references both new symbols as undefined (U)
+  [ok] test_z077_dyn does not define the new symbols (not statically absorbed)
+-- test_z077_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z077_cpp DT_NEEDED names libmimiralloc.so
+                 U mimir_reallocarray
+                 U mimir_trim
+  [ok] test_z077_cpp references both new symbols as undefined (U)
+  [ok] test_z077_cpp does not define the new symbols (not statically absorbed)
+-- C++ consumer object: unmangled references --
+                 U mimir_reallocarray
+                 U mimir_trim
+  [ok] test_z077_cpp.o undefined references are unmangled (extern C guards cover the new declarations)
+=== S5 header-only translation units (compile-only) ===
+-rw-r--r-- 1 volmarr volmarr 3872 Nov 12 16:28 build/header_only_z077_c.o
+-rw-r--r-- 1 volmarr volmarr 1328 Nov 12 16:28 build/header_only_z077_cpp.o
+  [ok] header-only C and C++ objects built (header self-contained, exact prototypes)
+=== S6 static contract test ===
+=== test_z077: trim + reallocarray contract ===
+-- S1 success paths --
+-- S2 overflow edges (null ptr) --
+-- S3 failure preservation (live ptr) --
+-- S4 zero factors (posture) --
+-- S5 worker thread --
+-- S6 trim: retained spans --
+-- S7 large path + mapping pool --
+-- S8 audit counters --
+trim calls: 8, reallocarray calls: 21
+test_z077: 65 checks, 0 failed
+RESULT: PASS
+  [ok] test_z077 exit 0
+=== S7 dynamic C consumer ===
+test_z077_dyn: PASS
+  [ok] test_z077_dyn exit 0
+=== S8 C++ consumer ===
+test_z077_cpp: PASS
+  [ok] test_z077_cpp exit 0
+=== S9 neighbour evidence: E-005/E-008 audit readers ===
+0
+e005/e008 sources reference only the original four counters (grep above counts trim/reallocarray references; 0 expected)
+  [ok] make test-e005 still passes (log hidden_files/z077_test_e005.log)
+=== Z-077 ABI RUN RESULT: PASS ===

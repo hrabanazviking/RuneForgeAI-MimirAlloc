@@ -23,6 +23,10 @@
  * entry point -- plus, from Z-076 (Wave 9), the public
  * statistics entry point mimir_stats_snapshot below,
  * which promotes the J-002 internal snapshot. Absent symbols are the
+ * from Z-077 (Wave 9), mimir_trim and mimir_reallocarray.
+ * Nothing else is declared: no standard-name malloc/free
+ * replacement, no usable-size or statistics entry point.
+ * Absent symbols are the
  * documented unsupported behaviour for those facilities
  * (B-008 S6.1: not present - absence at link time, never a
  * runtime refusal and never a silent fallback to another
@@ -178,6 +182,56 @@ void *mimir_calloc(size_t nmemb, size_t size);
  * pointer-identity promise is made; errno is not promised
  * (U-10). */
 void *mimir_realloc(void *ptr, size_t size);
+/* Z-077 (Wave 9), per the contracts.md S2.8 conditional
+ * rows MA-COND-REALLOCARRAY-01/-02/-03, taken up directly
+ * for this surface as Z-073/Z-074 took up the aligned
+ * rows. The requested size is the checked product
+ * nmemb * size: the product is checked before the
+ * multiplication is relied on, and overflow is exactly a
+ * null return -- no wrapped-around size is allocated and
+ * the original block, if any, remains valid, unchanged in
+ * contents and ownership, and freeable exactly as before
+ * (with MA-6.1-REALLOC-02 / MA-6.2-022 by analogy). On
+ * success it behaves exactly as mimir_realloc(ptr,
+ * nmemb * size), including min(old, new) preservation;
+ * a null ptr behaves as mimir_malloc(product). A zero
+ * factor makes the product zero: the case is
+ * [UNRESOLVED: U-09] (null ptr) / [UNRESOLVED: U-12]
+ * (live ptr); this implementation returns null and
+ * leaves the original block live and unchanged, as a
+ * posture only, which settles neither -- Z-078 owns the
+ * closure. errno is not promised (U-10). Invalid
+ * pointers are undefined behaviour (MA-6.1-REALLOC-05
+ * by analogy). */
+void *mimir_reallocarray(void *ptr, size_t nmemb,
+                         size_t size);
+
+/* Z-077 (Wave 9): the public trim, over the I-003
+ * on-demand trim machinery (docs/PHASE_9_TRIM_
+ * IMPLEMENTATION.md; semantics fixed by I-002 S5) and
+ * the Z-048 mapping cache. pad is a byte count the
+ * caller asks to KEEP in retained memory:
+ * - pad == 0 releases every retained empty span and
+ *   every pooled dead mapping -- the full trim.
+ * - pad > 0 retains up to pad bytes of retained EMPTY
+ *   spans: spans are exactly one page on this host, so
+ *   the kept amount is pad rounded UP to whole spans
+ *   (a partial span cannot be retained; the rounding
+ *   never keeps less than pad), and the surplus spans
+ *   are released. The mapping pool is NOT touched by a
+ *   pad > 0 call.
+ * Live spans, live small objects and live large
+ * mappings are never touched. The return is exactly
+ * 1 if any span or pooled mapping was actually
+ * released, else exactly 0 -- including when nothing
+ * was retained and when the allocator lock could not
+ * be taken (nothing is released then). The call is
+ * non-terminal and idempotent: the allocator stays
+ * fully usable, and a second identical call with
+ * nothing left to release returns 0. No errno is
+ * promised (U-10 by analogy). */
+int mimir_trim(size_t pad);
+
 
 /* Z-074, per the Z-073 contract (by analogy under U-03 to
  * MA-6.1-ALIGNED-01/-02). A valid alignment is a non-zero
