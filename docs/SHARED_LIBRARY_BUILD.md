@@ -164,3 +164,101 @@ exercised because no behaviour is promised for them
 One commit on `yrsa/mimiralloc-02`; not pushed or merged by
 this slice — the keeper banks E-002 after E-001 in roadmap
 order. README.md untouched, per the standing rule.
+
+## Z-080 (Z13 line) — SONAME, versioning, install: the ldconfig story
+
+This section discharges INC-E002-01 on the Z13 host
+(purpleraider, x86-64) for the current public surface. The
+machinery itself is the M-007 block in the Makefile (first
+cut on the original line; see
+`docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md`, decisions
+D1–D5, which this slice adopts unchanged): `VERSION` at the
+repository root holds the project version (`0.1.0`), the ABI
+epoch is `0`, and the versioned library is built from the
+same PIC objects as `build/libmimiralloc.so`. What Z-080
+adds is the on-this-host proof against the widened surface
+plus the consumer route that records the versioned name:
+`tests/abi/test_z080_dyn.c`, `make test-z080`,
+`tests/abi/run_z080.sh`, filed as
+`tests/abi/recorded_run_z13_z080.txt`.
+
+The layout, exactly as proven in the recorded run:
+
+- Real file: `libmimiralloc.so.0.1.0`, linked with
+  `-Wl,-soname,libmimiralloc.so.0`. It exports exactly the
+  ten public symbols of the current surface (the original
+  four plus `mimir_aligned_alloc`, `mimir_posix_memalign`,
+  `mimir_usable_size`, `mimir_stats_snapshot`, `mimir_trim`,
+  `mimir_reallocarray`); no internal symbol is exported.
+- `libmimiralloc.so.0` → `libmimiralloc.so.0.1.0`: the
+  SONAME symlink. This is the name a consumer's `DT_NEEDED`
+  records and the name the loader looks for.
+- `libmimiralloc.so` → `libmimiralloc.so.0`: the
+  development symlink. It exists only in an installed tree
+  (and is what `-lmimiralloc` finds at link time). The build
+  tree keeps its own banked `build/libmimiralloc.so` real
+  file for the E-002 route; the two never collide because
+  the versioned targets live beside it.
+- Version discipline (M-007 D1/D2, unchanged): compatible
+  symbol additions leave the epoch at `0`, so existing
+  consumers keep resolving; a symbol removal or signature
+  change increments the epoch and the project minor
+  together, at the release cut that records the break. The
+  Z-074…Z-077 additions were compatible additions; no new
+  release has been cut on this line, so `VERSION` stays
+  `0.1.0` and the epoch stays `0`.
+
+Install: `make install` honours `PREFIX` (default
+`/usr/local`) and `DESTDIR` (default empty). It installs
+the real file under `$(DESTDIR)$(PREFIX)/lib`, creates
+both symlinks there, and installs the public header under
+`$(DESTDIR)$(PREFIX)/include`.
+
+The ldconfig story, in full:
+
+- Real install (`DESTDIR` empty): after laying down the
+  files, the install target runs `ldconfig $(PREFIX)/lib`.
+  ldconfig reads each library's SONAME, (re)creates the
+  SONAME symlink `libmimiralloc.so.0` →
+  `libmimiralloc.so.0.1.0`, and refreshes `/etc/ld.so.cache`
+  so the loader resolves `libmimiralloc.so.0` with no
+  `LD_LIBRARY_PATH` and no rpath. `/usr/local/lib` is in
+  the loader's configured path on this host
+  (`/etc/ld.so.conf.d/libc.conf`); a prefix outside the
+  configured paths needs its own `ld.so.conf.d` entry —
+  that is a packager decision, recorded here, not something
+  the install target invents.
+- Staged install (`DESTDIR` set): the install target
+  deliberately does NOT run ldconfig against the host —
+  a staging root is not the host's root, and writing the
+  host cache from a staged path would register names that
+  do not exist at their real locations. The recorded run
+  proves the staged form of the same story: give the
+  staging root an `etc/ld.so.conf` naming `/usr/local/lib`
+  (the one line a packager's root carries), delete the
+  SONAME symlink, and `ldconfig -r <stage>` recreates it
+  from the SONAME alone and enters
+  `libmimiralloc.so.0 => /usr/local/lib/libmimiralloc.so.0`
+  in the staged cache.
+- Running a consumer against a staged prefix still needs
+  the staged lib directory on the loader path
+  (`LD_LIBRARY_PATH` in the recorded run): the staged cache
+  describes the root it will become after installation, it
+  does not make the host loader look inside the staging
+  area. That is the honest staging limit, and it is the
+  staged form of INC-E002-02, not a defect in the install.
+
+Consumer proof (the gate): a consumer linked against the
+versioned file — in the build tree via `make test-z080`,
+and against the staged prefix in the recorded run —
+records `DT_NEEDED` = `libmimiralloc.so.0`, resolves
+through the SONAME symlink to `libmimiralloc.so.0.1.0`,
+and passes the full ten-symbol exercise. The E-002-route
+consumer (`test_z077_dyn`) still records the unversioned
+`libmimiralloc.so`; that route is banked evidence wiring
+and is unchanged by this slice.
+
+Disposition: INC-E002-01 is CLOSED on this line (SONAME,
+versioned filename, install target and this ldconfig story
+all implemented and proven on this host). INC-E002-02
+stands only in its staged form, explained above.

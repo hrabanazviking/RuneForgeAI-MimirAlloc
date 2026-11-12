@@ -1,0 +1,119 @@
+=== Z-080 SONAME / versioning / install recorded run ===
+date_utc: 2026-11-12T22:40:17Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+ldconfig: ldconfig (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+head: 29f1db70d92811a53e6c818f4937a7e4d6fc7f37
+branch: yrsa/mimiralloc-team-06
+loadavg: 1.19 0.99 0.80 2/1302 2690184
+page_size: 4096
+VERSION file: 0.1.0
+=== S1 build from clean ===
+  [ok] make lib lib-versioned + z080/z077 consumers (log hidden_files/z080_build.log)
+-rwxr-xr-x 1 volmarr volmarr 42584 Nov 12 17:40 build/libmimiralloc.so
+lrwxrwxrwx 1 volmarr volmarr    22 Nov 12 17:40 build/libmimiralloc.so.0 -> libmimiralloc.so.0.1.0
+-rwxr-xr-x 1 volmarr volmarr 42584 Nov 12 17:40 build/libmimiralloc.so.0.1.0
+=== S2 versioned library identity (SONAME + exports) ===
+ 0x000000000000000e (SONAME)             Library soname: [libmimiralloc.so.0]
+parsed SONAME: libmimiralloc.so.0
+  [ok] SONAME is libmimiralloc.so.0 (ABI epoch 0, M-007 D2 rule)
+libmimiralloc.so.0.1.0
+  [ok] build-tree SONAME symlink points at the versioned file
+-- exports (nm -D) - exactly the 10 public symbols --
+00000000000063e0 T mimir_aligned_alloc
+0000000000006230 T mimir_calloc
+00000000000058f0 T mimir_free
+00000000000058d0 T mimir_malloc
+0000000000006400 T mimir_posix_memalign
+00000000000063c0 T mimir_realloc
+0000000000006f50 T mimir_reallocarray
+00000000000065e0 T mimir_stats_snapshot
+0000000000006da0 T mimir_trim
+0000000000006480 T mimir_usable_size
+defined dynamic symbol count: 10
+  [ok] count == 10
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_usable_size
+  [ok] exported: mimir_stats_snapshot
+  [ok] exported: mimir_trim
+  [ok] exported: mimir_reallocarray
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+=== S3 contrast leg: the banked unversioned library ===
+SONAME entries in build/libmimiralloc.so: 0
+  [ok] unversioned build library carries no SONAME (E-002 state, untouched)
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] E-002-route consumer DT_NEEDED names the unversioned libmimiralloc.so
+=== S4 build-tree consumer against the versioned file ===
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so.0]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z080_dyn DT_NEEDED names libmimiralloc.so.0 (the SONAME)
+  [ok] test_z080_dyn has no unversioned libmimiralloc.so DT_NEEDED
+Z-080 dynamic consumer (versioned libmimiralloc only)
+Z080 DYN: 183 checks, 0 failed
+RESULT: PASS
+  [ok] test_z080_dyn exit 0 (run via $ORIGIN rpath + SONAME symlink)
+=== S5 staging-prefix install ===
+staging prefix root: /tmp/z080-stage.yCYLHa (DESTDIR=/tmp/z080-stage.yCYLHa, PREFIX=/usr/local)
+  [ok] make install DESTDIR=stage (log hidden_files/z080_install.log)
+install -d /tmp/z080-stage.yCYLHa/usr/local/lib /tmp/z080-stage.yCYLHa/usr/local/include
+install -m 0755 build/libmimiralloc.so.0.1.0 /tmp/z080-stage.yCYLHa/usr/local/lib/libmimiralloc.so.0.1.0
+ln -sf libmimiralloc.so.0.1.0 /tmp/z080-stage.yCYLHa/usr/local/lib/libmimiralloc.so.0
+ln -sf libmimiralloc.so.0 /tmp/z080-stage.yCYLHa/usr/local/lib/libmimiralloc.so
+install -m 0644 include/mimir_alloc.h /tmp/z080-stage.yCYLHa/usr/local/include/mimir_alloc.h
+/tmp/z080-stage.yCYLHa
+/tmp/z080-stage.yCYLHa/usr
+/tmp/z080-stage.yCYLHa/usr/local
+/tmp/z080-stage.yCYLHa/usr/local/include
+/tmp/z080-stage.yCYLHa/usr/local/include/mimir_alloc.h
+/tmp/z080-stage.yCYLHa/usr/local/lib
+/tmp/z080-stage.yCYLHa/usr/local/lib/libmimiralloc.so
+/tmp/z080-stage.yCYLHa/usr/local/lib/libmimiralloc.so.0
+/tmp/z080-stage.yCYLHa/usr/local/lib/libmimiralloc.so.0.1.0
+  [ok] staged real file libmimiralloc.so.0.1.0 present (not a symlink)
+  [ok] staged libmimiralloc.so.0 -> libmimiralloc.so.0.1.0
+  [ok] staged libmimiralloc.so (development symlink) -> libmimiralloc.so.0
+  [ok] staged header usr/local/include/mimir_alloc.h present
+ 0x000000000000000e (SONAME)             Library soname: [libmimiralloc.so.0]
+  [ok] staged library exports exactly 10 symbols
+  [ok] host /usr/local/lib NOT polluted by the staged install (DESTDIR set: install ran no host ldconfig)
+=== S6 the staged ldconfig story ===
+A staging root has no /etc of its own: give it the one line a
+packager's root carries (on this host /etc/ld.so.conf.d/libc.conf
+already names /usr/local/lib), then delete the SONAME symlink
+and let ldconfig -r recreate it from the SONAME alone.
+/usr/local/lib
+libmimiralloc.so
+libmimiralloc.so.0.1.0
+  [ok] ldconfig -r stage exit 0
+total 44
+drwxr-xr-x 2 volmarr volmarr   100 Nov 12 17:40 .
+drwxr-xr-x 4 volmarr volmarr    80 Nov 12 17:40 ..
+lrwxrwxrwx 1 volmarr volmarr    18 Nov 12 17:40 libmimiralloc.so -> libmimiralloc.so.0
+lrwxrwxrwx 1 volmarr volmarr    22 Nov 12 17:40 libmimiralloc.so.0 -> libmimiralloc.so.0.1.0
+-rwxr-xr-x 1 volmarr volmarr 42584 Nov 12 17:40 libmimiralloc.so.0.1.0
+  [ok] ldconfig recreated libmimiralloc.so.0 -> libmimiralloc.so.0.1.0 from the SONAME
+	libmimiralloc.so.0 (libc6,x86-64) => /usr/local/lib/libmimiralloc.so.0
+  [ok] staged cache lists libmimiralloc.so.0 => /usr/local/lib/libmimiralloc.so.0
+=== S7 consumer against the staged prefix ===
+  [ok] consumer compiles against the staged include/lib
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so.0]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] staged consumer DT_NEEDED names libmimiralloc.so.0
+-- ldd (LD_LIBRARY_PATH stands in for the cache a real install refreshes) --
+	libmimiralloc.so.0 => /tmp/z080-stage.yCYLHa/usr/local/lib/libmimiralloc.so.0 (0x000078906de68000)
+  [ok] loader resolves libmimiralloc.so.0 into the staged prefix
+Z-080 dynamic consumer (versioned libmimiralloc only)
+Z080 DYN: 183 checks, 0 failed
+RESULT: PASS
+  [ok] staged consumer exit 0
+=== S8 neighbour routes unregressed ===
+  [ok] make test-z077 still passes (log hidden_files/z080_test_z077.log)
+  [ok] make test-e002 still passes (log hidden_files/z080_test_e002.log)
+staging root left in place for inspection: /tmp/z080-stage.yCYLHa
+=== Z-080 RUN RESULT: PASS ===

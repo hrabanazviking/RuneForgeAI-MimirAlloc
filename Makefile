@@ -2174,3 +2174,33 @@ test-z079: $(BUILD)/test_z079_budget
 	./$(BUILD)/test_z079_budget
 
 .PHONY: test-z079
+# ------------------------------------------------------------------
+# Z-080: SONAME, versioning, install (D-07) -- the M-007
+# versioned library (above) proven on this host against the
+# current ten-symbol surface, plus the consumer route that
+# records the versioned name. The consumer under tests/abi/
+# (test_z080_dyn.c) links ONLY against the versioned library
+# file build/libmimiralloc.so.$(MIMIR_VERSION), whose SONAME
+# is libmimiralloc.so.$(ABI_EPOCH): its DT_NEEDED therefore
+# names the SONAME -- the versioned identity -- never the
+# unversioned build-tree name the E-002 route records. It
+# runs through an $ORIGIN rpath, resolving the SONAME
+# symlink the lib-versioned target lays down beside it.
+# Standalone via `make test-z080`; NOT part of `make test`
+# (standing gate counts untouched). The full recorded run
+# (staging-prefix install, the staged ldconfig proof, and
+# the staged consumer) is tests/abi/run_z080.sh, filed as
+# tests/abi/recorded_run_z13_z080.txt; the ldconfig story is
+# written down in docs/SHARED_LIBRARY_BUILD.md (Z-080
+# section).
+# ------------------------------------------------------------------
+$(BUILD)/test_z080_dyn.o: tests/abi/test_z080_dyn.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_z080_dyn.c -o $@
+
+$(BUILD)/test_z080_dyn: $(VLIB) $(BUILD)/$(VSONAME) $(BUILD)/test_z080_dyn.o
+	$(CC) $(CFLAGS) $(BUILD)/test_z080_dyn.o $(VLIB) -Wl,-rpath,'$$ORIGIN' -o $@
+
+test-z080: $(BUILD)/test_z080_dyn
+	./$(BUILD)/test_z080_dyn
+
+.PHONY: test-z080
