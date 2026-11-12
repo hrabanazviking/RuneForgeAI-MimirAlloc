@@ -1,0 +1,99 @@
+MimirAlloc Z13 recorded run - Z-024 Free-path anatomy
+slice: Z-024 - Free-path anatomy (cross-thread free and remote-free costs on the banked core; mapping-path free cost separated from small-path free cost)
+date: 2026-11-12T03:36-03:39-05:00 (America/New_York; host_truth captured 08:36:04Z, two full measurement invocations back to back, gate suite after)
+base: fe9eef4 (team branch yrsa/mimiralloc-team-01 after merging seat main 0b6c20f, banked Z-001..Z-019; the Z-019 lock histograms are this slice's starting evidence: free hold small 86 cycles, mixed 601, large 4,490)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: tests/perf/probe_z024.c, tests/perf/run_z024.sh, tests/perf/summarize_z024.py, this recorded run. No production code changed by this slice.
+
+environment header (scripts/z13/host_truth.sh at run start, verbatim):
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T08:36:04Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2753237
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 63%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 3.38 2.50 2.31
+
+load honesty: SHARED HOST. At header capture a Tensile lab library build (TensileCreateLibrary) was briefly active and loadavg read 3.38/2.50/2.31; during the two measurement invocations loadavg read 2.37/2.35/2.27 (invocation 1 start) falling to 1.87/2.23/2.24 (final invocation start) and 1.96/2.25/2.24 at its end, with the Tensile lab python (round2.py, ~1% CPU) as the only steady co-tenant. These are this-machine numbers under that stated light-to-moderate shared load, NOT quiet-machine baselines. The guard is agreement: every mimir headline below is the median of 7 processes in invocation 1, and invocation 2 (a second full 175-process run) reproduced every mimir group within 5% (worst 4.80%); the single group that failed agreement is a glibc comparator group and is labelled DISAGREE where it appears.
+
+method (per docs/Z13_MEASUREMENT_PROTOCOL.md, Z-004): each phase is run as separate PROCESSES, 3 warm-up processes discarded + 7 measured per phase per invocation, 25 phases x 7 = 175 RESULT lines per invocation. Headline = MEDIAN across processes of per-process ns/op (summarize_z024.py); per-phase split-half drift within invocation 1 is <= 6.81% for every group, most <= 2%. Inside a process, ONE batch is timed with CLOCK_MONOTONIC around ONLY the free loop; allocation, pattern-touch and checksum verification all happen outside the timed region. The allocator writes a per-block pattern (first and last byte); the FREEING side verifies the batch checksum before the timer starts (K-002 discipline); exactly one checksum per (leg, phase, size) group in both invocations (verified by the summariser, exit 0). Threads pin themselves with pthread_setaffinity_np (CCD0 = CPUs 0-7, CCD1 = CPUs 8-15); local phases also run under taskset -c 2. Remote handoff is a preallocated pointer array plus padded atomic sequence words: no allocation, no mutex, no condvar in the handoff, and the consumer's timer starts only after it observes the publish flag, so handoff cost is excluded from the free cost. Swap phases use a two-stage release so victim-checksum verification also completes before the timed wall window opens.
+
+geometries and shapes:
+  local          allocating thread == freeing thread (CPU 2).
+  remote         producer allocates on one CPU, a single consumer frees on another: same-CCD pair 2 -> 3, cross-CCD pair 2 -> 10, and the reversed cross-CCD pair 10 -> 2.
+  swap           4 threads each allocate a batch, then each frees the NEXT thread's batch concurrently (steady half); headline is wall time over all frees (throughput cost per free under contention). Pairs: CPUs 2,3,4,5 (same-CCD) and 2,10,3,11 (every free crosses a CCD).
+  steady         free every SECOND block of the batch: every span keeps live blocks, no span is released; the timed cost is lock + lookup + free-list threading only.
+  emptying       free ALL blocks: small spans empty out and all but the retention bound (2 per class) are released whole inside the timed region; mapping frees always munmap.
+  local_rev      emptying but frees run NEWEST-first: the newest blocks sit in the head span / head mapping descriptor, so registry walks are shortest. Paired with oldest-first local_emptying it isolates the walk-depth share.
+  Batch shapes: small 8,192 blocks (64-byte class: 62 objects/span -> 133 spans live; 512-byte class: 7 objects/span -> 1,171 spans live); mapping 2,048 blocks at 8,192 bytes (2,048 live mappings) and 512 blocks at 262,144 bytes (512 live mappings). Forward (allocation-order) frees free the OLDEST blocks first - the deepest registry positions. Blocks are pattern-touched at first and last byte only; for mapping blocks that faults exactly 2 pages per mapping, so the munmap page-table share in the mapping numbers is a FLOOR (a fully-touched large block costs more to unmap; Z-014/Z-015 bound that share).
+
+FREE-COST TABLE - mimir leg (ns per free, median of 7 processes, invocation 1; invocation 2 agreed within 5% on every row):
+  small 64,  local steady             444.1
+  small 64,  local emptying           497.5
+  small 64,  local_rev emptying        75.1
+  small 64,  remote same-CCD steady   456.1   (+2.7% vs local steady)
+  small 64,  remote same-CCD emptying 517.1   (+3.9% vs local emptying)
+  small 64,  remote cross-CCD steady  470.0   (+5.8% vs local steady)
+  small 64,  remote cross-CCD empty   541.7   (+8.9% vs local emptying)
+  small 64,  remote cross-CCD rev steady (10 alloc -> 2 free) 460.2 (+3.6%)
+  small 64,  swap x4 same-CCD (wall) 1,128.2   (2.54x local steady)
+  small 64,  swap x4 cross-CCD (wall) 1,356.8  (3.06x local steady)
+  small 512, local steady           5,668.0
+  small 512, local emptying         6,333.5
+  small 512, local_rev emptying       523.2
+  mapping 8192, local emptying      6,390.9
+  mapping 8192, local_rev emptying  1,176.0
+  mapping 8192, remote same-CCD     7,365.2   (+15.2% vs local)
+  mapping 8192, remote cross-CCD    8,413.9   (+31.6% vs local)
+  mapping 262144, local emptying    2,616.5
+  mapping 262144, remote cross-CCD  4,636.8   (+77.2% vs local)
+
+FREE-COST TABLE - glibc comparator leg (identical probe and shapes):
+  small 64,  local steady               4.6
+  small 64,  local emptying             5.7
+  small 64,  remote same-CCD steady    12.9   (+179% vs local, +8.3 ns)
+  small 64,  remote cross-CCD steady   13.4   (+190% vs local, +8.8 ns)
+  8192,      local emptying            73.1   (heap path: at 8 KiB glibc does NOT mmap under its default threshold, so this row is NOT like-for-like with mimir's mapping path - it prices glibc heap free, not a munmap)
+  8192,      remote cross-CCD emptying 307.8 (invocation 1) / 243.6 (invocation 2) - DISAGREE, wide per-process spread (185..372 ns) in both invocations; reported as a noisy range ~244..308, never a headline.
+
+ANATOMY - where the free time goes (source: src/core/mimir_core.c on this tree):
+1. THE REGISTRY WALK IS THE FREE PATH. mimir_core_free first walks the mapping registry (find_candidate_locked, linear in live mappings), then walks the span registry (find_span_live_locked, linear in live spans) - and small_free_locked then calls find_span_live_locked a SECOND time, repeating the registry walk and the found span's free-list scan. A small free therefore pays two linear walks whose length is set by how many spans/mappings are live and how deep the block's owner sits in the list (registry inserts at the head; allocation order frees the oldest = deepest first). The reverse-order pairs price the walk directly:
+     64-byte emptying:   oldest-first 497.5 vs newest-first 75.1 ns  (walk-depth share ~85%)
+     512-byte emptying:  oldest-first 6,333.5 vs newest-first 523.2 ns (walk-depth share ~92%)
+     8192 mapping:       oldest-first 6,390.9 vs newest-first 1,176.0 ns (walk-depth share ~82%)
+   The 512-byte class is the extreme case by arithmetic, not by class policy: 7 objects per span means the 8,192-block batch keeps 1,171 spans live (vs 133 at 64 bytes), so the average walk is ~9x longer and the free costs ~12.8x the 64-byte steady free (5,668.0 vs 444.1). Free cost on this core is a function of LIVE SET SIZE and FREE ORDER, not of the block's size class per se. Mixed-order real churn lands between the oldest-first and newest-first regimes; both bounds are now of record.
+2. THE LOCK ITSELF IS NOT THE STORY (single-threaded). Z-019 measured the free lock hold at 86 cycles (~30 ns at this host's TSC rate) for the small path - an order below the 444 ns steady free above. The gap between the Z-019 hold and this slice's per-free cost is the walk work done INSIDE that hold at these live-set depths (Z-019's workloads keep far fewer spans live). Any Wave 4/5 redesign that only cheapens locking leaves the dominant term standing.
+3. REMOTE FREE IS CHEAP - UNTIL IT IS CONCURRENT. A single remote consumer freeing a quiescent batch pays only +2.7% (same CCD) to +8.9% (cross CCD) over local free on the small path: the walk and the lock dwarf the cache-transfer cost of the freed block's first word and the span header, and the reversed cross-CCD pair (+3.6%) shows no CCD-direction asymmetry. On the mapping path the remote premium is real money (+15.2% same-CCD, +31.6% cross-CCD at 8,192; +77.2% cross-CCD at 262,144 - the freeing thread unmaps in its own context and the metadata/page-table lines come from the producer's CCD; mechanism attribution is interpretation, the premium itself is measured). Under CONCURRENT remote frees (swap x4) the one global lock serialises everything: wall cost per free rises to 2.54x (same-CCD) / 3.06x (cross-CCD) the local steady figure at only 4 threads.
+   Consequence for Z-026/Z-030, stated plainly: a remote-free queue routed to the owner thread does NOT, by itself, buy back the dominant cost - the owner would still pay the same registry walks under the same lock. The evidence argues the redesign must first kill the walk (the span of a small block is mechanically derivable - spans are exactly one page with the header at the page base - but the registry walk is also the J-006 integrity posture, so replacing lookup-by-walk with lookup-by-arithmetic is a contract trade Z-026 must record, not a free optimisation). Queueing helps the swap-geometry contention term, not the walk term.
+4. SPAN RELEASE (emptying minus steady, local): +53.3 ns/free at 64 bytes (+12.0%) and +665.5 ns/free at 512 bytes (+11.7%). The share is roughly constant in proportion because release count scales with span count (130 of 133 spans released at 64 bytes; 1,169 of 1,171 at 512) - the per-release munmap is amortised over the objects the span held (62 vs 7), which is exactly why the absolute delta is 12x larger for the coarse class.
+5. MAPPING FREE AT SHALLOW DEPTH (newest-first, 1,176.0 ns at 8,192) is the mapping path's floor at this batch shape: short walk + descriptor validation + munmap of a 3-page mapping with 2 faulted pages, all under the lock. Forward-order mapping frees at depth are walk-dominated (point 1), and the 262,144 local figure (2,616.5) sitting BELOW the 8,192 figure (6,390.9) is the same effect - 512 live mappings walk shorter than 2,048 - not a size effect; with fully-touched blocks the munmap share grows (see the shape caveat above) and Z-023's large-path split owns that term.
+6. TELEMETRY GAP CARRIED, NOT NEW: cross_thread_frees (J-002) counts only mapping-path remote frees (INC-J002-01, PARTIAL by design - no per-object owner record exists for small blocks). This slice's small remote frees are therefore measurable only by timing, never by the stats surface; Z-026 should treat small-path remote-free accounting as unbuilt, not as zero.
+
+VERDICTS (roadmap Law 2, honest grading):
+  Small-path free vs glibc: LOSS, large. Local steady 444.1 vs 4.6 ns (~96x); remote cross-CCD steady 470.0 vs 13.4 ns (~35x). glibc's remote premium is proportionally bigger (+~190%) but absolutely tiny (+8.8 ns); mimir's is proportionally small (+5.8%) because the walk already dwarfs transfer costs.
+  Mapping-path free vs glibc at 8,192: NOT LIKE-FOR-LIKE (glibc heap vs mimir munmap, see comparator table) - no verdict claimed from that row. The mapping path's own anatomy (walk ~82%, floor 1,176.0 ns shallow) is the recorded result.
+  Remote-free premium on the banked core: SMALL for a single consumer (<= +8.9% small path), REAL on the mapping path (up to +77.2% cross-CCD at 262,144), and SEVERE under concurrency (2.54x..3.06x wall at 4 threads, lock serialisation).
+  Gate: free-cost table per path and thread geometry - MET (table above: 2 paths x local / same-CCD / cross-CCD / reversed / concurrent geometries, plus the walk-depth control pair per path).
+
+correctness gate: scripts/z13/run_gate.sh on this tree (post-merge, Z-024 artifacts present, no production change): GREEN, 4,988 checks / 0 failed / 77 by-design skips, make exit 0 (hidden_files/z024_gate.log) - identical counts to the Z-001/Z-010/Z-011/Z-015 baseline, delta zero as expected for a measurement-only slice.
+defects: none in repo code. Probe defects found and fixed before recording: (a) the pilot swap phase verified victim checksums INSIDE the timed wall window - restructured to a two-stage release (verify at stage 1, timed frees at stage 2) and both recorded invocations re-run in full; the pilot raw/summary are kept in hidden_files/z024_*_pilot.* as method evidence only, never as results. (b) an early pilot showed an unstable remote same-CCD 8,192 group; the two final full invocations agree on that group within 2.35%, so no defect is carried - the group is reported from the agreeing pair.
+repro: tests/perf/run_z024.sh <raw.csv> [reps] then python3 tests/perf/summarize_z024.py <raw.csv>. Raw evidence for this run: hidden_files/z024_raw1.csv + z024_raw2.csv (175 RESULT lines each), summaries hidden_files/z024_summary1.txt / z024_summary2.txt, host header hidden_files/z024_host_truth.txt.
