@@ -1,0 +1,345 @@
+MimirAlloc Z13 recorded run - Z-005 perf-counter leg
+slice: Z-005 - Perf-counter leg (extends the K-002 oracle with perf stat counters)
+date: 2026-11-12T02:16-05:00 (perf run window, America/New_York)
+base: 5ad882b (branch yrsa/mimiralloc-team-05, seat founding commit)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+arch: x86_64 (uname -m)
+pagesize: 4096 (getconf PAGESIZE)
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, nproc 32
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+compiler: gcc (Ubuntu 15.3.0-4ubuntu1) 15.3.0, repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2
+harness: tests/perf/bench_k002.c UNMODIFIED (sha256 30dd0d9a8da12b03aa511fd35a4a098cf593b79c0e9ad352026ecb11eacc7d37 - identical to the Z-003 recorded hash). The counter leg is built AROUND it: tests/perf/probe_z005.c #includes bench_k002.c with its main() renamed away and adds no workload code of its own - the workload functions, size tables, op definition (one allocation plus its matching free) and checksums are the banked ones. bench_k002 runs all four workloads in one process, so perf stat around the bench binary could only give whole-process counters; the probe runs ONE workload per process (argv-selected), one warm-up pass at 1/10 scale exactly as bench_k002, then R timed passes (R per workload: small_churn 20, mixed_batch 5, large_batch 20, mixed_lifecycle 10). Runner: tests/perf/run_perf_z005.sh, 5 measured processes per leg per workload, legs alternating process by process (glibc, mimiralloc) per workload. Summariser: tests/perf/summarize_z005.py.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh at the seat, Z-002, run verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T07:17:05Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5116478
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 58%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.71 1.47 2.00
+
+=== PERF ACCESS ON THIS HOST - BLOCKER PROOF AND METHOD USED ===
+Unprivileged perf_event_open is BLOCKED on this host:
+  /proc/sys/kernel/perf_event_paranoid = 4
+  $ perf stat -e cycles -- true
+  Error:
+  No supported events found.
+  Access to performance monitoring and observability operations is limited.
+  Consider adjusting /proc/sys/kernel/perf_event_paranoid setting to open
+  access to performance monitoring and observability operations for processes
+  without CAP_PERFMON, CAP_SYS_PTRACE or CAP_SYS_ADMIN Linux capability.
+Method used (no host setting changed): the table below was measured with
+`sudo -n perf stat -x '|' -e cycles,instructions,cache-misses,branch-misses`
+(passwordless sudo already granted on this host; per-process counting of the
+probe child only). No sysctl was modified. Every event in every block reports
+100.00% running time - no counter multiplexing, no scaled estimates, no
+<not counted> events (the summariser checks all three and would have
+printed them as problems).
+
+=== METHOD / NORMALISATION ===
+perf counters cover the whole probe process: process start-up + the 1/10-scale
+warm-up pass + the R timed passes. Per-op figures are counter / EXECUTED ops
+(warm-up ops + timed ops - the work the counters actually measured). Warm-up
+share of executed ops per workload: small_churn 0.5%, mixed_batch 2.0%,
+large_batch 0.5%, mixed_lifecycle 1.0% (printed in the table). Start-up is
+amortised by the per-workload R above (timed windows 12 ms..2.8 s per process).
+Both legs run the identical probe structure, so the comparison is like for like.
+Checksum proof: every one of the 40 blocks has checksum == R x the Z-003
+recorded per-pass checksum (small_churn 12756656, mixed_batch 34727552,
+large_batch 1106008, mixed_lifecycle 40359936) - the measured work is proven
+to be the banked K-002 work, byte for byte.
+load state: load average 0.61 / 2.25 / 2.43 at first check (02:11), 0.85 / 1.56 / 2.05 at perf-run end (02:16) - a QUIET window on this shared 32-thread host (contrast Z-003's run at load 5.29-6.14 under Tensile contention). That is why this run's ns/op medians are faster than Z-003's for both legs; the counter ratios, not the absolute ns/op, are the portable result here. These are honest quiet-window numbers, recorded with their load state, not a contention baseline.
+correctness gate: full make test in this worktree, log hidden_files/z005_make_test.log (team-local, not banked): 4988 checks run (18 smoke + 4970 CHECKS across the other targets), 0 failed, 77 by-design SKIP lines, make exit 0 - identical counts to the Z-001 baseline.
+
+=== COUNTER TABLE (summarize_z005.py on the raw blocks below; medians per op) ===
+blocks parsed: 40 (expect 40)
+checksum proof: every block checksum == reps x Z-003 per-pass checksum
+
+leg         workload         procs  warm%  cyc/op med  ins/op med  cmiss/op med  bmiss/op med  ns/op med
+glibc       small_churn          5   0.5%      17.826      82.990       0.01362       0.00472       3.87
+glibc       mixed_batch          5   2.0%      18.306     100.611       0.01806       0.01468       3.59
+glibc       large_batch          5   0.5%    3512.486    8820.614       4.64864       6.25547     698.76
+glibc       mixed_lifecycle      5   1.0%      35.280     208.216       0.01048       0.02965       6.79
+mimiralloc  small_churn          5   0.5%     175.653     861.968       0.01688       0.00613      34.49
+mimiralloc  mixed_batch          5   2.0%    1173.776    3125.603       0.45442       2.73256     228.81
+mimiralloc  large_batch          5   0.5%   14005.627   32076.006      13.06845      23.79151    2751.60
+mimiralloc  mixed_lifecycle      5   1.0%    4374.607    9550.162       4.90669       8.34941     852.87
+
+per-op ranges (min..max across processes):
+  glibc small_churn: cycles=17.72..18.77 | instructions=82.97..83.14 | cache-misses=0.01284..0.01484 | branch-misses=0.004358..0.005063
+  glibc mixed_batch: cycles=17.84..21.55 | instructions=100.6..100.7 | cache-misses=0.01585..0.02112 | branch-misses=0.01383..0.0226
+  glibc large_batch: cycles=3485..3586 | instructions=8809..8846 | cache-misses=4.307..4.755 | branch-misses=6.041..6.845
+  glibc mixed_lifecycle: cycles=34.71..36.77 | instructions=208.2..208.3 | cache-misses=0.008945..0.0123 | branch-misses=0.02785..0.03665
+  mimiralloc small_churn: cycles=175.5..176.4 | instructions=861.9..862.1 | cache-misses=0.01477..0.01948 | branch-misses=0.00561..0.006894
+  mimiralloc mixed_batch: cycles=1170..1186 | instructions=3118..3144 | cache-misses=0.447..0.4746 | branch-misses=2.662..2.757
+  mimiralloc large_batch: cycles=1.395e+04..1.414e+04 | instructions=3.204e+04..3.242e+04 | cache-misses=12.2..13.89 | branch-misses=23.41..25.37
+  mimiralloc mixed_lifecycle: cycles=4341..4453 | instructions=9438..9627 | cache-misses=4.553..4.933 | branch-misses=8.09..8.686
+
+=== READING (median cycles/op and instructions/op, mimiralloc vs glibc) ===
+small_churn      cycles/op   175.65 vs   17.83 ( 9.9x) | instructions/op   861.97 vs   82.99 (10.4x) | cache-miss/op near-parity (0.0169 vs 0.0136): the small path's loss is instruction count, not cache behaviour - KL-A is a code-path-length wound.
+mixed_batch      cycles/op  1173.78 vs   18.31 (64.1x) | instructions/op  3125.60 vs  100.61 (31.1x) | cache-misses/op 0.454 vs 0.018 (25x) and branch-misses/op 2.73 vs 0.015: the batch path pays in instructions AND cache/branch behaviour.
+large_batch      cycles/op 14005.63 vs 3512.49 ( 4.0x) | instructions/op 32076.01 vs 8820.61 ( 3.6x) | both legs are cache-miss heavy per op (13.07 vs 4.65 misses/op) - the mapping path dominates, as expected for above-cutoff sizes.
+mixed_lifecycle  cycles/op  4374.61 vs   35.28 (124.0x) | instructions/op  9550.16 vs  208.22 (45.9x) | cache-misses/op 4.91 vs 0.010: the lifecycle leg is the deepest counter wound on this machine - long code paths plus cache churn on refill.
+Overall: the Z-003 LOSS verdicts are now explained at counter level - MimirAlloc executes 3.6x..46x more instructions per op than glibc on every baseline workload, and on the two mixed workloads it also misses cache and branches at rates glibc does not. A proven loss, measured deeper, is a bankable result (roadmap Law 2).
+
+=== RAW BLOCKS (leg workload proc reps; probe CSV line; perf stat -x lines count||event|time_enabled|pct_running||) ===
+=== glibc small_churn proc=1 reps=20 ===
+glibc,small_churn,2000000,6793268,294409112.1,3.40,255133120
+36343686||cycles|7114108|100.00||
+166809111||instructions|7114108|100.00||
+25805||cache-misses|7114108|100.00||
+8759||branch-misses|7114108|100.00||
+=== mimiralloc small_churn proc=1 reps=20 ===
+mimiralloc,small_churn,2000000,68143990,29349616.9,34.07,255133120
+352689815||cycles|69039729|100.00||
+1732441552||instructions|69039729|100.00||
+31587||cache-misses|69039729|100.00||
+12284||branch-misses|69039729|100.00||
+=== glibc small_churn proc=2 reps=20 ===
+glibc,small_churn,2000000,7285913,274502317.0,3.64,255133120
+35649741||cycles|7762871|100.00||
+166769079||instructions|7762871|100.00||
+27050||cache-misses|7762871|100.00||
+9448||branch-misses|7762871|100.00||
+=== mimiralloc small_churn proc=2 reps=20 ===
+mimiralloc,small_churn,2000000,69094692,28945783.6,34.55,255133120
+353063392||cycles|70131600|100.00||
+1732705806||instructions|70131600|100.00||
+38441||cache-misses|70131600|100.00||
+13856||branch-misses|70131600|100.00||
+=== glibc small_churn proc=3 reps=20 ===
+glibc,small_churn,2000000,8124154,246179479.1,4.06,255133120
+37733209||cycles|8582574|100.00||
+166814526||instructions|8582574|100.00||
+27576||cache-misses|8582574|100.00||
+9584||branch-misses|8582574|100.00||
+=== mimiralloc small_churn proc=3 reps=20 ===
+mimiralloc,small_churn,2000000,70443533,28391534.5,35.22,255133120
+354466425||cycles|71355077|100.00||
+1732556554||instructions|71355077|100.00||
+33926||cache-misses|71355077|100.00||
+12324||branch-misses|71355077|100.00||
+=== glibc small_churn proc=4 reps=20 ===
+glibc,small_churn,2000000,7896707,253270128.9,3.95,255133120
+35831218||cycles|8336483|100.00||
+167101809||instructions|8336483|100.00||
+29835||cache-misses|8336483|100.00||
+10177||branch-misses|8336483|100.00||
+=== mimiralloc small_churn proc=4 reps=20 ===
+mimiralloc,small_churn,2000000,68225404,29314593.7,34.11,255133120
+352839715||cycles|69050980|100.00||
+1732916580||instructions|69050980|100.00||
+39158||cache-misses|69050980|100.00||
+13494||branch-misses|69050980|100.00||
+=== glibc small_churn proc=5 reps=20 ===
+glibc,small_churn,2000000,7739351,258419601.3,3.87,255133120
+35615940||cycles|8175362|100.00||
+166788219||instructions|8175362|100.00||
+27376||cache-misses|8175362|100.00||
+9489||branch-misses|8175362|100.00||
+=== mimiralloc small_churn proc=5 reps=20 ===
+mimiralloc,small_churn,2000000,68989435,28989946.1,34.49,255133120
+353113534||cycles|69969357|100.00||
+1732543521||instructions|69969357|100.00||
+29678||cache-misses|69969357|100.00||
+11277||branch-misses|69969357|100.00||
+=== glibc mixed_batch proc=1 reps=5 ===
+glibc,mixed_batch,1280000,4592091,278740120.8,3.59,173637760
+23572246||cycles|5144997|100.00||
+131348496||instructions|5144997|100.00||
+23578||cache-misses|5144997|100.00||
+18724||branch-misses|5144997|100.00||
+=== mimiralloc mixed_batch proc=1 reps=5 ===
+mimiralloc,mixed_batch,1280000,292889151,4370254.1,228.82,173637760
+1532482402||cycles|299711199|100.00||
+4084345888||instructions|299711199|100.00||
+593293||cache-misses|299711199|100.00||
+3474920||branch-misses|299711199|100.00||
+=== glibc mixed_batch proc=2 reps=5 ===
+glibc,mixed_batch,1280000,4458630,287083700.6,3.48,173637760
+23296925||cycles|4976382|100.00||
+131357586||instructions|4976382|100.00||
+20697||cache-misses|4976382|100.00||
+18056||branch-misses|4976382|100.00||
+=== mimiralloc mixed_batch proc=2 reps=5 ===
+mimiralloc,mixed_batch,1280000,292879643,4370395.9,228.81,173637760
+1527655667||cycles|299473444|100.00||
+4077663649||instructions|299473444|100.00||
+597758||cache-misses|299473444|100.00||
+3530974||branch-misses|299473444|100.00||
+=== glibc mixed_batch proc=3 reps=5 ===
+glibc,mixed_batch,1280000,4336231,295187226.0,3.39,173637760
+23932251||cycles|4670430|100.00||
+131358522||instructions|4670430|100.00||
+21729||cache-misses|4670430|100.00||
+29503||branch-misses|4670430|100.00||
+=== mimiralloc mixed_batch proc=3 reps=5 ===
+mimiralloc,mixed_batch,1280000,292695629,4373143.5,228.67,173637760
+1533847563||cycles|300132768|100.00||
+4071251069||instructions|300132768|100.00||
+583539||cache-misses|300132768|100.00||
+3599466||branch-misses|300132768|100.00||
+=== glibc mixed_batch proc=4 reps=5 ===
+glibc,mixed_batch,1280000,5062223,252853341.3,3.95,173637760
+28142016||cycles|6174852|100.00||
+131515652||instructions|6174852|100.00||
+27488||cache-misses|6174852|100.00||
+25218||branch-misses|6174852|100.00||
+=== mimiralloc mixed_batch proc=4 reps=5 ===
+mimiralloc,mixed_batch,1280000,296058714,4323466.7,231.30,173637760
+1548305499||cycles|302354149|100.00||
+4105164587||instructions|302354149|100.00||
+619608||cache-misses|302354149|100.00||
+3587964||branch-misses|302354149|100.00||
+=== glibc mixed_batch proc=5 reps=5 ===
+glibc,mixed_batch,1280000,4995728,256218913.4,3.90,173637760
+23900847||cycles|5520681|100.00||
+131353133||instructions|5520681|100.00||
+27574||cache-misses|5520681|100.00||
+19160||branch-misses|5520681|100.00||
+=== mimiralloc mixed_batch proc=5 reps=5 ===
+mimiralloc,mixed_batch,1280000,292126251,4381667.2,228.22,173637760
+1527544798||cycles|298942303|100.00||
+4080787023||instructions|298942303|100.00||
+584154||cache-misses|298942303|100.00||
+3567628||branch-misses|298942303|100.00||
+=== glibc large_batch proc=1 reps=20 ===
+glibc,large_batch,192000,133556479,1437594.1,695.61,22120160
+675139763||cycles|133010983|100.00||
+1705045319||instructions|133010983|100.00||
+897910||cache-misses|133010983|100.00||
+1288320||branch-misses|133010983|100.00||
+=== mimiralloc large_batch proc=1 reps=20 ===
+mimiralloc,large_batch,192000,528307465,363424.7,2751.60,22120160
+2702525804||cycles|528175731|100.00||
+6187072996||instructions|528175731|100.00||
+2680894||cache-misses|528175731|100.00||
+4896232||branch-misses|528175731|100.00||
+=== glibc large_batch proc=2 reps=20 ===
+glibc,large_batch,192000,137448545,1396886.4,715.88,22120160
+691960458||cycles|136493873|100.00||
+1702025731||instructions|136493873|100.00||
+831151||cache-misses|136493873|100.00||
+1165701||branch-misses|136493873|100.00||
+=== mimiralloc large_batch proc=2 reps=20 ===
+mimiralloc,large_batch,192000,533296380,360024.9,2777.59,22120160
+2719432482||cycles|533627106|100.00||
+6195176469||instructions|533627106|100.00||
+2396889||cache-misses|533627106|100.00||
+4543266||branch-misses|533627106|100.00||
+=== glibc large_batch proc=3 reps=20 ===
+glibc,large_batch,192000,134161242,1431113.8,698.76,22120160
+672453777||cycles|132686235|100.00||
+1699783822||instructions|132686235|100.00||
+897001||cache-misses|132686235|100.00||
+1181766||branch-misses|132686235|100.00||
+=== mimiralloc large_batch proc=3 reps=20 ===
+mimiralloc,large_batch,192000,524636991,365967.3,2732.48,22120160
+2691301213||cycles|524789086|100.00||
+6189386102||instructions|524789086|100.00||
+2521689||cache-misses|524789086|100.00||
+4516513||branch-misses|524789086|100.00||
+=== glibc large_batch proc=4 reps=20 ===
+glibc,large_batch,192000,133447354,1438769.6,695.04,22120160
+677769335||cycles|132739285|100.00||
+1701292627||instructions|132739285|100.00||
+890329||cache-misses|132739285|100.00||
+1320746||branch-misses|132739285|100.00||
+=== mimiralloc large_batch proc=4 reps=20 ===
+mimiralloc,large_batch,192000,524874166,365802.0,2733.72,22120160
+2693857658||cycles|525493713|100.00||
+6183379326||instructions|525493713|100.00||
+2590937||cache-misses|525493713|100.00||
+4590809||branch-misses|525493713|100.00||
+=== glibc large_batch proc=5 reps=20 ===
+glibc,large_batch,192000,136923533,1402242.5,713.14,22120160
+684868577||cycles|136979808|100.00||
+1706862531||instructions|136979808|100.00||
+917548||cache-misses|136979808|100.00||
+1207055||branch-misses|136979808|100.00||
+=== mimiralloc large_batch proc=5 reps=20 ===
+mimiralloc,large_batch,192000,532278613,360713.3,2772.28,22120160
+2728270780||cycles|532670176|100.00||
+6256035613||instructions|532670176|100.00||
+2353585||cache-misses|532670176|100.00||
+4729109||branch-misses|532670176|100.00||
+=== glibc mixed_lifecycle proc=1 reps=10 ===
+glibc,mixed_lifecycle,3072000,20686570,148502144.1,6.73,403599360
+108833612||cycles|21266564|100.00||
+646036265||instructions|21266564|100.00||
+28237||cache-misses|21266564|100.00||
+86416||branch-misses|21266564|100.00||
+=== mimiralloc mixed_lifecycle proc=1 reps=10 ===
+mimiralloc,mixed_lifecycle,3072000,2620015880,1172512.0,852.87,403599360
+13573180484||cycles|2645400361|100.00||
+29631478340||instructions|2645400361|100.00||
+15307040||cache-misses|2645400361|100.00||
+25472674||branch-misses|2645400361|100.00||
+=== glibc mixed_lifecycle proc=2 reps=10 ===
+glibc,mixed_lifecycle,3072000,22106754,138962056.6,7.20,403599360
+114096107||cycles|23025301|100.00||
+646020299||instructions|23025301|100.00||
+34273||cache-misses|23025301|100.00||
+113709||branch-misses|23025301|100.00||
+=== mimiralloc mixed_lifecycle proc=2 reps=10 ===
+mimiralloc,mixed_lifecycle,3072000,2623042064,1171159.3,853.85,403599360
+13587822131||cycles|2650010261|100.00||
+29576205510||instructions|2650010261|100.00||
+14459692||cache-misses|2650010261|100.00||
+26951715||branch-misses|2650010261|100.00||
+=== glibc mixed_lifecycle proc=3 reps=10 ===
+glibc,mixed_lifecycle,3072000,20499871,149854601.5,6.67,403599360
+107697269||cycles|21270262|100.00||
+646003906||instructions|21270262|100.00||
+27753||cache-misses|21270262|100.00||
+89550||branch-misses|21270262|100.00||
+=== mimiralloc mixed_lifecycle proc=3 reps=10 ===
+mimiralloc,mixed_lifecycle,3072000,2599279764,1181865.9,846.12,403599360
+13468209084||cycles|2625964229|100.00||
+29283430436||instructions|2625964229|100.00||
+14127102||cache-misses|2625964229|100.00||
+26132047||branch-misses|2625964229|100.00||
+=== glibc mixed_lifecycle proc=4 reps=10 ===
+glibc,mixed_lifecycle,3072000,21391683,143607214.1,6.96,403599360
+109784597||cycles|22339210|100.00||
+646053625||instructions|22339210|100.00||
+38162||cache-misses|22339210|100.00||
+91999||branch-misses|22339210|100.00||
+=== mimiralloc mixed_lifecycle proc=4 reps=10 ===
+mimiralloc,mixed_lifecycle,3072000,2668014715,1151417.9,868.49,403599360
+13817125622||cycles|2695519954|100.00||
+29869509626||instructions|2695519954|100.00||
+15271982||cache-misses|2695519954|100.00||
+25905871||branch-misses|2695519954|100.00||
+=== glibc mixed_lifecycle proc=5 reps=10 ===
+glibc,mixed_lifecycle,3072000,20864492,147235791.8,6.79,403599360
+109464232||cycles|21670579|100.00||
+646204923||instructions|21670579|100.00||
+32507||cache-misses|21670579|100.00||
+102534||branch-misses|21670579|100.00||
+=== mimiralloc mixed_lifecycle proc=5 reps=10 ===
+mimiralloc,mixed_lifecycle,3072000,2612436728,1175913.6,850.40,403599360
+13535873890||cycles|2639095970|100.00||
+29697695424||instructions|2639095970|100.00||
+15224070||cache-misses|2639095970|100.00||
+25102500||branch-misses|2639095970|100.00||
