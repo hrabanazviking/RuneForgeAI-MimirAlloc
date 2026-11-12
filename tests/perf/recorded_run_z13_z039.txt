@@ -1,0 +1,356 @@
+Z-039 - Second arena geometry (evidence-conditional) - RECORDED RUN
+STATUS: CONDITION-PENDING - NO GEOMETRY CHOSEN, NO PRODUCTION CODE CHANGED
+Campaign: MimirAlloc Z13, Wave 5. Team-08 worktree, branch
+  yrsa/mimiralloc-team-08, built on merge e508446 (seat main
+  35f7f55, banked Z-001..Z-035). Date: 2026-11-12.
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, 16 cores /
+  32 threads, 128 GB UMA). Load: LIGHT and recorded per leg -
+  mimir leg start 0.14/0.16/0.22, end 0.71/0.47/0.33; glibc leg
+  start 0.76/0.49/0.33, end 0.81/0.55/0.37 (full headers in
+  hidden_files/z039_mimir.log and z039_glibc.log). No other
+  campaign work observed running; these legs were measured on
+  a quiet machine and may be cited as this-machine numbers.
+
+== CONDITION STATE (checked 2026-11-12, first-hand) ==
+Z-039's roadmap text: "Per-thread arenas if Z-038 argues for
+them, else lock-sharding of the central core; the road not
+taken is recorded with its reason. Gate: chosen geometry's
+ladder table + decision in the ledger."
+The condition is Z-038's arena ladder, which needs Z-037's
+per-CCD arena prototype and Z-036's Wave 4 verdict. Checked
+first-hand at build time:
+  - seat /home/volmarr/mimiralloc-z13-forge/tests/perf/ holds
+    NO z036, z037, z038 or z039 artifacts; seat main is
+    35f7f55 (banked through Z-035 only).
+  - team-06 and team-07 worktrees (the Z-037/Z-038 owners per
+    the keeper's parallel assignment) hold NO z037/z038
+    artifacts in tests/perf/; their CAMPAIGN_STATE.md files
+    record earlier slices only.
+EXACTLY WHAT IS MISSING: (1) Z-036's verdict doc; (2) Z-037's
+arena prototype + recorded run (tests/perf/
+recorded_run_z13_z037.txt); (3) Z-038's three-way ladder
+table (tests/perf/recorded_run_z13_z038.txt). Until (3)
+lands there is no evidence that argues for either geometry,
+and none is invented here. CONSEQUENCE, stated plainly: the
+roadmap gate's "chosen geometry" half is NOT MET by this
+slice and is OWED. This slice delivers everything about
+Z-039 that does not depend on the missing evidence: the two
+condition-independent legs of the future three-way table,
+measured now on the current banked core (below); the
+pre-registered decision rule (next section); paper designs
+for both geometries (later section). RE-OPEN TRIGGER: when
+recorded_run_z13_z038.txt banks at the seat, the team owning
+Z-039's follow-up applies the decision rule to Z-038's
+table, builds the chosen geometry as a new slice, records
+the road not taken with its reason, and appends the
+decision to docs/DECISION_LEDGER.md at that time (this slice
+follows Z-033's precedent: a CONDITION-PENDING slice records
+its condition in its own recorded run and does not edit the
+ledger before a decision exists).
+
+== DECISION RULE (pre-registered, applied to Z-038's table) ==
+All comparisons are median aggregate ops/s from Z-038's own
+three-way table (banked / arena / glibc), same-run, with the
+campaign's 5% noise bound as the TIE band.
+  R1. If the arena leg beats the banked leg by >5% on BOTH
+      workloads in the 8..16 thread band (the band where the
+      banked leg's cliff sits, see results), per-thread
+      arenas are argued for: build geometry A scaled from
+      Z-037's per-CCD prototype.
+  R2. If the arena leg is within the 5% TIE band of the
+      banked leg at 8..16 threads on either workload, or
+      wins only at 32 threads (SMT), the arena evidence does
+      NOT argue for per-thread arenas: build geometry B
+      (lock-sharding of the existing geometry), the cheaper
+      change with no per-thread state.
+  R3. If the arena leg wins the 8..16 band on one workload
+      and ties/loses on the other, the decision goes to the
+      workload that Z-036's verdict names as the Wave 5
+      priority; absent that naming, R2 applies (no split
+      decision on ambiguous evidence).
+  R4. Whichever geometry is built, its own ladder table
+      (same shapes, same protocol) is the gate evidence;
+      the road not taken is recorded with the R-rule that
+      closed it.
+
+== METHOD ==
+Ladder shapes identical to Z-020/Z-021 rung for rung:
+workloads small_churn (50000 iters/thread) and mixed_batch
+(200 batches = 51200 ops/thread) from bench_k002.c included
+unmodified; rungs 1 2 3 4 6 8 12 16 20 24 28 32 threads;
+worker t pinned to CPU t (0-15 physical, 0-7 CCD0 / 8-15
+CCD1; 16-31 SMT siblings), pin verified by sched_getcpu();
+5 separate processes per point, headline = median; one
+discarded warm-up process per point at 1/10 scale plus the
+probe's in-process 1/10 warm-up; 2 s pauses between points;
+per-point loadavg recorded in the raw files (/tmp/
+z039_mimir.raw, /tmp/z039_glibc.raw at run time).
+  mimir leg: probe_z039.c = the banked probe_z020.c body
+  unmodified except header/name strings, built against the
+  production sources with the SHIPPED flags (-O2 -flto,
+  Z-035) - i.e. the current banked core WITH the Z-029 TLS
+  cache. It is NOT Z-020's build (pre-TLS, pre-LTO); wherever
+  the two tables are compared below, the delta mixes TLS +
+  LTO + geometry-residue effects and is cited as shape
+  evidence only, never as a geometry verdict.
+  glibc leg: the banked probe_z021.c built UNMODIFIED with
+  -DLEG_GLIBC exactly as run_z021.sh builds it, including
+  Z-021's own per-thread timing (its documented deviation
+  from Z-020's main-thread timing, adopted after main-thread
+  timing produced impossible aggregates on this leg).
+Checksums: both legs report chk_each small_churn 6371544,
+  mixed_batch 6627200 - identical to Z-020/Z-021, so the legs
+  performed provably identical work, rung for rung.
+Selfchecks: mimir MATCH + MATCH_K002; glibc replica MATCH.
+
+== RESULTS - mimir leg (current banked core, shipped flags) ==
+Z-039 ladder summary - leg: mimir
+headline = median across processes; noise bound 5%; drift bound 8%
+
+selfcheck: SELF,mixed_batch,37,1228352,1228352,9472,9472,MATCH
+selfcheck: SELF,small_churn,100000,12756656,100000,MATCH_K002
+
+checksum small_churn: OK - exactly one chk_each value=6371544 across all processes
+checksum mixed_batch: OK - exactly one chk_each value=6627200 across all processes
+
+=== ladder: small_churn ===
+threads  processes  agg_ops_s_median  agg_min..agg_max     per_thread_median  scaling  efficiency  drift%
+# note: small_churn t=1 drift 10.6% exceeds 8.0% bound DRIFT-REJECT
+      1          5        43881898.0  34628173.1..44081176.4         43881898.0    1.000       1.000    10.6
+      2          5        45230326.4  44456339.0..46011154.9         22615163.2    1.031       0.515     1.2
+      3          5        37253086.5  33588877.5..37604710.3         12417695.5    0.849       0.283     0.3
+      4          5        35796099.0  32175617.1..35933789.8          8949024.7    0.816       0.204     0.1
+      6          5        34377949.3  33874359.5..35152535.6          5729658.2    0.783       0.131     2.4
+      8          5        36198076.2  36095382.0..36259752.2          4524759.5    0.825       0.103     0.3
+     12          5        18070208.9  17778916.2..18159979.4          1505850.7    0.412       0.034     1.3
+     16          5        20801755.8  20761122.5..20922221.7          1300109.7    0.474       0.030     0.5
+     20          5        25856639.5  25834514.2..26066753.9          1292832.0    0.589       0.029     0.4
+     24          5        29945400.6  28347344.8..30031468.5          1247725.0    0.682       0.028     2.5
+     28          5        31012748.3  30815844.6..31296140.2          1107598.2    0.707       0.025     0.2
+     32          5        33279465.0  33226656.4..33468667.4          1039983.3    0.758       0.024     0.2
+PEAK: small_churn aggregate peaks at 2 thread(s) (45230326.4 ops/s)
+INVERSION: small_churn scaling inverts at 3 threads (median 37253086.5 ops/s is >5% below the 2-thread peak)
+
+=== ladder: mixed_batch ===
+threads  processes  agg_ops_s_median  agg_min..agg_max     per_thread_median  scaling  efficiency  drift%
+      1          5        35058840.0  31759698.2..35194518.5         35058840.0    1.000       1.000     4.6
+      2          5        29772773.3  29211006.2..30394748.8         14886386.6    0.849       0.425     1.8
+      3          5        36837889.3  36349919.1..38002860.6         12279296.4    1.051       0.350     0.6
+      4          5        38556633.9  37684702.0..40209466.2          9639158.5    1.100       0.275     2.3
+      6          5        41842748.1  40807315.3..42693468.7          6973791.3    1.194       0.199     3.2
+      8          5        42523243.7  41592826.5..43221673.5          5315405.5    1.213       0.152     0.3
+     12          5        25468606.4  24199510.8..25696343.1          2122383.9    0.726       0.061     2.0
+     16          5        25455452.8  24702858.6..25729808.5          1590965.8    0.726       0.045     1.4
+     20          5        29889470.0  23254227.5..30064040.2          1494473.5    0.853       0.043     0.3
+     24          5        31419427.9  26085789.1..32261171.8          1309142.8    0.896       0.037     3.6
+     28          5        32042956.2  30126916.1..32098627.3          1144391.3    0.914       0.033     0.9
+     32          5        32391154.8  29014992.5..33257919.8          1012223.6    0.924       0.029     1.1
+PEAK: mixed_batch aggregate peaks at 8 thread(s) (42523243.7 ops/s)
+INVERSION: mixed_batch scaling inverts at 12 threads (median 25468606.4 ops/s is >5% below the 8-thread peak)
+
+Z-039 LEG GATE: PASS
+
+== RESULTS - glibc leg (banked probe_z021.c, -DLEG_GLIBC) ==
+DRIFT DISCIPLINE (Z-021 wording, adopted): any point whose
+split-half drift exceeds the 8% bound has its median marked
+DRIFT-REJECT below - INDICATIVE ONLY, no clean claim rests
+on it. This leg was drift-noisy in Z-021 (32 drift notes)
+and is again here; the mimir leg carries the clean shape.
+Z-039 ladder summary - leg: glibc
+headline = median across processes; noise bound 5%; drift bound 8%
+
+
+checksum small_churn: OK - exactly one chk_each value=6371544 across all processes
+checksum mixed_batch: OK - exactly one chk_each value=6627200 across all processes
+
+=== ladder: small_churn ===
+threads  processes  agg_ops_s_median  agg_min..agg_max     per_thread_median  scaling  efficiency  drift%
+# note: small_churn t=1 drift 42.3% exceeds 8.0% bound DRIFT-REJECT
+      1          5       288078172.9  171824258.1..300441047.5        288078172.9    1.000       1.000    42.3
+# note: small_churn t=2 drift 88.6% exceeds 8.0% bound DRIFT-REJECT
+      2          5       254365548.7  152647285.5..395909463.4        127182774.4    0.883       0.441    88.6
+# note: small_churn t=3 drift 76.0% exceeds 8.0% bound DRIFT-REJECT
+      3          5       128475915.9  127216104.5..325116554.3         42825305.3    0.446       0.149    76.0
+      4          5       841559578.2  278760408.2..1177038336.1        210389894.6    2.921       0.730     5.2
+# note: small_churn t=6 drift 23.1% exceeds 8.0% bound DRIFT-REJECT
+      6          5      1694608884.3  967960507.2..1732661830.6        282434814.0    5.882       0.980    23.1
+# note: small_churn t=8 drift 31.2% exceeds 8.0% bound DRIFT-REJECT
+      8          5      1270773170.2  1009868944.3..2097238461.3        158846646.3    4.411       0.551    31.2
+# note: small_churn t=12 drift 38.1% exceeds 8.0% bound DRIFT-REJECT
+     12          5       967476659.6  504611306.3..2397420375.7         80623055.0    3.358       0.280    38.1
+# note: small_churn t=16 drift 37.2% exceeds 8.0% bound DRIFT-REJECT
+     16          5      3005733436.5  283699713.8..3080892688.7        187858339.8   10.434       0.652    37.2
+# note: small_churn t=20 drift 17.9% exceeds 8.0% bound DRIFT-REJECT
+     20          5      3525956327.5  2215752225.7..3576755382.1        176297816.4   12.240       0.612    17.9
+# note: small_churn t=24 drift 9.6% exceeds 8.0% bound DRIFT-REJECT
+     24          5      3486304633.3  2893553404.1..4234447228.2        145262693.1   12.102       0.504     9.6
+# note: small_churn t=28 drift 30.6% exceeds 8.0% bound DRIFT-REJECT
+     28          5      2849704546.7  1155452995.3..2932477608.4        101775162.4    9.892       0.353    30.6
+     32          5      3137045765.6  1919111835.0..3418248318.6         98032680.2   10.890       0.340     7.1
+PEAK: small_churn aggregate peaks at 20 thread(s) (3525956327.5 ops/s)
+INVERSION: small_churn scaling inverts at 28 threads (median 2849704546.7 ops/s is >5% below the 20-thread peak)
+
+=== ladder: mixed_batch ===
+threads  processes  agg_ops_s_median  agg_min..agg_max     per_thread_median  scaling  efficiency  drift%
+# note: mixed_batch t=1 drift 44.1% exceeds 8.0% bound DRIFT-REJECT
+      1          5       288579142.3  145708293.1..311668705.9        288579142.3    1.000       1.000    44.1
+# note: mixed_batch t=2 drift 17.7% exceeds 8.0% bound DRIFT-REJECT
+      2          5       574754578.7  337812204.1..623983133.0        287377289.3    1.992       0.996    17.7
+# note: mixed_batch t=3 drift 31.3% exceeds 8.0% bound DRIFT-REJECT
+      3          5       121991414.5  73432320.4..188280287.6         40663804.8    0.423       0.141    31.3
+# note: mixed_batch t=4 drift 15.7% exceeds 8.0% bound DRIFT-REJECT
+      4          5      1066950075.3  669254800.5..1129002916.2        266737518.8    3.697       0.924    15.7
+# note: mixed_batch t=6 drift 16.1% exceeds 8.0% bound DRIFT-REJECT
+      6          5       962143776.6  111042673.4..1700554119.4        160357296.1    3.334       0.556    16.1
+# note: mixed_batch t=8 drift 68.7% exceeds 8.0% bound DRIFT-REJECT
+      8          5      1299946047.2  1137926340.4..2244248291.9        162493255.9    4.505       0.563    68.7
+# note: mixed_batch t=12 drift 30.5% exceeds 8.0% bound DRIFT-REJECT
+     12          5      1781980074.5  560333427.6..2004482681.0        148498339.5    6.175       0.515    30.5
+     16          5      1979346371.1  902294065.0..2340604865.8        123709148.2    6.859       0.429     3.0
+# note: mixed_batch t=20 drift 8.4% exceeds 8.0% bound DRIFT-REJECT
+     20          5      2789225526.9  2220188976.2..2936175459.4        139461276.3    9.665       0.483     8.4
+     24          5      3225772578.8  2778349315.0..3340510210.7        134407190.8   11.178       0.466     7.3
+# note: mixed_batch t=28 drift 21.7% exceeds 8.0% bound DRIFT-REJECT
+     28          5      2362460346.9  1398379027.4..2921612103.8         84373583.8    8.187       0.292    21.7
+# note: mixed_batch t=32 drift 39.0% exceeds 8.0% bound DRIFT-REJECT
+     32          5      4342720827.0  929437833.1..4366714463.1        135710025.8   15.049       0.470    39.0
+PEAK: mixed_batch aggregate peaks at 32 thread(s) (4342720827.0 ops/s)
+INVERSION: mixed_batch none in ladder - aggregate still rising at 32 threads
+
+Z-039 LEG GATE: PASS
+
+== WHAT THE BEFORE-LEGS SAY (shape evidence, no verdict) ==
+Same-run, Law 2 (mimir vs glibc, this run only): glibc's
+aggregate exceeds the banked core's at every rung on both
+workloads - on small_churn by ~6.6x at 1 thread widening to
+~94x at 32; on mixed_batch by ~8.2x at 1 thread to ~134x at
+32 (glibc medians drift-indicative at many rungs; the ORDER
+of the gap, not its exact size, is the claim). Grade on
+these synthetic churn shapes: LOSS, as every wave has
+recorded; the geometry question below is about mimir's own
+scaling shape, not about closing the glibc gap in one slice.
+Shape vs Z-020 (same probe body, different core: Z-020's
+core was pre-TLS, pre-LTO, one global lock on every op -
+the delta mixes TLS + LTO effects and is cited as shape
+only): Z-020 small_churn peaked at 1 thread (20.40M ops/s)
+and inverted at 2, falling to scaling 0.043 at 32 threads.
+Today's banked core peaks at 2 threads (45.23M), holds
+scaling 0.78-0.83 through 8 threads, then shows a CLIFF at
+12 threads (18.07M, scaling 0.412) with partial recovery
+through the SMT range to 33.28M at 32 (scaling 0.758).
+mixed_batch shows the same cliff (peak 42.52M at 8, 25.47M
+at 12, recovery to 32.39M at 32). The 8..16 band - threads
+spanning both CCDs, where TLS refill/drain still meets the
+one central lock and its registries - is where the current
+geometry loses most; that band is the decision rule's
+field (R1-R3). One drift note on the clean leg: small_churn
+t=1 drift 10.6% (one slow first process, 34.6M vs median
+43.9M); the median stands, the point is flagged in-table.
+
+== PAPER DESIGNS (no code; the decision applies R1-R3) ==
+Geometry A - per-thread arenas. Partition: each thread owns
+an arena = a private set of per-class span registries plus
+its TLS bins; spans are born in one arena and stay owned by
+it. Key: owning thread id (arena index = a small integer
+assigned at first allocation, Z-037's per-CCD prototype is
+the 2-arena stepping stone). Stays global: the mapping
+registry (page acquisition/release) behind the one existing
+global lock, taken only on span birth/death, not per op.
+Cross-thread frees: a free of a block owned by another
+thread routes to the owner's Z-030 MPSC ring (bounded,
+counted overflow falls back to freeing under the owner's
+arena lock); the owner drains in batches of 8 on its next
+allocation, feeding its TLS bins. TLS refill/drain: refill
+draws from the thread's OWN arena registries under its own
+arena lock (uncontended in the common case); drain returns
+to the same. Thread exit: arena is sealed, its live blocks
+remain valid and freeable via the ring/lock path, its empty
+spans return to the global pool through the H-001 drain
+machinery; the arena slot is recycled only when empty.
+Overhead/RSS risk: per-thread registry state and retained
+empty spans multiply worst-case retention by live-thread
+count - the Z-042 storm slice exists to price exactly this.
+Top hazard: a span migrating or being freed through the
+wrong arena corrupts two registries at once; ownership must
+be derivable from the pointer alone (span header), never
+from the freeing thread. Argued FOR by: arena leg winning
+the 8..16 band per R1 (contention was the wound, and
+removing shared registries removes it).
+Geometry B - lock-sharding of the existing geometry.
+Partition: the singleton core keeps ONE set of registries;
+the one global lock becomes K shard locks (K = banked
+class count is too many; the design shards by class GROUP -
+hot small classes each get a shard, cold classes share),
+each shard guarding its classes' span lists; the mapping
+registry keeps its own lock, always acquired LAST (fixed
+lock order: shard -> mapping). Key: size class of the
+operation. Stays global: everything else - span ownership
+is unchanged, so cross-thread frees need no routing change
+at all (a free takes the block's class shard, whoever
+frees it); the Z-030 ring stays an assembly option, not a
+requirement. TLS refill/drain: refill takes only the
+refilled class's shard; drain likewise; two-class
+operations (realloc across classes) take both shards in
+class order. Thread exit: unchanged from today (TLS drain
+under the touched shards). Overhead: K padded lock words
+(Z-016 rule) and nothing else; RSS unchanged. Top hazard:
+lock-order inversion on the two-shard paths (realloc,
+drain) - the fixed order and a lock-order audit in the
+slice's suite are the mitigation. Argued FOR by: R2/R3 -
+the arena leg tying or winning only at SMT counts says the
+wound is lock granularity, not shared state, and B is the
+smaller, retention-free change.
+DEPENDENCY NOTE for Z-040: the false-sharing purge's target
+list depends on which geometry exists (A adds per-arena
+structures; B adds the shard array). Z-040 must read the
+Z-039 decision record before fixing its target list; while
+the decision is pending, Z-040's condition-independent
+targets are only the structures both geometries keep
+(TLS state, audit counters, Z-030 rings).
+
+== ROADMAP GATE ACCOUNTING ==
+Gate text: "chosen geometry's ladder table + decision in
+the ledger." NEITHER half is met by this slice: there is
+no chosen geometry (condition unmet, above) and no ledger
+entry is made (Z-033 precedent: the ledger records
+decisions, and no decision exists; the follow-up slice
+appends it when R1-R3 are applied). What this slice DOES
+deliver toward the gate: the banked and glibc legs of the
+ladder table measured under the gate's own protocol, the
+pre-registered decision rule, and both geometries designed
+to buildable depth. Standing gate: scripts/z13/run_gate.sh
+GREEN, 4,988 checks / 0 failed / 77 by-design skips (log
+hidden_files/gate_z039.log) - identical counts to baseline;
+this slice adds no make-test tests. Leg gates: both legs'
+summarisers exit 0, checksums clean, LADDER lines 120/leg.
+Merge preservation (verifier checklist): after merge
+e508446, make test-z030 passes 86/0 and make test-z025
+passes - both Makefile targets intact.
+
+== TEAM, BUGS, NEXT ==
+Team structure: the lead spawned all six Mythic Engineering
+sub-agents (inspector, designer, measurement reviewer,
+failure analyst, recorder, verifier) as design/verification
+reviewers; their must-fixes were folded in (gate-vs-ledger
+contradiction answered head-on above; before-legs never
+labelled a reproduction of Z-020 nor the chosen geometry's
+table; Z-040 dependency named; drift-indicative discipline
+imported from Z-021; commit-scope and gate-recount checks
+run before declaring built). All device-side work was
+executed by the lead alone, sequentially, in this worktree
+only.
+Bugs found/fixed: none in the allocator or the suite. One
+tooling slip by the lead: the standing gate was first
+invoked via `sh` (it is a bash script) and exited 1 before
+writing a log; re-run under bash, GREEN - recorded here so
+the failed invocation is never mistaken for a gate result.
+No other incidents; no file transfers were needed (all
+slice files were derived on-device from banked sources).
+IMMEDIATE NEXT WORK (the re-open, restated): on
+recorded_run_z13_z038.txt banking at the seat, apply
+R1-R3, build the chosen geometry as the follow-up slice
+with its own full ladder table, record the road not taken
+with the R-rule that closed it, and append the decision to
+docs/DECISION_LEDGER.md. Until then Z-039 stands
+CONDITION-PENDING and banks in roadmap order behind
+Z-036..Z-038.
