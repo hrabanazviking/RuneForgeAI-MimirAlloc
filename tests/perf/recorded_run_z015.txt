@@ -1,0 +1,149 @@
+MimirAlloc Z13 slice Z-015 - recorded run of tests/perf/probe_z015.c
+slice: Z-015 - Syscall and VMA economics (Wave 2)
+date: 2026-11-12T03:01:18-05:00 (invocation 1, runs R1-R2) and 2026-11-12T03:07:14-05:00
+  (invocation 2, runs R3-R4), America/New_York. R1-R2 by the original lead before its
+  cancellation; R3-R4 plus this record by the resumed lead.
+base: 8fa37904b35208c56b4b5b09afbbc14122ee1ac8 (branch yrsa/mimiralloc-team-01, Z-011 team
+  commit; Z-010/Z-011 unbanked; seat banked Z-001..Z-006; Z-007..Z-009 ahead. )
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (Strix Halo), 16 cores / 32 threads, 2 CCDs,
+  128 GiB UMA (single NUMA node, CPUs 0-31); pagesize 4096
+vm.max_map_count: 1048576; THP enabled: always [madvise] never (the probe never calls
+  MADV_HUGEPAGE, so every fault below is a 4 KiB fault)
+scaling_governor: performance (cpu2); cpu2 L3 shared_cpu_list 0-7,16-23 (CCD0)
+compiler: cc -std=c11 -Wall -Wextra -Werror -O2 (standalone build in run_z015.sh;
+  Makefile untouched)
+sha256: probe_z015.c  4d414ae6eb2cb37a137f58dd39870252f84d0b7a58c39ee331172c4f8bedbadf
+        run_z015.sh   d9a01a1fdd3e4e49c0083e5c6e511c1de5e6180edd302b580cee9e8c67e70642
+        /tmp/probe_z015 607153f7d73c9159c9117759c42dfa1b7a828598fe41b334a14aa4a3beb628ef
+  (identical in both invocations)
+method: per the Z-004 measurement protocol (seat docs/Z13_MEASUREMENT_PROTOCOL.md), adapted
+  to a syscall microbench: process pinned to CPU 2 (CCD0) by taskset in the runner; every
+  op timed individually with clock_gettime(CLOCK_MONOTONIC); per-op samples per process run
+  sorted, median + min reported; reps 101 (<=256 KiB), 31 (1-16 MiB), 15 (64 MiB). Four
+  process runs in two runner invocations. Untouched leg (mmap+munmap, no fault) separates
+  pure syscall cost from fault cost; touched leg faults every page once (one byte written
+  per page) before munmap. VMA counts sampled from /proc/self/maps inside the probe.
+  Raw logs: hidden_files/z015_probe_raw.log (invocation 1), hidden_files/z015_probe_raw2.log
+  (invocation 2), hidden_files/z015_hint_check.log (adjacency follow-up, see VMA notes).
+load state (SHARED HOST - recorded honestly, protocol section 10 CONTENDED):
+  invocation 1 (03:01): load average 1.70 / 1.74 / 1.56; co-tenants in the runner snapshot:
+  team-07's probe_z007_mimir at 99.1% CPU and the Tensile lab (TensileCreateLibrary +
+  round1.py). Invocation 2 (03:07): load average 1.26 / 1.46 / 1.50; Tensile lab again
+  (TensileCreateLibrary ~10%, round1.py ~4%) and a brief Aesir cc1 compile in the start
+  snapshot. Verdict: the VMA counts are deterministic and identical in all four runs; the
+  microsecond-scale medians below are indicative under this stated load, NOT quiet-machine
+  baselines. Where the four runs disagree beyond the protocol's 5% noise bound the spread
+  itself is reported instead of a single flattering figure.
+
+=== SYSCALL COST TABLE - untouched leg (ns per op; median of per-op samples per run) ===
+size        mmap med R1 R2 R3 R4        munmap med R1 R2 R3 R4      mins (all runs)
+4 KiB       390  390  381  391          692  681  892  841          mmap 370-380, munmap 561-591
+16 KiB      381  390  390  391          592  602  812  782          mmap 370-380, munmap 571
+64 KiB      381  391  391  391          591  681  682  692          mmap 370-380, munmap 571-581
+256 KiB     381  381  390  391          621  621  701  711          mmap 370-380, munmap 581-601
+1 MiB       451  390  381  391          370* 762  771  771          mmap 370-431, munmap 350-661
+4 MiB       440  521  541  441          361  391  471  381          mmap 420-430, munmap 350-370
+16 MiB      441  531  521  441          391  451  470  431          mmap 421-430, munmap 370-390
+64 MiB      451  431  451  441          441  431  441  441          mmap 421, munmap 411-440
+* R1's 1 MiB munmap median (370) is a low outlier against 762-771 in R2-R4; quoted as spread.
+Reading: untouched mmap is FLAT at ~0.38-0.54 us (mins 0.37-0.43 us) from 4 KiB to 64 MiB -
+  reserving address space costs the same at any size when nothing is faulted. Untouched
+  munmap medians spread 0.36-0.89 us (mins 0.35-0.66 us), also size-flat; at this scale the
+  medians are jitter-dominated under the co-tenant load above, so the honest statement is
+  "sub-microsecond, size-independent", not a per-size ranking.
+
+=== SYSCALL COST TABLE - touched leg (ns; total = mmap + fault every page; then munmap) ===
+size        total med R1 R2 R3 R4      munmap med R1 R2 R3 R4      total min (all runs)
+4 KiB       952  752  841  791         881  942  921  891          741-742
+16 KiB      1643 1663 1643 1643        1082 1173 1092 1062         1613-1633
+64 KiB      6021 5991 5931 5961        2164 2064 2054 1963         5119-5180
+256 KiB     21760 21871 21681 21691    4769 4829 4799 4769         21310-21450
+1 MiB       91411 90078 90670 88175    16872 16791 16641 16551     86662-87735
+4 MiB       373729 371415 375943 368008  66564 65623 66074 66445   357949-360194
+16 MiB      4469332* 4530084* 1675054 1526456  264404 268853 261840 258023  1491190-1670596
+* REGIME SPLIT at 16 MiB: R1-R2 (invocation 1, team-07 probe holding a core at 99% CPU)
+  medians are 4.47-4.53 ms while their own mins (1.58-1.67 ms) match R3-R4 medians
+  (1.53-1.68 ms). Fault cost roughly TRIPLES under that contention; the of-record figures
+  are R3-R4, and the split is kept here as contention evidence, never averaged away.
+Derived per-page costs (of-record runs; total minus the flat ~0.4 us mmap, per 4 KiB page):
+  first-touch fault: ~333 ns/page at 256 KiB, ~353 at 1 MiB, ~367 at 4 MiB, ~372-409 at
+  16 MiB - call it 0.33-0.41 us per page, mildly rising with size.
+  touched munmap (teardown of present pages): ~128 ns/page at 64 KiB falling to a flat
+  ~63-65 ns/page from 1 MiB up (16641/256, 66074/1024, 258023/4096) - releasing POPULATED
+  memory costs ~64 ns for every page resident, while releasing untouched space is free
+  of any per-page term (flat row above).
+
+=== MREMAP LADDER (ns per op, untouched ranges; median R1 R2 R3 R4, mins in parens) ===
+1 MiB -> 4 MiB grow:    992* 2044 1994 2004   (mins 781-1773)  *R1 low outlier; of record ~2.0 us
+4 MiB -> 16 MiB grow:   831 962 942 952        (mins 801-902)   ~0.95 us
+16 MiB -> 64 MiB grow:  922 1002 1022 1082     (mins 881-952)   ~1.0 us
+64 MiB -> 16 MiB shrink: 541 641 762 661       (mins 491-520)   ~0.65 us
+16 MiB -> 4 MiB shrink: 481 611 661 611        (mins 461-471)   ~0.61 us
+Reading: mremap resize of an untouched range is pure page-table work at ~0.6-2.0 us,
+  independent of the megabytes involved, and a grow does NOT fault the new tail (pages
+  fault later, on first touch, at the per-page rate above). Resizing in place is orders
+  of magnitude cheaper than unmap + remap + re-fault for arena growth.
+
+=== VMA BEHAVIOUR (counts from /proc/self/maps; IDENTICAL in all four runs) ===
+base count 26 (this process: binary, libraries, stack, heap, vdso...).
++ one 16 MiB anonymous mapping: 27 (+1).
+interior hole punch (munmap 4 MiB at offset 4 MiB inside it): 28 (+1 - the VMA SPLITS
+  into two survivors, [0,4 MiB) and [8 MiB,16 MiB)).
+head unmap (munmap the first 4 MiB): 27 (-1 - edge shrink of the first survivor,
+  NO split, NO new VMA).
+unmap the rest: 26 (+0 vs base - counts always return to base; no VMA leaks).
+adjacency / merge: a second 4 MiB mmap requested with an address hint immediately after
+  a first 4 MiB mapping was NOT placed at the hint in any run (top-down placement put it
+  immediately BELOW the first mapping instead); landing exactly adjacent with identical
+  flags, it MERGED - the count stayed +0 for two live 4 MiB mappings (verified directly
+  by the throwaway check in hidden_files/z015_hint_check.log: a2 == a1 - 4 MiB,
+  errno 0, count unchanged, three consecutive runs).
+gapped churn: 48 x (map 128 KiB, punch the upper 64 KiB) -> 74 (+48): every surviving
+  64 KiB piece stays its own VMA, isolated by its 64 KiB hole - holes never merge.
+  Freeing all 48 survivors returns the count to 26.
+repeated splits: 16 punches of 64 KiB at 128 KiB stride from offset 64 KiB inside one
+  8 MiB mapping -> 27 to 43 (+16): one VMA becomes 17 pieces; a single full-range
+  munmap of the original 8 MiB (holes included) removes all 17, back to 26.
+
+=== NOTES FOR THE TRIM DESIGN (the gate's second half) ===
+- Edge trim is free of VMA cost: shrinking a mapping from either end never splits.
+- Interior trim (hole punching) costs exactly +1 VMA per hole and fragments linearly
+  (16 holes -> 17 VMAs); every extra VMA is walked by all later mmap/munmap/mremap
+  calls on the process. With vm.max_map_count = 1048576 the count ceiling is not the
+  binding constraint on this host - walk cost and fragmentation are.
+- Reserve big, fault lazily: untouched reservation/release is a flat ~0.4 us at any
+  size to 64 MiB, so an arena may over-reserve address space at no per-page cost; the
+  bill arrives at first touch (~0.33-0.41 us/page) and at release of populated ranges
+  (~64 ns/page). A trim that returns only UNTOUCHED tail pages costs the flat munmap;
+  a trim that returns populated pages pays the per-page teardown - prefer trimming
+  cold/untouched tails, and prefer mremap shrink (~0.6 us flat) over unmap+remap when
+  the arena itself must move size.
+
+=== GATE VERDICT ===
+Gate: syscall cost table + VMA behaviour notes for the trim design - MET.
+- Syscall table filed above for mmap/munmap (untouched and touched) and mremap across
+  4 KiB..64 MiB, four pinned runs, load state recorded; disagreements beyond the 5%
+  noise bound are shown as spreads/regimes, not hidden.
+- Headline numbers: untouched mmap/munmap sub-microsecond and size-flat; first-touch
+  fault 0.33-0.41 us/page; populated teardown ~64 ns/page; mremap resize 0.6-2.0 us
+  flat; fault cost ~3x under the recorded invocation-1 contention.
+- VMA behaviour is deterministic across all runs: interior unmap splits (+1/hole),
+  edge unmap never splits, exact-adjacent identical mappings merge, counts always
+  return to base.
+Correctness gate: make clean && make test in the team worktree - exit 0; 8/8 targets
+  PASS; per-target CHECKS 29+69+95+23+122+42+4590 = 4970 CHECKS + 18 smoke = 4988
+  checks run, 0 failed, 77 by-design SKIPPED/NOT-YET lines (70 test_c007, 7 test_c008)
+  - identical posture to Z-001/Z-010/Z-011 (hidden_files/z015_make_test.log).
+Defects: none in repo code. One code-review claim (that the punch16 cleanup munmap
+  could not remove all pieces) was examined and disproven: munmap unmaps the whole
+  [addr, addr+len) range across holes, and the probe's own counts return to base in
+  every run. The probe's adjacency line was ambiguous as printed (NOT_PLACED, +0);
+  the follow-up check above resolved it - placement below + merge - and the notes
+  here state the verified behaviour.
+Protocol deviation note (method review): repetitions are per-op samples inside one
+  pinned process per run (four process runs across two invocations), not the protocol
+  section-6 separate-processes default, and the runner stamps governor / THP /
+  max_map_count / load inline rather than embedding host_truth.sh verbatim - the same
+  adaptation as Z-010/Z-011. Medians are therefore indicative under the recorded load;
+  the VMA counts, being deterministic, are unaffected.
