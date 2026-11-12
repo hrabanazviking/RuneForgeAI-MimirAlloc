@@ -1,0 +1,349 @@
+Z-051 - Huge allocations (256 MiB..8 GiB) - recorded run
+Campaign: MimirAlloc Z13 (purpleraider, ASUS ROG Flow Z13,
+Strix Halo, x86-64, 4 KiB pages, 128 GB UMA, one NUMA node)
+Roadmap gate: huge-size table (success cost + failure
+behaviour) recorded.
+Team: team-05, worktree /home/volmarr/mimiralloc-team-05,
+branch yrsa/mimiralloc-team-05.
+Base: merge d716793 of seat main 517bbb1 (banked
+Z-001..Z-046) into the team branch. The allocator under
+test is the core exactly as banked at Z-046: every request
+above the 1024-byte cutoff takes a fresh private anonymous
+mmap per allocation (one reserve page + request, page
+rounded) and munmaps it whole on free. The mapping cache
+(Z-047 design / Z-048 implementation) is NOT banked yet
+and queues ahead of this slice; nothing in this run
+measures it. Z-049 THP-for-cache and Z-050 trim policy
+likewise do not exist in this core.
+Method: docs/Z13_MEASUREMENT_PROTOCOL.md (Z-004). Every
+process pinned taskset -c 2 (CCD0). Cost legs are separate
+processes, interleaved mimir/glibc round by round,
+headline = median of 5 processes (the protocol minimum;
+warm-ups: 1 discarded process per leg/size/touch instead
+of the usual 3 - deviation recorded here: at these sizes
+one warm process already brings frequency, caches and
+page tables to steady state, and 3 would have tripled
+the touched volume for no information). Failure-audit
+cases are verdicts, not timings: one process each, the
+sequence case run twice.
+Safety: free memory checked before the run (114 GiB free,
+118 GiB available of 121 GiB). No run holds more than
+16 GiB live (the pair case: 2 x 8 GiB, sparse touch).
+Sizes above 8 GiB are attempted only UNTOUCHED (32/64 GiB
+overcommit probes, 2^48 beyond-VA probe): a success there
+commits virtual space only and is freed without touching,
+so no OOM risk is taken on this shared host. Load state:
+SHARED HOST, quiet window - loadavg 0.39/1.43/1.37 at run
+start, 0.81/1.41/1.36 at end (co-tenant campaign work
+present but light; the 5/15-minute figures are its tail).
+A first cost run in a busier window (load 2.02 at start)
+gave the same grades (touched TIE everywhere, untouched
+LOSS 1.10x-1.39x). It is corroboration only; this file is
+the run of record.
+Overcommit posture of this host, read at run start:
+vm.overcommit_memory = 0 (heuristic), vm.overcommit_ratio
+= 50, CommitLimit 195294544 kB (~186 GiB), MemTotal
+127396532 kB, SwapTotal 131596280 kB.
+
+HOST TRUTH (scripts/z13/host_truth.sh, captured at run
+start, verbatim):
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T12:28:50Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5109270
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 91%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 2.02 1.91 1.45
+
+COST TABLE (summarize_z051.py on the raw CSV below; medians of 5 processes):
+size_mib touch leg        n  alloc_med_ns  touch_med_ns   free_med_ns  total_med_ns  total_min     total_max     drift_pct  minflt_med  rss_alloc_med  rss_touch_med  mapped_delta_med
+     256     0 glibc       5           2745              0          2595           5431          5000          6743       2.88           3         2301952         2301952                -1
+     256     0 mimir       5           3005              0          3166           6462          5550          9247      10.32           4         2301952         2301952                 0
+     256     1 glibc       5           3066       31495495       4301300       35808037      35566536      36002811       0.32       65538         2301952       270733312                -1
+     256     1 mimir       5           3246       31865427       4580342       36452882      35587234      37323731       3.17       65540         2301952       270737408                 0
+     512     0 glibc       5           2815              0          2495           5249          4889          6702      19.92           3         2301952         2301952                -1
+     512     0 mimir       5           2835              0          3416           6372          5470          9348      25.88           4         2306048         2306048                 0
+     512     1 glibc       5           3587       64922642      10320883       75153527      74936241      75560408       0.06      131074         2297856       539164672                -1
+     512     1 mimir       5           3566       64159746      10648295       74786932      74649615      75026500       0.37      131076         2310144       539181056                 0
+    1024     0 glibc       5           2736              0          3126           6011          5691          6122       3.77           3         2301952         2301952                -1
+    1024     0 mimir       5           2965              0          3597           6592          6011          9387      22.49           4         2306048         2306048                 0
+    1024     1 glibc       5           3878      133634688      29617134      163296606     161648435     163536274       1.02      262146         2301952      1076039680                -1
+    1024     1 mimir       5           3897      132573564      31175387      163833330     163168538     164196448       0.28      262148         2306048      1076047872                 0
+    2048     0 glibc       5           5320              0          3056           8255          6362         10280      33.27           3         2297856         2297856                -1
+    2048     0 mimir       5           6432              0          3807          10100          6773         10630      31.46           4         2301952         2301952                 0
+    2048     1 glibc       5           4097      266730259      64023862      330785178     330011562     332907567       0.03      524290         2301952      2149781504                -1
+    2048     1 mimir       5           4829      266452569      62720967      329010622     328664474     331356467       0.35      524292         2306048      2149789696                 0
+    4096     0 glibc       5           3065              0          2975           6081          6002          8566       0.41           3         2297856         2297856                -1
+    4096     0 mimir       5           3106              0          3977           6913          6633          7424       4.07           4         2306048         2306048                 0
+    4096     1 glibc       5           4389      528754921     111281483      640044439     639506112     645339096       0.39     1048578         2301952      4297265152                -1
+    4096     1 mimir       5           7524      527245460     111478360      640151047     638136341     643605395       0.39     1048580         2306048      4297273344                 0
+    8192     0 glibc       5           3015              0          3106           6112          5750          6412       2.45           3         2301952         2301952                -1
+    8192     0 mimir       5           3476              0          3827           7274          6652          7825       0.49           4         2306048         2306048                 0
+    8192     1 glibc       5           8346     1040200445     186053938     1227577667    1224851950    1239188411       0.64     2097154         2301952      8592232448                -1
+    8192     1 mimir       5           4739     1040633594     186594558     1227196564    1226672843    1230314471       0.00     2097156         2306048      8592240640                 0
+
+checksum size=268435456 touch=1: [8355840] OK single checksum
+checksum size=536870912 touch=1: [16711680] OK single checksum
+checksum size=1073741824 touch=1: [33423360] OK single checksum
+checksum size=2147483648 touch=1: [66846720] OK single checksum
+checksum size=4294967296 touch=1: [133693440] OK single checksum
+checksum size=8589934592 touch=1: [267386880] OK single checksum
+
+grade size=256MiB touch=0: mimir/glibc total ratio 1.190 -> LOSS
+grade size=512MiB touch=0: mimir/glibc total ratio 1.214 -> LOSS
+grade size=1024MiB touch=0: mimir/glibc total ratio 1.097 -> LOSS
+grade size=2048MiB touch=0: mimir/glibc total ratio 1.224 -> LOSS
+grade size=4096MiB touch=0: mimir/glibc total ratio 1.137 -> LOSS
+grade size=8192MiB touch=0: mimir/glibc total ratio 1.190 -> LOSS
+grade size=256MiB touch=1: mimir/glibc total ratio 1.018 -> TIE
+grade size=512MiB touch=1: mimir/glibc total ratio 0.995 -> TIE
+grade size=1024MiB touch=1: mimir/glibc total ratio 1.003 -> TIE
+grade size=2048MiB touch=1: mimir/glibc total ratio 0.995 -> TIE
+grade size=4096MiB touch=1: mimir/glibc total ratio 1.000 -> TIE
+grade size=8192MiB touch=1: mimir/glibc total ratio 1.000 -> TIE
+
+FAILURE AUDIT (probe_z051 fail cases, verbatim):
+case overflow rc follows
+FAILCASE overflow malloc_SIZE_MAX=NULL malloc_SIZE_MAX-4095=NULL malloc_SIZE_MAX-4096=NULL calloc_2^32x2^32=NULL calloc_SIZE_MAXx2=NULL
+FAILCASE overflow small_after=1 huge256MiB_after=1 result=PASS
+case beyondva rc follows
+FAILCASE beyondva mimir_2^48=NULL glibc_2^48=NULL small_after=1 result=PASS
+case overcommit rc follows
+FAILCASE overcommit size=34359738368 result=SUCCESS rss_growth=118784 vm_growth=34359742464
+FAILCASE overcommit size=34359738368 after_free vm_delta=0 rss_delta=118784
+FAILCASE overcommit size=68719476736 result=SUCCESS rss_growth=4096 vm_growth=68719480832
+FAILCASE overcommit size=68719476736 after_free vm_delta=0 rss_delta=0
+FAILCASE overcommit result=PASS
+case calloczero rc follows
+FAILCASE calloczero alloc_ns=46672447 scan_ns=19166428 byte_sum=0 result=PASS
+case reallocfail rc follows
+FAILCASE reallocfail realloc_SIZE_MAX=NULL pattern_intact=1 mapped_unchanged=1
+FAILCASE reallocgrow preserved=1 result=PASS
+case sequence rc follows
+FAILCASE sequence live_mapped_delta=4294979584 expected=4294975488 fail_between=NULL small_after_fail=1
+FAILCASE sequence retained_before_trim=4096 trimmed_spans=1 mapped_restored=1 maps_restored=1 (26->26) result=PASS
+case pair rc follows
+FAILCASE pair both_live=1 mapped_restored=1 maps_restored=1 result=PASS
+FAILCASE sequence live_mapped_delta=4294979584 expected=4294975488 fail_between=NULL small_after_fail=1
+FAILCASE sequence retained_before_trim=4096 trimmed_spans=1 mapped_restored=1 maps_restored=1 (26->26) result=PASS
+
+VERDICT - Z-051
+Success cost (table above; medians of 5 processes):
+- Fully touched (the honest huge-allocation price: alloc
+  + first-touch of every page + free): TIE at every size,
+  mimir/glibc total ratios 0.995..1.018. The price is the
+  kernel's, not the allocator's: first touch runs
+  ~486-496 ns/page at both ends of the ladder, minor
+  faults equal pages+2 in both legs, RSS after touch is
+  size + ~2.3 MB baseline in both legs, and free of a
+  touched block costs ~70 ns/page (256 MiB) rising to
+  ~89 ns/page (8 GiB) in both legs - page-table teardown
+  of a fresh mapping, identical because both allocators
+  hand the kernel the same single fresh mapping.
+- Untouched (alloc + free only): LOSS at every size,
+  ratios 1.10x-1.22x, on totals of only 5-10 microseconds
+  (alloc ~3 us, free ~3-4 us per leg). MimirAlloc pays
+  roughly 0.5-1.5 us more per alloc/free pair than glibc:
+  the global lock, descriptor write, registry insert and
+  checked counter updates, against glibc's mmap-chunk
+  path. Several untouched legs carry drift above the 8%
+  bound (microsecond totals on a shared host), so the
+  magnitudes are indicative; the direction was identical
+  at all six sizes in two independent runs.
+- UMA behaviour: one NUMA node, no locality effects to
+  pay. An untouched huge allocation is pure virtual
+  space in both legs: RSS stays at the ~2.3 MB baseline
+  while VmSize grows by the full mapping.
+- calloc at huge size is NOT lazy in this core: calloc
+  (256 MiB) took 46.7 ms because alloc_locked memsets the
+  whole usable extent, faulting every page in at calloc
+  time (a same-size malloc+touch pair costs ~36 ms; the
+  zero scan-back took 19.2 ms). The bytes are proven
+  zero. This is a real posture difference from glibc,
+  whose mmap'd calloc returns untouched zero pages.
+Failure behaviour (audit above; every case PASS, the
+sequence case PASS in both of its runs):
+- Arithmetic refusals are clean NULLs before any mapping
+  is attempted: malloc(SIZE_MAX), malloc(SIZE_MAX-4095),
+  malloc(SIZE_MAX-4096), calloc(2^32 x 2^32) and calloc
+  (SIZE_MAX x 2) all return NULL, and the allocator is
+  immediately proven live (small + 256 MiB allocations).
+- Beyond-VA: malloc(2^48) returns clean NULL from both
+  MimirAlloc and glibc; no crash, allocator live after.
+- Overcommit: malloc(32 GiB) and malloc(64 GiB) untouched
+  SUCCEED under this host's heuristic posture (CommitLimit
+  ~186 GiB), RSS growth 118784 B / 4096 B (lazy commitment
+  confirmed), and free restores VmSize exactly (delta 0).
+  Nothing was touched at these sizes, by design.
+- realloc failure is non-destructive: realloc of a
+  patterned 256 MiB block to SIZE_MAX returns NULL with
+  the pattern byte-intact and bytes_mapped unchanged;
+  a following realloc-grow to 1 GiB succeeds and
+  preserves the pattern.
+- Partial-failure sequence: with 2 GiB live, a SIZE_MAX
+  attempt fails cleanly BETWEEN two successful 2 GiB
+  allocations; a small allocation succeeds immediately
+  after the failure. After all frees, the only residue
+  is 4096 B - one retained EMPTY small-path span created
+  by the sequence's own small allocation (by-design
+  bounded retention, G-007) - released by one trim call,
+  after which bytes_mapped and the /proc/self/maps line
+  count return EXACTLY to baseline (26 -> 26). The huge
+  path itself retains nothing: every huge free munmaps
+  its whole mapping (pair case: two 8 GiB blocks live at
+  once, both freed, mapped bytes and maps count exact).
+  First-attempt honesty: this case initially reported
+  FAIL on the same 4096 B residue before its source was
+  identified; the audit was corrected (small path warmed
+  and trimmed before the baseline) rather than the
+  residue being waved away, and the corrected case shows
+  the residue's size, source and release explicitly.
+Bugs: none discovered in the allocator. Three defects in
+this slice's own probe were caught and fixed before the
+run of record: a misleading-indentation compile error, a
+/proc/self/stat field-parse error that read minflt as 0,
+and the sequence-baseline methodology above. The runner
+also lost a misleading always-zero exit-status echo line.
+Gate: roadmap gate MET - huge-size table (success cost +
+failure behaviour) recorded above and below.
+
+RAW COST CSV (leg,size,touch,alloc_ns,touch_ns,free_ns,minflt_delta,rss_base,rss_alloc,rss_touch,rss_free,vm_alloc,mapped_delta,checksum,status):
+mimir,268435456,0,3005,0,3457,4,2224128,2306048,2306048,2301952,275791872,0,0,OK
+glibc,268435456,0,2745,0,2695,3,2224128,2301952,2301952,2297856,275791872,-1,0,OK
+mimir,268435456,0,2524,0,3166,4,2220032,2301952,2301952,2297856,275791872,0,0,OK
+glibc,268435456,0,2514,0,2595,3,2228224,2306048,2306048,2301952,275791872,-1,0,OK
+mimir,268435456,0,3076,0,3667,4,2220032,2301952,2301952,2297856,275791872,0,0,OK
+glibc,268435456,0,3046,0,2385,3,2228224,2306048,2306048,2301952,275791872,-1,0,OK
+mimir,268435456,0,6282,0,2965,4,2228224,2306048,2306048,2301952,275791872,0,0,OK
+glibc,268435456,0,4088,0,2655,3,2224128,2301952,2301952,2297856,275791872,-1,0,OK
+mimir,268435456,0,2454,0,3096,4,2220032,2301952,2301952,2297856,275791872,0,0,OK
+glibc,268435456,0,2695,0,2305,3,2220032,2297856,2297856,2293760,275791872,-1,0,OK
+mimir,268435456,1,3496,32360393,4789994,65540,2224128,2306048,270741504,2301952,275791872,0,8355840,OK
+glibc,268435456,1,3066,31300911,4262559,65538,2220032,2297856,270729216,2293760,275791872,-1,8355840,OK
+mimir,268435456,1,7113,31865427,4580342,65540,2220032,2301952,270737408,2297856,275791872,0,8355840,OK
+glibc,268435456,1,3466,31518339,4301300,65538,2224128,2301952,270733312,2297856,275791872,-1,8355840,OK
+mimir,268435456,1,3146,31288328,4355262,65540,2220032,2301952,270737408,2297856,275791872,0,8355840,OK
+glibc,268435456,1,2946,31495405,4309686,65538,2220032,2297856,270729216,2293760,275791872,-1,8355840,OK
+mimir,268435456,1,3246,32550438,4770047,65540,2228224,2310144,270745600,2306048,275791872,0,8355840,OK
+glibc,268435456,1,3076,31634455,4365280,65538,2224128,2301952,270733312,2297856,275791872,-1,8355840,OK
+mimir,268435456,1,3026,31280553,4303655,65540,2224128,2301952,270737408,2297856,275791872,0,8355840,OK
+glibc,268435456,1,2836,31495495,4290069,65538,2228224,2306048,270737408,2301952,275791872,-1,8355840,OK
+mimir,536870912,0,2835,0,3537,4,2220032,2301952,2301952,2297856,544227328,0,0,OK
+glibc,536870912,0,4007,0,2695,3,2220032,2297856,2297856,2293760,544227328,-1,0,OK
+mimir,536870912,0,5491,0,3597,4,2224128,2306048,2306048,2301952,544227328,0,0,OK
+glibc,536870912,0,2815,0,2434,3,2224128,2301952,2301952,2297856,544227328,-1,0,OK
+mimir,536870912,0,2665,0,3416,4,2224128,2306048,2306048,2301952,544227328,0,0,OK
+glibc,536870912,0,2404,0,2485,3,2220032,2297856,2297856,2293760,544227328,-1,0,OK
+mimir,536870912,0,6082,0,3266,4,2224128,2306048,2306048,2301952,544227328,0,0,OK
+glibc,536870912,0,2875,0,2755,3,2224128,2301952,2301952,2297856,544227328,-1,0,OK
+mimir,536870912,0,2565,0,2905,4,2220032,2301952,2301952,2297856,544227328,0,0,OK
+glibc,536870912,0,2435,0,2495,3,2224128,2301952,2301952,2297856,544227328,-1,0,OK
+mimir,536870912,1,3296,64159746,10619151,131076,2224128,2306048,539176960,2301952,544227328,0,16711680,OK
+glibc,536870912,1,3407,64922642,10352452,131074,2220032,2297856,539164672,2293760,544227328,-1,16711680,OK
+mimir,536870912,1,3747,64111446,10534422,131076,2228224,2310144,539181056,2306048,544227328,0,16711680,OK
+glibc,536870912,1,3677,64767803,10164761,131074,2224128,2301952,539168768,2297856,544227328,-1,16711680,OK
+mimir,536870912,1,3566,64228224,10764052,131076,2224128,2306048,539176960,2301952,544227328,0,16711680,OK
+glibc,536870912,1,3477,64829167,10320883,131074,2228224,2306048,539172864,2301952,544227328,-1,16711680,OK
+mimir,536870912,1,3577,64355492,10667431,131076,2228224,2310144,539181056,2306048,544227328,0,16711680,OK
+glibc,536870912,1,6452,64933542,10065035,131074,2220032,2297856,539164672,2293760,544227328,-1,16711680,OK
+mimir,536870912,1,3046,64135591,10648295,131076,2228224,2310144,539181056,2306048,544227328,0,16711680,OK
+glibc,536870912,1,3587,65131733,10425088,131074,2220032,2297856,539164672,2293760,544227328,-1,16711680,OK
+mimir,1073741824,0,2945,0,3697,4,2224128,2306048,2306048,2301952,1081098240,0,0,OK
+glibc,1073741824,0,3076,0,3046,3,2224128,2301952,2301952,2297856,1081098240,-1,0,OK
+mimir,1073741824,0,5570,0,3817,4,2224128,2306048,2306048,2301952,1081098240,0,0,OK
+glibc,1073741824,0,2736,0,3297,3,2220032,2297856,2297856,2293760,1081098240,-1,0,OK
+mimir,1073741824,0,2965,0,3567,4,2224128,2306048,2306048,2301952,1081098240,0,0,OK
+glibc,1073741824,0,2725,0,3126,3,2224128,2301952,2301952,2297856,1081098240,-1,0,OK
+mimir,1073741824,0,2995,0,3597,4,2220032,2301952,2301952,2297856,1081098240,0,0,OK
+glibc,1073741824,0,2745,0,2946,3,2228224,2301952,2301952,2297856,1081098240,-1,0,OK
+mimir,1073741824,0,2615,0,3396,4,2224128,2306048,2306048,2301952,1081098240,0,0,OK
+glibc,1073741824,0,2715,0,3296,3,2224128,2297856,2297856,2293760,1081098240,-1,0,OK
+mimir,1073741824,1,3696,132657793,31171841,262148,2224128,2306048,1076047872,2301952,1081098240,0,33423360,OK
+glibc,1073741824,1,3797,133634688,29658121,262146,2228224,2306048,1076043776,2301952,1081098240,-1,33423360,OK
+mimir,1073741824,1,5280,132120438,31042820,262148,2228224,2306048,1076047872,2301952,1081098240,0,33423360,OK
+glibc,1073741824,1,3507,133578944,29905514,262146,2224128,2301952,1076039680,2297856,1081098240,-1,33423360,OK
+mimir,1073741824,1,3897,132721983,31235610,262148,2228224,2310144,1076051968,2306048,1081098240,0,33423360,OK
+glibc,1073741824,1,3878,133915262,29617134,262146,2224128,2301952,1076039680,2297856,1081098240,-1,33423360,OK
+mimir,1073741824,1,3747,132515726,31175387,262148,2228224,2310144,1076051968,2306048,1081098240,0,33423360,OK
+glibc,1073741824,1,3947,133918389,27726099,262146,2224128,2301952,1076039680,2297856,1081098240,-1,33423360,OK
+mimir,1073741824,1,4088,132573564,31618796,262148,2224128,2306048,1076047872,2301952,1081098240,0,33423360,OK
+glibc,1073741824,1,3977,133530604,28195076,262146,2228224,2301952,1076039680,2297856,1081098240,-1,33423360,OK
+mimir,2147483648,0,2876,0,3897,4,2224128,2301952,2301952,2297856,2154840064,0,0,OK
+glibc,2147483648,0,6733,0,3547,3,2220032,2297856,2297856,2293760,2154840064,-1,0,OK
+mimir,2147483648,0,3326,0,3807,4,2207744,2289664,2289664,2285568,2154840064,0,0,OK
+glibc,2147483648,0,5320,0,2935,3,2220032,2297856,2297856,2293760,2154840064,-1,0,OK
+mimir,2147483648,0,6853,0,3277,4,2224128,2306048,2306048,2301952,2154840064,0,0,OK
+glibc,2147483648,0,6863,0,3056,3,2228224,2306048,2306048,2301952,2154840064,-1,0,OK
+mimir,2147483648,0,6753,0,3347,4,2220032,2301952,2301952,2297856,2154840064,0,0,OK
+glibc,2147483648,0,3596,0,2925,3,2220032,2297856,2297856,2293760,2154840064,-1,0,OK
+mimir,2147483648,0,6432,0,4198,4,2220032,2301952,2301952,2297856,2154840064,0,0,OK
+glibc,2147483648,0,3106,0,3256,3,2220032,2297856,2297856,2293760,2154840064,-1,0,OK
+mimir,2147483648,1,3647,266915895,64436925,524292,2228224,2310144,2149793792,2306048,2154840064,0,66846720,OK
+glibc,2147483648,1,3918,267956891,63815653,524290,2224128,2301952,2149781504,2297856,2154840064,-1,66846720,OK
+mimir,2147483648,1,5390,266571953,62410206,524292,2228224,2306048,2149789696,2301952,2154840064,0,66846720,OK
+glibc,2147483648,1,4669,266441368,63565525,524290,2228224,2301952,2149781504,2297856,2154840064,-1,66846720,OK
+mimir,2147483648,1,5100,266284555,62720967,524292,2224128,2301952,2149785600,2297856,2154840064,0,66846720,OK
+glibc,2147483648,1,3497,267989182,64914888,524290,2220032,2297856,2149777408,2293760,2154840064,-1,66846720,OK
+mimir,2147483648,1,4268,266452569,63520472,524292,2224128,2306048,2149789696,2301952,2154840064,0,66846720,OK
+glibc,2147483648,1,4138,266730259,64023862,524290,2224128,2301952,2149781504,2297856,2154840064,-1,66846720,OK
+mimir,2147483648,1,4829,266101914,62557731,524292,2224128,2306048,2149789696,2301952,2154840064,0,66846720,OK
+glibc,2147483648,1,4097,266464402,64316679,524290,2224128,2301952,2149781504,2297856,2154840064,-1,66846720,OK
+mimir,4294967296,0,3106,0,4108,4,2215936,2297856,2297856,2293760,4302323712,0,0,OK
+glibc,4294967296,0,3025,0,3066,3,2220032,2297856,2297856,2293760,4302323712,-1,0,OK
+mimir,4294967296,0,3266,0,3647,4,2228224,2310144,2310144,2306048,4302323712,0,0,OK
+glibc,4294967296,0,3046,0,2975,3,2220032,2297856,2297856,2293760,4302323712,-1,0,OK
+mimir,4294967296,0,3377,0,4047,4,2224128,2306048,2306048,2301952,4302323712,0,0,OK
+glibc,4294967296,0,3065,0,3016,3,2220032,2297856,2297856,2293760,4302323712,-1,0,OK
+mimir,4294967296,0,3096,0,3537,4,2224128,2301952,2301952,2297856,4302323712,0,0,OK
+glibc,4294967296,0,3066,0,2936,3,2224128,2297856,2297856,2293760,4302323712,-1,0,OK
+mimir,4294967296,0,2805,0,3977,4,2228224,2310144,2310144,2306048,4302323712,0,0,OK
+glibc,4294967296,0,5861,0,2705,3,2224128,2297856,2297856,2293760,4302323712,-1,0,OK
+mimir,4294967296,1,7524,527245460,111256275,1048580,2224128,2306048,4297273344,2301952,4302323712,0,133693440,OK
+glibc,4294967296,1,9148,527609319,112158041,1048578,2228224,2306048,4297269248,2301952,4302323712,-1,133693440,OK
+mimir,4294967296,1,8536,528664151,111478360,1048580,2224128,2301952,4297269248,2297856,4302323712,0,133693440,OK
+glibc,4294967296,1,4389,534408689,110926018,1048578,2228224,2301952,4297265152,2297856,4302323712,-1,133693440,OK
+mimir,4294967296,1,9187,526982608,114845174,1048580,2228224,2310144,4297277440,2306048,4302323712,0,133693440,OK
+glibc,4294967296,1,4047,528220582,111281483,1048578,2224128,2301952,4297265152,2297856,4302323712,-1,133693440,OK
+mimir,4294967296,1,4308,526988699,111143334,1048580,2224128,2306048,4297273344,2301952,4302323712,0,133693440,OK
+glibc,4294967296,1,3988,528754921,111285530,1048578,2224128,2297856,4297261056,2293760,4302323712,-1,133693440,OK
+mimir,4294967296,1,4338,527560859,116040198,1048580,2224128,2306048,4297273344,2301952,4302323712,0,133693440,OK
+glibc,4294967296,1,5010,529556369,111125281,1048578,2224128,2301952,4297265152,2297856,4302323712,-1,133693440,OK
+mimir,8589934592,0,3928,0,3897,4,2224128,2306048,2306048,2301952,8597291008,0,0,OK
+glibc,8589934592,0,3146,0,3266,3,2224128,2301952,2301952,2297856,8597291008,-1,0,OK
+mimir,8589934592,0,2865,0,3787,4,2224128,2306048,2306048,2301952,8597291008,0,0,OK
+glibc,8589934592,0,3005,0,3106,3,2224128,2301952,2301952,2297856,8597291008,-1,0,OK
+mimir,8589934592,0,3487,0,3787,4,2224128,2301952,2301952,2297856,8597291008,0,0,OK
+glibc,8589934592,0,2906,0,3206,3,2224128,2301952,2301952,2297856,8597291008,-1,0,OK
+mimir,8589934592,0,3436,0,3837,4,2220032,2297856,2297856,2293760,8597291008,0,0,OK
+glibc,8589934592,0,3145,0,3016,3,2228224,2306048,2306048,2301952,8597291008,-1,0,OK
+mimir,8589934592,0,3476,0,3827,4,2224128,2306048,2306048,2301952,8597291008,0,0,OK
+glibc,8589934592,0,3015,0,2735,3,2224128,2301952,2301952,2297856,8597291008,-1,0,OK
+mimir,8589934592,1,4478,1039114585,187912492,2097156,2224128,2306048,8592240640,2301952,8597291008,0,267386880,OK
+glibc,8589934592,1,4278,1041519451,186053938,2097154,2228224,2306048,8592236544,2301952,8597291008,-1,267386880,OK
+mimir,8589934592,1,4739,1040633594,186687632,2097156,2224128,2306048,8592240640,2301952,8597291008,0,267386880,OK
+glibc,8589934592,1,4709,1050100772,189082930,2097154,2228224,2306048,8592236544,2301952,8597291008,-1,267386880,OK
+mimir,8589934592,1,5340,1040596666,186594558,2097156,2224128,2306048,8592240640,2301952,8597291008,0,267386880,OK
+glibc,8589934592,1,8346,1040200445,187854734,2097154,2228224,2301952,8592232448,2297856,8597291008,-1,267386880,OK
+mimir,8589934592,1,4247,1042217806,184450790,2097156,2224128,2306048,8592240640,2301952,8597291008,0,267386880,OK
+glibc,8589934592,1,8505,1039468226,185375219,2097154,2224128,2301952,8592232448,2297856,8597291008,-1,267386880,OK
+mimir,8589934592,1,8836,1044625216,185680419,2097156,2224128,2306048,8592240640,2301952,8597291008,0,267386880,OK
+glibc,8589934592,1,9738,1039633996,185857200,2097154,2224128,2301952,8592232448,2297856,8597291008,-1,267386880,OK
