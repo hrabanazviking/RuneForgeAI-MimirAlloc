@@ -1,0 +1,139 @@
+MimirAlloc Z13 slice Z-010 - recorded run of tests/perf/probe_z010.c
+slice: Z-010 - Latency ladder (Wave 2)
+date: 2026-11-12T02:00:51-05:00 (primary run start, America/New_York); corroborating run 2026-11-12T01:57:52-05:00
+base: de03613b301e33e12a06c714eb7ed0b0ecc9e36a (branch yrsa/mimiralloc-team-01, Z-001 team commit; Z-001 banked at seat as 7f92c27)
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux
+cpu: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S (Strix Halo), 16 cores / 32 threads, 2 CCDs
+cache topology (sysfs, printed by the runner): cpu0 and cpu8 both L1d 48K, L2 1024K;
+  cpu0 L3 32768K shared_cpu_list 0-7,16-23 (CCD0); cpu8 L3 32768K shared_cpu_list 8-15,24-31 (CCD1)
+  coherency_line_size 64 (getconf LEVEL1_DCACHE_LINESIZE 64); pagesize 4096
+scaling_governor: performance (cpu0)
+THP: /sys/kernel/mm/transparent_hugepage/enabled = always [madvise] never; the probe does
+  not madvise, so all runs are on 4 KiB pages - large-size numbers include 4 KiB page-walk cost (named below)
+compiler: cc -std=c11 -Wall -Wextra -Werror -pthread -O2 (standalone build in run_z010.sh; Makefile untouched)
+sha256: probe_z010.c 37aec071171fc060ffb0f98a8b7fa691aa8db02372837d23fc43fa35b150a52a
+        run_z010.sh   ec1a1797a942a632192d896e47fb890f7d159660ebaabcab3045571ad7ffcf4e
+        /tmp/probe_z010 f64b57a49f8af599ac258e28b1c8dcb803e72e6affd67f016b8465c29d6a3943
+method: single-cycle random permutation pointer chase, one 64-byte element per cache line,
+  dependent loads only (prefetch-defeating); chain construction first-touches every page;
+  one warm-up pass per size; 5 timed repetitions per size, median reported, min as cross-check;
+  clock_gettime(CLOCK_MONOTONIC) around the whole chase; accesses per rep = max(4,000,000, N)
+  pinned inside the probe via sched_setaffinity: leg 1 on CPU 0 (CCD0), leg 2 on CPU 8 (CCD1)
+load state (SHARED HOST - recorded honestly, numbers are not quiet-machine baselines):
+  primary run: load average 2.00 at start, 4.85 at end; the Tensile lab bench_sizes.py
+  (TT shapes, ~418% CPU) ran throughout; Aesir/Lifthrasir forges idle at run time.
+  corroborating run: load 4.78 at start, 4.09 at end, Tensile bench_sizes.py TN at ~373% CPU.
+  Both legs exit 0 in both runs (4/4 legs).
+
+=== PRIMARY RUN (run 2) - median ns/access (min in parentheses) ===
+size        CPU0/CCD0        CPU8/CCD1
+4 KiB         0.79 (  0.79)     0.80 (  0.80)
+8 KiB         0.79 (  0.79)     0.80 (  0.80)
+16 KiB        0.79 (  0.79)     0.80 (  0.80)
+32 KiB        0.79 (  0.79)     0.80 (  0.80)
+48 KiB        0.85 (  0.84)     0.87 (  0.86)
+64 KiB        2.76 (  2.73)     2.80 (  2.80)
+96 KiB        2.74 (  2.74)     2.80 (  2.80)
+128 KiB       2.73 (  2.73)     2.80 (  2.80)
+192 KiB       2.74 (  2.74)     2.80 (  2.80)
+256 KiB       2.83 (  2.77)     2.80 (  2.80)
+384 KiB       2.87 (  2.76)     2.81 (  2.80)
+512 KiB       3.09 (  3.09)     3.16 (  3.16)
+768 KiB       3.80 (  3.72)     4.31 (  4.31)
+1 MiB         5.72 (  5.66)     5.93 (  5.93)
+1.5 MiB         7.67 (  7.62)     8.19 (  8.05)
+2 MiB         8.64 (  8.59)     8.59 (  8.58)
+3 MiB        11.62 (  9.58)     9.59 (  9.58)
+4 MiB        12.41 ( 12.37)    10.18 ( 10.18)
+6 MiB        12.70 ( 12.66)    10.77 ( 10.77)
+8 MiB        13.07 ( 12.85)    10.95 ( 10.93)
+12 MiB       13.45 ( 12.98)    11.15 ( 11.15)
+16 MiB       28.48 ( 12.94)    11.45 ( 11.44)
+24 MiB       28.85 ( 21.77)    18.44 ( 18.39)
+32 MiB       44.25 ( 42.52)    38.42 ( 38.37)
+48 MiB      130.36 ( 90.90)    84.86 ( 82.34)
+64 MiB      144.11 (128.67)   108.03 (106.67)
+96 MiB      163.48 (145.52)   129.27 (128.79)
+128 MiB     155.17 (151.40)   140.48 (139.39)
+192 MiB     154.20 (146.55)   150.83 (147.98)
+256 MiB     151.21 (151.10)   154.36 (152.76)
+384 MiB     156.88 (156.70)   169.33 (156.03)
+512 MiB     159.71 (159.40)   163.99 (162.80)
+
+=== CORROBORATING RUN (run 1) - median ns/access ===
+size        CPU0/CCD0   CPU8/CCD1
+4 KiB           1.31       0.82
+8 KiB           1.27       0.82
+16 KiB          1.22       0.81
+32 KiB          1.20       0.81
+48 KiB          1.29       0.88
+64 KiB          4.54       2.84
+96 KiB          4.88       2.84
+128 KiB         5.01       2.83
+192 KiB         7.33       2.83
+256 KiB         8.52       2.83
+384 KiB         8.53       2.82
+512 KiB         9.61       3.18
+768 KiB        12.70       3.92
+1 MiB          18.25       5.28
+1.5 MiB          23.60       7.78
+2 MiB          26.71       8.64
+3 MiB           9.58       9.62
+4 MiB          10.00      10.25
+6 MiB          10.79      10.88
+8 MiB          11.38      11.02
+12 MiB         13.24      11.24
+16 MiB         12.22      11.37
+24 MiB         22.77      18.68
+32 MiB         53.26      37.72
+48 MiB        190.77      82.80
+64 MiB        143.22     107.73
+96 MiB        171.75     130.15
+128 MiB       167.03     140.56
+192 MiB       158.81     150.13
+256 MiB       179.40     152.99
+384 MiB       188.40     159.76
+512 MiB       160.97     170.18
+
+Run-1 CPU0 leg note: its small/mid sizes are visibly contended (L1 1.20-1.31 ns, L2 region
+4.30-18.25 ns and non-monotonic at 1.5-3 MiB) while Tensile ran at up to 603% CPU and CPU0
+carries host housekeeping; run 2 (load lower at start) reproduces CPU8 closely at L1/L2
+(0.79/2.76 vs 0.80/2.80 ns), so run 1 CPU0 is kept as contention evidence, not as ladder data.
+Raw logs: hidden_files/z010_probe_raw.log and hidden_files/z010_probe_raw2.log (team-local, not banked).
+
+=== PLATEAU BOUNDARIES (named from the measured steps, primary run + run-1 CPU8) ===
+L1d plateau: 4 KiB..48 KiB at 0.79-0.88 ns/access on both CCDs. Boundary at 48 KiB =
+  the per-core L1d capacity (48 KiB, sysfs): latency steps x3.2 at 64 KiB (2.74-2.84 ns).
+L2 plateau: 64 KiB..384 KiB at 2.73-2.87 ns/access, flat on both CCDs. Transition
+  512 KiB (3.09-3.18 ns) and 768 KiB (3.80-4.31 ns); boundary at 1 MiB = per-core L2
+  capacity (1024K, sysfs): 5.28-5.93 ns at exactly 1 MiB, rising through 1.5 MiB.
+L3-local plateau (per-CCD L3): 2 MiB..12 MiB at 8.59-13.45 ns/access, extending to
+  16 MiB on the CPU8 legs (11.37-11.45 ns); the run-2 CPU0 16 MiB median (28.48 ns,
+  min 12.94 ns) shows contention spread at that one point; the CPU8 legs
+  stay at 8.59-11.45 ns through this range. The gentle rise inside the plateau past 8 MiB is consistent
+  with 4 KiB dTLB reach being exceeded (8 MiB = 2048 pages), adding page-walk cost on
+  top of L3 hits - it is recorded as part of this measurement, not separated here.
+L3 capacity transition zone: 24 MiB..48 MiB. 18.44-28.85 ns at 24 MiB, 38.42-44.25 ns
+  at 32 MiB, 82.80-130.36 ns at 48 MiB. Boundary named at 32 MiB = one CCD local L3
+  capacity (32768K, sysfs): a single pinned core cannot use the other CCD L3 as local
+  cache, so past 32 MiB the chase is progressively DRAM-served; no clean plateau exists
+  in 32..64 MiB on either leg - the second CCD 32 MiB does NOT appear as a step at
+  64 MiB, confirming L3 is per-CCD, not unified.
+DRAM plateau (UMA LPDDR, 4 KiB pages): 64 MiB..512 MiB. 107.73-144.11 ns at 64 MiB,
+  rising to 151-170 ns at 256-512 MiB - UMA DRAM latency plus full page-walk cost at
+  4 KiB pages (512 MiB = 131072 pages), measured under the shared load recorded above;
+  these are this-machine numbers under that stated load, not quiet-machine baselines.
+CCD symmetry: L1/L2 plateaus identical on CCD0 and CCD1 within noise; L3/transition
+  values differ by up to ~30% between legs/runs under contention (e.g. 16 MiB: 11.37-
+  13.45 ns clean legs vs 28.48 ns on the run-2 CPU0 leg) - cross-CCD remote-L3 latency
+  itself is Z-012 territory (ping-pong), not claimed here.
+
+=== STANDING CORRECTNESS GATE ===
+command: make clean && make test (unmodified tree) in the team worktree, run after the
+  probe legs finished; full log hidden_files/z010_make_test.log (team-local, not banked)
+result: 8/8 targets PASS; 4988 checks run (18 smoke + 4970 CHECKS), 0 failed, make exit 0;
+  77 SKIP lines, all pre-existing by-design SKIPPED/NOT-YET (identical posture to Z-001)
+
+Verdict: Z-010 gate met - latency table 4 KiB..512 MiB recorded above for both CCDs with
+plateau boundaries named at 48 KiB (L1d), 1 MiB (L2), 32 MiB (per-CCD L3) and the DRAM
+plateau from 64 MiB; full make test green at the Z-001 baseline counts.
