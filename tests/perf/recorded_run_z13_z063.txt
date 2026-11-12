@@ -1,0 +1,61 @@
+MimirAlloc Z13 recorded run - Z-063 Wave 7 verdict (built with OWED sections)
+slice: Z-063 - Wave 7 verdict (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md: fragmentation + soak standings, both soaks, both allocators; KL-D's slow half restated; gate: verdict doc traceable to recorded runs)
+date: 2026-11-12 (build window, America/Indiana/Indianapolis; standing gate on the final tree the same session)
+base: merge acb60f0 of seat main c0e19cd (banked Z-001..Z-060, ls-remote verified by the keeper) into yrsa/mimiralloc-team-02 - clean merge, no conflicts; merged tree byte-identical to seat main (git diff HEAD c0e19cd empty at merge time).
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed at the end of this file, captured 2026-11-12T16:18:13Z).
+status: BUILT WITH OWED SECTIONS (the Z-036 / Z-045 pattern). Banked Wave 7 slices Z-055..Z-060 are FINAL in the verdict; Z-061 (Soak 2, running under team-01 at build time) and Z-062 (reuse-distance, team-06 finishing, recorded run + commit pending) are OWED sections in docs/Z13_WAVE07_VERDICT.md section 6, with their fold-in sources named. No number from either owed slice appears anywhere in the verdict or in this run.
+artifacts: docs/Z13_WAVE07_VERDICT.md + this recorded run. No runner and no summariser are banked by this slice: the verdict derives no new measurement - every number is a synthesis of banked recorded runs, re-read first-hand from disk at the seat copies (identical content in this merged tree), and the only fresh execution is the standing gate below.
+method: synthesis only, per the keeper-directed OWED pattern (Z-036 / Z-045 precedent). The lead read, on-device and first-hand: the roadmap Wave 7 sections Z-055..Z-063; docs/Z13_WAVE06_VERDICT.md + tests/perf/recorded_run_z13_z054.txt (house form + KL-D standing of record); and the banked recorded runs tests/perf/recorded_run_z13_z055.txt, _z056.txt, _z057.txt, _z058.txt, _z059.txt, _z060.txt (seat commits 7b49210, c2ed635, 3d9c267, adb7f56, f4ef75f, c0e19cd), with docs/Z13_PRESSURE_CYCLES.md and docs/DECISION_LEDGER.md D-009 as filed by Z-060 / Z-059, and tests/perf/recorded_run_z13_z053.txt for the Wave 6 large-path context. No new benchmark, probe, or soak was run for this slice.
+load state: SHARED HOST at build (loadavg 2.34 / 1.96 / 1.61 at merge time; the Z-061 one-hour soak and sibling campaigns were live co-tenants). Load is immaterial to this slice's only fresh execution (the correctness gate is not a timing) and to every cited quantity (each source run carries its own load stamp, restated in the verdict where it matters).
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z063_gate.log: GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN - identical to the Z-001 baseline. This slice adds no tests and changes no production source; the count is unchanged by construction (verdict slice: docs + tests/perf recorded run only).
+
+=== EVIDENCE INDEX (banked; seat commit; what the verdict takes from it) ===
+Z-055 7b49210 recorded_run_z13_z055.txt - F-series PARTIAL filing (F-1..F-4 + F-6 filed, F-5 NOT MEASURED, INC-I006-01 carried); oracle checks=120 failures=0 RESULT PASS; F-6 children A 9/0, D 7/0; F-6 DISCHARGED for x86-64 (O-08 / INC-I006-02); F-3 free-but-unusable 32064 B; R-EXT 0.260937 (Q-MAPPED 122880); R-INT 0.091146; span tails 3360 B (class-1024 tail 928 B); F-1(a) live term 360 B; F-2 overheads 4576 + 5056 = 9632 B; per-class fragmented state 64: 4/0/1/3/93, 256: 4/0/1/3/23, 1024: 6/1/2/3/5; F-4: 6 retained spans / Q-RETAINED 24576, partial trim(2) released 2, full trim remaining 4, OS drop 16384 B; gate GREEN 4988/0/77.
+Z-056 c2ed635 recorded_run_z13_z056.txt - soak harness + 600 s pilot: both legs COMPLETE 61/61 samples, DRAINED + DONE, exit 0/0, ALL LEGS COMPLETE; mimir ops 43181056, peak RSS 174744 KiB, net_factor median 2.016 worst 2.638, drained retained net 36100 KiB / +83 VMA; glibc ops 271437568 (6.29x, time-boxed caveat), peak RSS 198468 KiB, net_factor median 2.522 worst 3.275, drained retained net 194444 KiB; latency medians small 238 vs 44, large 2290 vs 135 ns/op (shared-machine samples); integrity zero failures; gate GREEN 4988/0/77.
+Z-057 3d9c267 recorded_run_z13_z057.txt - Soak 1, 3600 s on the banked allocator at seat c2ed635: both legs COMPLETE 61/61, exit 0/0, ALL LEGS COMPLETE; mimir ops 256120832, peak RSS 179672 KiB at t=720, live peak 105892768 B, RSS median first-30 151822 vs last-30 148730 KiB (F1 NO DRIFT; glibc 190914 -> 187950), net_factor median 1.988 worst 2.469 (F2 resident-shape WIN; glibc 2.500 / 3.168, peak RSS 204084 KiB, live peak 98299712 B, ops 1628749056 = 6.36x); F3 holes median 108 / 52664320 B, worst hole bytes 76947456 at t=2280, worst count 123, worst single 24289280, worst net_factor 2.469 at t=1320, glibc 0 holes every sample; F4 DRAINED mimir RSS 38772 KiB retained net 36696 KiB +73 VMA (pilot 36100 KiB - duration-independent), glibc DRAINED 186480 KiB retained net 184392 KiB +0 VMA; F5 latency medians small 253 (worst 329) vs 44 (70), large 2423 (2915) vs 134 (191) ns/op, flat all hour; integrity zero failures; gate GREEN 4988/0/77.
+Z-058 adb7f56 recorded_run_z13_z058.txt - split/coalesce audit: checks=69 failures=0 RESULT PASS; P1 carve-split at birth only; P2 no coalesce, exact-size reuse YES; P3 cross-class split NO; P4 PIN TRAP worst case (one live 64 B block pins its 4096 B page, 4032 B = 98.44% free-but-unusable; pinned point mapped 28672 B behind 1 live object, retained 24576 B); P5 free-order reuse exact-slot, not LIFO, batch indices 62 / 189 of 256; P6 large split NO; P7 large coalesce NO; P8 exact-length reuse YES same address; P9 realloc shrink split NO (45056 -> 45056, tail 25056 B = 55.6% dead until free); P10 whole-page release only (mapped returns to 0 exactly); gate GREEN 4988/0/77.
+Z-059 f4ef75f recorded_run_z13_z059.txt + DECISION_LEDGER D-009 - placement trial: leg A control exact in all 3 builds (F-3 32064, tails 3360, R-EXT 0.260937, R-INT 0.091146, Q-MAPPED 122880, Q-RETAINED 16384); 3 runs per policy, checks=49 failures=0 each, METRIC lines identical; leg B class 64 touched 1 / empty 3 all policies; class 256 current + first-fit touched 2 / empty 2, best-fit touched 3 / empty 1; f3class 13824 (class 64), 12800 (class 256); clauses b + c NOT MET; DECISION D-009 NO-ADOPTION (first-fit TIE everywhere, best-fit LOSS at class 256); flag-off core .text byte-identical to seat core; gate GREEN 4988/0/77.
+Z-060 c0e19cd recorded_run_z13_z060.txt + docs/Z13_PRESSURE_CYCLES.md - pressure cycles: PASS 3/3 attempts x 5 cycles, tuples identical in all 15 cycles; NO UNBOUNDED RETENTION (span retention 393216 B at bound 16; pool capped 64 units / 33554432 B; both to exactly 0 under one FULL evaluation every cycle; RSS drop exactly 7200 KiB); CP-1 DISCHARGED-PROVEN; CP-2 NOT DISCHARGED (single-list LIFO); CP-3 FAILED BOUND NAMED (PARTIAL DONTNEED course does not exist; partial_pool_delta=0 in all 15 cycles); CP-4 DISCHARGED-WITH-CORRECTION (cap 32 MiB; 20975616 B mapping pools whole); CP-5 DISCHARGED BY DECISION (MADV_FREE rejected); neighbours test-z048 57/0, test-z050 60/0, test-z052 35/0 PASS; gate GREEN 4988/0/77.
+Z-054 0925d37 (Wave 6 verdict, context of record) - KL-D fast half: mixed_lifecycle LOSS 71.927x same-window (run 2: mimir 505.65 vs glibc 7.03 ns/op; run 1: 71.452x); mimir absolute 898.76 (Z-009) -> 505.65; Z-060's pool leg carried OWED there (section 6 item 3) and discharged by Z-060 above.
+Z-053 8df68e8 (Wave 6, context) - large-path worst-phase median net_factor: checker 3.804 (glibc 1.031), uniform 1.559 (1.043), pinwheel 2.537 (1.077), churn 1.634 (1.480).
+
+=== VERDICT - THE WAVE 7 STANDINGS OF RECORD (banked part) ===
+Fragmentation: F-series PARTIAL filed on this host (F-5 absent, named); F-3 32064 B class-locked at R-EXT 0.260937; mechanism audit complete - split = carve-at-birth only, coalesce = none below the page, reuse = exact-size only; worst case P4 pin trap (4032 B / 98.44% held by one 64 B block); placement trial DECISION D-009 NO-ADOPTION (first-fit TIE, best-fit LOSS at class 256).
+Soaks (banked): pilot (Z-056) and Soak 1 (Z-057) both COMPLETE 61/61 both legs; Soak 1 NO DRIFT either allocator over 3600 s; resident shape WIN for mimir (net_factor median 1.988 vs glibc 2.500, worst 2.469 vs 3.168); drain retention bounded and duration-independent (36696 KiB net after 3600 s vs 36100 KiB after 600 s); batch latency LOSS steady (small 253 vs 44, large 2423 vs 134 ns/op medians, shared-machine samples, flat all hour). Soak 2 (Z-061) OWED - see below.
+Pressure: Z-060 PASS, no unbounded retention, Z-050's owed pool leg discharged (CP-1 proven, CP-4 corrected, CP-5 decided; CP-3's failed bound named, CP-2 not discharged).
+KL-D restated: fast half STILL LOST 71.927x same-window (Z-054, not re-measured by Wave 7; factor of record unchanged); slow half DISCHARGED - no drift, no bloat, no retention growth over the long run on this host; the loss is a steady-state per-operation cost, not a growing one. Full restatement: docs/Z13_WAVE07_VERDICT.md section 5.
+
+=== OWED (not banked at this build; fold-in sources named; nothing asserted) ===
+Z-061 Soak 2 (tests/perf/recorded_run_z13_z061.txt once banked): folds into verdict section 3.3 + section 5 - completeness, per-leg ops / RSS / drift / net_factor / holes / latency / DRAINED beside the Z-057 counterparts, the curve-by-curve comparison verdict, and an explicit stand / move / fall ruling on Z-057 F1, F2, F4.
+Z-062 Reuse-distance and L3 (tests/perf/recorded_run_z13_z062.txt once banked): folds into verdict section 2.5 + section 5 - the reuse-policy table vs the 64 MiB L3, per-class cache-residency verdicts, any proposed per-class policy change with its numbers (or the no-change ruling), and reconciliation with Z-058's P5 (exact-slot reuse on TLS-batch timing, not strict LIFO).
+
+Bugs found/fixed: none in the allocator or the suite. No defect was discovered by this synthesis; every gap carried in the verdict (F-5 / INC-I006-01, CP-2, CP-3's nonexistent PARTIAL course, INC-Z048-01, the unmitigated pin trap) is a named gap of record from its source slice, carried - not newly found, and not left unfixed by this slice: none of them is inside a verdict slice's scope, and each is itemised in docs/Z13_WAVE07_VERDICT.md section 8 with its owner source.
+Team structure: fresh team-02 lead + the six Mythic Engineering roles run SEQUENTIALLY by the lead (platform muster for this slice spawned no parallel sub-agents; recorded plainly per the muster instruction): evidence audit, fragmentation review, soak review, KL-D restatement review, owed-scope review, gate / commit-scope review. All device-side work was executed by the lead alone, sequentially, in this worktree only.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured at this build, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-12T16:18:13Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2822735
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 72%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 2.69 2.11 1.68
