@@ -5,6 +5,11 @@
 # complete with per-size checksums identical across legs
 # and shapes. Logs land in hidden_files/ (team bookkeeping,
 # never banked); the recorded run is assembled separately.
+# Fold-in: the probe now records the Z-092 prototype's
+# real presence - internal batch symbols in the core
+# object and the contract header - alongside the original
+# public-surface facts (public header and .so exports
+# still carry zero batch names, by the Z-092 design).
 set -eu
 DIR=$(dirname "$0");ROOT=$(cd "$DIR/../.." && pwd);cd "$ROOT"
 HF="$ROOT/hidden_files";mkdir -p "$HF" build
@@ -14,12 +19,19 @@ grep -i batch include/mimir_alloc.h || echo "(no batch declaration in public hea
 make -s lib >> "$HF/z093_build.log" 2>&1
 echo "so batch exports: $(nm -D --defined-only build/libmimiralloc.so | grep -c -i batch || true)"
 nm -D --defined-only build/libmimiralloc.so | grep -i batch || echo "(no batch symbol exported by libmimiralloc.so)"
+echo "contract header: $(test -f tests/contract/mimir_batch_z092.h && echo present || echo ABSENT)"
+echo "core header batch decls: $(grep -c mimir_batch src/core/mimir_core.h || true)"
+make -s build/mimir_core.o >> "$HF/z093_build.log" 2>&1
+echo "core object batch symbols: $(nm build/mimir_core.o | grep -c mimir_batch || true)"
+nm build/mimir_core.o | grep mimir_batch || echo "(no batch symbol in core object)"
 echo "== build =="
 make -s build/bench_k007_mimir >> "$HF/z093_build.log" 2>&1
 cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto -DLEG_GLIBC -c tests/perf/bench_z093.c -o build/bench_z093_glibc.o
 cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto -DLEG_GLIBC build/bench_z093_glibc.o -o build/bench_z093_glibc
 cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto -c tests/perf/bench_z093.c -o build/bench_z093_mimir.o
 cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/bench_z093_mimir.o -o build/bench_z093_mimir
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto -DLEG_PROTO -c tests/perf/bench_z093.c -o build/bench_z093_proto.o
+cc -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto build/mimir_alloc.o build/mimir_core.o build/mimir_platform.o build/bench_z093_proto.o -o build/bench_z093_proto
 echo "build ok"
 echo "loadavg before: $(cat /proc/loadavg)"
 echo "== invocation 1 =="

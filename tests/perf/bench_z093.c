@@ -1,17 +1,59 @@
 /* bench_z093.c - Z-093 batch verdict run harness.
  * Roadmap slice Z-093 (Wave 11): prototype vs per-op loop
- * vs glibc on batch-shaped workloads. The Z-092 batch API
- * prototype is built concurrently on another team branch
- * and is NOT present in this tree (verified by the runner's
- * prototype probe: no batch symbol in the public header or
- * in the built .so exports), so the legs measured here are
- * the two legs that exist on this tree today:
- *   mimir per-op loop  (this file, banked LIBOBJS, -O2)
+ * vs glibc on batch-shaped workloads.
+ *
+ * Original run (commit ab2aa5f): the Z-092 batch API
+ * prototype was NOT present in that tree (verified by the
+ * runner's prototype probe: no batch symbol in the public
+ * header or in the built .so exports), so only the two
+ * legs that existed were measured - mimir per-op loop and
+ * glibc per-op loop - and the prototype leg was recorded
+ * OWED (verdict doc S1/S5).
+ *
+ * Fold-in (this version): Z-092 is banked at seat main
+ * 4188da8 and merged into this tree. The batch symbols
+ * are internal (src/core/mimir_core.c, declared in
+ * src/core/mimir_core.h and in the test-only contract
+ * header tests/contract/mimir_batch_z092.h); they are
+ * NOT public exports (nm -D on libmimiralloc.so still
+ * shows zero batch symbols - the runner probe records
+ * both facts). Three legs now exist:
+ *   mimir per-op loop  (banked LIBOBJS, -O2, public
+ *                       mimir_malloc / mimir_free)
  *   glibc per-op loop  (-DLEG_GLIBC, stdlib malloc/free)
- * driven over batch-shaped workloads. The prototype leg is
- * OWED and recorded as such in the recorded run and the
- * verdict doc; it must be added and re-run when Z-092
- * merges, before Z-093's verdict can cover the prototype.
+ *   proto batch leg    (-DLEG_PROTO, Z-092 internal
+ *                       mimir_batch_alloc / mimir_batch_free
+ *                       over the same LIBOBJS)
+ * driven over the IDENTICAL batch-shaped workloads:
+ * every shape, total and checksum below is unchanged
+ * from the original run, so the prototype numbers grade
+ * directly against the filed per-op numbers.
+ *
+ * Prototype leg construction (honest to the Z-092
+ * contract, docs/Z13_Z092_BATCH_API_PROTOTYPE.md S2):
+ * - same-class shapes: one mimir_batch_alloc call per
+ *   batch window, touch in sequence order, one
+ *   mimir_batch_free call per window. batch_free frees
+ *   in REVERSE (LIFO) order by contract, matching the
+ *   LIFO shapes natively; the FIFO shape is driven by
+ *   handing batch_free a reversed pointer array, so the
+ *   callee's reverse walk frees in FIFO order - the
+ *   batch API itself has no order parameter.
+ * - mixbatch512: the batch API is same-class only, so
+ *   each 512 window is grouped by class (six
+ *   mimir_batch_alloc calls, one per class present),
+ *   touched in the original sequence order (checksum
+ *   identical), and freed grouped by class (LIFO within
+ *   each class group). Free ORDER across classes differs
+ *   from the per-op LIFO walk; Z-091 found free order is
+ *   not a priced factor on this machine, and the
+ *   grouping is the only contract-legal way to drive a
+ *   mixed batch through this API - recorded here, not
+ *   hidden.
+ * - The Z-092 prototype loops the per-op core entries
+ *   and removes no walk (its own doc S2 says so); this
+ *   leg measures exactly that shipped prototype, not
+ *   the span-grouped design Z-091 briefed as future work.
  *
  * Shapes (K-007 geometry, unmodified totals): interleaved
  * alloc/touch/free (batch 1) vs burst alloc-all/touch-all/
@@ -25,8 +67,8 @@
  * processes driven by run_bench_z093.sh; warm-up 1/10
  * untimed (K-001 M-6). Whole-pass CLOCK_MONOTONIC.
  * Checksum depends only on the global op sequence, so all
- * patterns at one size must print identical ck on both
- * legs. */
+ * patterns at one size must print identical ck on all
+ * three legs. */
 #define _POSIX_C_SOURCE 200809L
 #include <stdint.h>
 #include <stdio.h>
@@ -38,6 +80,9 @@
 #define A_ALLOC malloc
 #define A_FREE free
 #define LEGNAME "glibc"
+#elif defined(LEG_PROTO)
+#include "../contract/mimir_batch_z092.h"
+#define LEGNAME "proto"
 #else
 #include "mimir_alloc.h"
 #define A_ALLOC mimir_malloc
@@ -49,6 +94,7 @@ static long minflt(void){struct rusage r;getrusage(RUSAGE_SELF,&r);return r.ru_m
 static long maxrss(void){struct rusage r;getrusage(RUSAGE_SELF,&r);return r.ru_maxrss;}
 static void *ptrs[512];
 static const size_t MIXSIZES[6]={32,64,128,256,512,1024};
+#ifndef LEG_PROTO
 static int run_pass(size_t sz,size_t batch,size_t total,int fifo,uint64_t *ck){
  size_t done=0;uint64_t seq=0;
  while(done<total){
@@ -66,6 +112,38 @@ static int run_pass_mix(size_t batch,size_t total,uint64_t *ck){
   for(i=b;i>0;i--)A_FREE(ptrs[i-1]);
   done+=b;}
  return 0;}
+#else /* LEG_PROTO: Z-092 batch API leg */
+static void *rev[512];
+static int run_pass(size_t sz,size_t batch,size_t total,int fifo,uint64_t *ck){
+ size_t done=0;uint64_t seq=0;
+ while(done<total){
+  size_t b=batch,i;if(b>total-done)b=total-done;
+  if(mimir_batch_alloc(sz,ptrs,b)!=b)return 3;
+  for(i=0;i<b;i++){memset(ptrs[i],(int)(seq&0x3F)+1,sz);*ck+=((unsigned char*)ptrs[i])[0];seq++;}
+  if(fifo){for(i=0;i<b;i++)rev[i]=ptrs[b-1-i];if(mimir_batch_free(rev,b)!=b)return 4;}
+  else{if(mimir_batch_free(ptrs,b)!=b)return 4;}
+  done+=b;}
+ return 0;}
+static int run_pass_mix(size_t batch,size_t total,uint64_t *ck){
+ size_t done=0;uint64_t seq=0;
+ void *tmp[512];size_t idx[512];
+ while(done<total){
+  size_t b=batch,i,c;uint64_t base=seq;if(b>total-done)b=total-done;
+  for(c=0;c<6;c++){
+   size_t n=0,k;
+   for(i=0;i<b;i++)if(MIXSIZES[(base+i)%6]==MIXSIZES[c])idx[n++]=i;
+   if(n==0)continue;
+   if(mimir_batch_alloc(MIXSIZES[c],tmp,n)!=n)return 3;
+   for(k=0;k<n;k++)ptrs[idx[k]]=tmp[k];}
+  for(i=0;i<b;i++){size_t sz=MIXSIZES[(base+i)%6];memset(ptrs[i],(int)((base+i)&0x3F)+1,sz);*ck+=((unsigned char*)ptrs[i])[0];}
+  for(c=0;c<6;c++){
+   size_t n=0;
+   for(i=0;i<b;i++)if(MIXSIZES[(base+i)%6]==MIXSIZES[c])tmp[n++]=ptrs[i];
+   if(n==0)continue;
+   if(mimir_batch_free(tmp,n)!=n)return 4;}
+  seq+=b;done+=b;}
+ return 0;}
+#endif /* LEG_PROTO */
 static int leg(const char *name,size_t sz,size_t batch,size_t total,int fifo){
  uint64_t ck=0,t0,t1;long f0,f1,r0,r1;int rc;
  f0=minflt();r0=maxrss();

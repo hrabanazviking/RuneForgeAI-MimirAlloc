@@ -6,12 +6,12 @@ host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 
 artifacts: docs/Z13_Z093_BATCH_VERDICT.md (verdict doc), tests/perf/bench_z093.c, tests/perf/run_bench_z093.sh, tests/perf/summarize_z093.py, tests/perf/run_z093.sh, this recorded run. No src/, API, ABI or Makefile change; bench_k007 harness untouched.
 team: lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly).
 method: bench_z093 built twice (glibc -DLEG_GLIBC; mimir over banked LIBOBJS; -O2). Shapes inter1/burst8/32/128/512 LIFO/burst512fifo at 64 B (120000 pairs) and 1024 B (30000 pairs), plus mixbatch512 (512-batch cycling 32/64/128/256/512/1024, 30720 pairs). 7 reps/leg, TWO full invocations (raw: team hidden_files/z093_raw1.txt, z093_raw2.txt). Checksums identical per size across legs/shapes/invocations: 64 B ck=3900000, 1024 B ck=974616, mix ck=998400. Headline = invocation 1 medians; invocation 2 mimir medians agreed within 3.7% on every cell (worst: mixbatch512; burst512 within 2.5%).
-prototype probe (runner, hidden_files/z093_run.log): include/mimir_alloc.h batch hits = 0; libmimiralloc.so batch exports = 0. The Z-092 batch API prototype does NOT exist in this tree; the prototype leg is OWED (verdict doc S1/S5), not graded and not invented.
+prototype probe (runner, hidden_files/z093_run.log): include/mimir_alloc.h batch hits = 0; libmimiralloc.so batch exports = 0. The Z-092 batch API prototype did NOT exist in that tree; the prototype leg was ungraded at that run - it is measured and graded in the FOLD-IN AMENDMENT at the end of this file (verdict doc S7), which discharges it.
 load honesty: SHARED HOST. loadavg 1.08/0.97/1.25 before, 1.15/0.98/1.26 mid, 1.22/1.00/1.26 after (Aesir/Lifthrasir/Tensile co-tenants; team-02 building Z-092 concurrently). Single-threaded median-of-7-processes, two-invocation agreement as guard; this-machine numbers under that stated load, NOT quiet baselines.
 correctness gate (baseline, pre-slice tree): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z093_baseline_gate.log). Final gate on the committed tree is recorded in team CAMPAIGN_STATE.md.
 
 === VERDICT ===
-Batching LOSS again on this machine (per-op loop over batch shapes - every batching form present in this tree): mimir burst512 vs inter1 = 11.94x at 64 B (406 vs 34 ns/pair) and 84.66x at 1024 B (3725 vs 44); burst8 free again (0.97x / 0.89x); mimir vs glibc at burst512 = 33.8x (406 vs 12) and 120.2x (3725 vs 31); mixbatch512 mimir 1137 vs glibc 22 ns/pair (51.7x). REASON NAMED (Law 2): the live-set metadata walk - per-op cost grows with live-set size (linear registry/span walks per alloc/free, Z-024; Z-091 F-4 dominant factor), and batching maximises live-set size. FIFO vs LIFO again inside noise (-4.2% / +0.1%). P-1 (span retention across burst frees) CLOSED, reaffirmed: Z-091 pricing stands (faults <=~5%, ~11% with syscalls at 1024 B; fault counts here match Z-091's: mimir burst512 minflt medians 2693 at 64 B, 11527 at 1024 B vs 40/42 interleaved). PROTOTYPE LEG: NO GRADE - OWED until Z-092 merges; re-run protocol in verdict doc S5.
+Batching LOSS again on this machine (per-op loop over batch shapes - every batching form present in this tree): mimir burst512 vs inter1 = 11.94x at 64 B (406 vs 34 ns/pair) and 84.66x at 1024 B (3725 vs 44); burst8 free again (0.97x / 0.89x); mimir vs glibc at burst512 = 33.8x (406 vs 12) and 120.2x (3725 vs 31); mixbatch512 mimir 1137 vs glibc 22 ns/pair (51.7x). REASON NAMED (Law 2): the live-set metadata walk - per-op cost grows with live-set size (linear registry/span walks per alloc/free, Z-024; Z-091 F-4 dominant factor), and batching maximises live-set size. FIFO vs LIFO again inside noise (-4.2% / +0.1%). P-1 (span retention across burst frees) CLOSED, reaffirmed: Z-091 pricing stands (faults <=~5%, ~11% with syscalls at 1024 B; fault counts here match Z-091's: mimir burst512 minflt medians 2693 at 64 B, 11527 at 1024 B vs 40/42 interleaved). PROTOTYPE LEG: graded in the FOLD-IN AMENDMENT at the end of this file - TIE against the per-op loop, LOSS as a batching answer, reason named (live-set metadata walk unremoved). The verdict doc S5 re-run protocol was followed exactly and is CLOSED.
 bugs: none in repo code.
 
 === HOST TRUTH (scripts/z13/host_truth.sh, Z-002) ===
@@ -97,3 +97,99 @@ mimir,burst8,size=64: n=7 ns/op median=32.00 min=26 max=34 all=[26, 31, 32, 32, 
 mimir,inter1,size=1024: n=7 ns/op median=41.00 min=32 max=50 all=[32, 33, 36, 41, 42, 45, 50] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
 mimir,inter1,size=64: n=7 ns/op median=34.00 min=31 max=38 all=[31, 34, 34, 34, 35, 36, 38] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
 mimir,mixbatch512,size=0: n=7 ns/op median=1179.00 min=1004 max=1326 all=[1004, 1054, 1096, 1179, 1191, 1215, 1326] ck=['998400'] minflt_median=3168 maxrss_delta_kb_median=2040
+
+
+=== FOLD-IN AMENDMENT - prototype leg measured and graded (Z-092 merged) ===
+date: 2026-11-12T22:49:22-05:00
+base: ff2b6fc (team branch yrsa/mimiralloc-team-01 = seat main 4188da8, banked Z-001..Z-092 incl. Z-092 Batch API prototype, merged into this branch on top of ab2aa5f, the original Z-093 commit)
+artifacts changed by the fold-in: tests/perf/bench_z093.c (prototype leg added, -DLEG_PROTO, Z-092 internal mimir_batch_alloc/mimir_batch_free over the same LIBOBJS; every shape, total and checksum identical), tests/perf/run_bench_z093.sh (three legs per key; 39 lines per rep-set), tests/perf/run_z093.sh (extended prototype probe + prototype binary build + probe object-build fix, see verdict doc S7), docs/Z13_Z093_BATCH_VERDICT.md (S5 closed, S7 added), this amendment. No src/, API, ABI or Makefile change; bench_k007 harness untouched.
+prototype probe (runner of record, hidden_files/z093_foldin_run.log): include/mimir_alloc.h batch hits = 0; libmimiralloc.so batch exports = 0 (prototype is not a public symbol, by Z-092 design); contract header tests/contract/mimir_batch_z092.h present; src/core/mimir_core.h batch decls = 5; build/mimir_core.o batch symbols = 3 (T mimir_batch_alloc, T mimir_batch_free, T mimir_batch_snapshot). One harness defect found and fixed in-slice before the run of record: the first fold-in attempt's probe read 0 core-object symbols because make lib builds the .so from dedicated PIC objects, so build/mimir_core.o did not exist at probe time; run_z093.sh now builds build/mimir_core.o before probing it and the run of record was re-executed from a cold object. The superseded attempt's bench medians agreed within noise on every headline cell.
+method: identical to the original run; three legs (glibc, mimir per-op, proto batch). 7 reps/leg, TWO full invocations, 273 raw lines each (raw: team hidden_files/z093_raw1.txt, z093_raw2.txt; the original run's raw/summaries preserved as *_orig.txt). Checksums identical per size across all three legs, shapes and invocations: 64 B ck=3900000, 1024 B ck=974616, mix ck=998400.
+load honesty: SHARED HOST, quiet window. loadavg 0.28/0.56/1.01 before, 0.39/0.58/1.01 mid, 0.48/0.59/1.01 after (runner log). This-machine numbers under that stated load, not quiet baselines. Two-invocation agreement (prototype leg): every cell within 2.9%; burst512 383/383 ns/pair at 64 B and 3544/3543 at 1024 B.
+
+=== FOLD-IN VERDICT ===
+PROTOTYPE LEG: TIE against the per-op loop, LOSS as a batching answer. Against the filed per-op numbers: burst512 proto 383 ns/pair at 64 B vs filed mimir 406 (-5.7%) and 3544 vs filed 3725 at 1024 B (-4.9%); same-run per-op burst512 388 / 3548, so the prototype is inside noise of the loop it wraps (-1.3% / -0.1%). inter1 proto 35 / 42 vs filed mimir 34 / 44: TIE. burst8 proto 20 / 26 vs same-run mimir 26 / 33 (-23% / -21%): the one real delta, the minor API-crossing term in the walk-free zone; burst8 was already free per-op. mixbatch512 proto 1021 vs same-run mimir 1016 (TIE), filed mimir 1137, glibc 20 same-run / 22 filed. REASON NAMED (Law 2): the shipped Z-092 prototype loops the per-op core entries and removes no walk (Z-092 doc S2), so at burst512 it pays 10.9x at 64 B (383 vs own inter1 35) and 84.4x at 1024 B (3544 vs 42) against its own interleaved shape, and ~32x / ~114x against glibc's filed burst512 (12 / 31) - the per-op loss at the same price, because it is the same walk. Minor faults identical to the per-op leg (burst512 minflt medians 2693 at 64 B, 11528 at 1024 B): the fault term is unmoved and the Z-091 P-1 pricing stands. Per the Z-091 rule a batching win must show as walk removal; this one does not. The owed prototype measurement from the original run is DISCHARGED; the verdict doc S5 protocol is CLOSED; nothing remains open for Z-093.
+bugs: none in repo code. One harness defect (runner probe object-build ordering) found and fixed in-slice, recorded above and in verdict doc S7.
+correctness gate: scripts/z13/run_gate.sh on the final fold-in tree is recorded in team CAMPAIGN_STATE.md (fold-in entry).
+
+=== FOLD-IN SUMMARISER OUTPUT invocation 1 (summarize_z093.py on hidden_files/z093_raw1.txt, verbatim) ===
+glibc,burst128,size=1024: n=7 ns/op median=19.00 min=19 max=31 all=[19, 19, 19, 19, 22, 27, 31] ck=['974616'] minflt_median=35 maxrss_delta_kb_median=0
+glibc,burst128,size=64: n=7 ns/op median=10.00 min=10 max=11 all=[10, 10, 10, 10, 11, 11, 11] ck=['3900000'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst32,size=1024: n=7 ns/op median=12.00 min=12 max=14 all=[12, 12, 12, 12, 12, 12, 14] ck=['974616'] minflt_median=11 maxrss_delta_kb_median=0
+glibc,burst32,size=64: n=7 ns/op median=8.00 min=8 max=9 all=[8, 8, 8, 8, 8, 8, 9] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,burst512,size=1024: n=7 ns/op median=22.00 min=21 max=38 all=[21, 21, 21, 22, 30, 35, 38] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=232
+glibc,burst512,size=64: n=7 ns/op median=11.00 min=10 max=13 all=[10, 10, 10, 11, 11, 12, 13] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst512fifo,size=1024: n=7 ns/op median=29.00 min=22 max=36 all=[22, 23, 25, 29, 30, 35, 36] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=232
+glibc,burst512fifo,size=64: n=7 ns/op median=11.00 min=10 max=13 all=[10, 10, 11, 11, 11, 12, 13] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst8,size=1024: n=7 ns/op median=6.00 min=6 max=7 all=[6, 6, 6, 6, 7, 7, 7] ck=['974616'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst8,size=64: n=7 ns/op median=3.00 min=3 max=3 all=[3, 3, 3, 3, 3, 3, 3] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=1024: n=7 ns/op median=5.00 min=5 max=9 all=[5, 5, 5, 5, 6, 9, 9] ck=['974616'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=64: n=7 ns/op median=5.00 min=3 max=6 all=[3, 3, 5, 5, 5, 6, 6] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,mixbatch512,size=0: n=7 ns/op median=20.00 min=17 max=28 all=[17, 18, 20, 20, 20, 26, 28] ck=['998400'] minflt_median=49 maxrss_delta_kb_median=0
+mimir,burst128,size=1024: n=7 ns/op median=3022.00 min=2982 max=3162 all=[2982, 2989, 3009, 3022, 3048, 3055, 3162] ck=['974616'] minflt_median=9302 maxrss_delta_kb_median=504
+mimir,burst128,size=64: n=7 ns/op median=309.00 min=302 max=318 all=[302, 305, 307, 309, 311, 313, 318] ck=['3900000'] minflt_median=400 maxrss_delta_kb_median=504
+mimir,burst32,size=1024: n=7 ns/op median=1450.00 min=1408 max=1483 all=[1408, 1428, 1436, 1450, 1468, 1470, 1483] ck=['974616'] minflt_median=3185 maxrss_delta_kb_median=0
+mimir,burst32,size=64: n=7 ns/op median=147.00 min=138 max=152 all=[138, 139, 143, 147, 149, 151, 152] ck=['3900000'] minflt_median=88 maxrss_delta_kb_median=0
+mimir,burst512,size=1024: n=7 ns/op median=3548.00 min=3515 max=3584 all=[3515, 3520, 3541, 3548, 3555, 3568, 3584] ck=['974616'] minflt_median=11528 maxrss_delta_kb_median=2548
+mimir,burst512,size=64: n=7 ns/op median=388.00 min=371 max=405 all=[371, 380, 388, 388, 390, 394, 405] ck=['3900000'] minflt_median=2693 maxrss_delta_kb_median=2040
+mimir,burst512fifo,size=1024: n=7 ns/op median=3600.00 min=3538 max=3659 all=[3538, 3546, 3576, 3600, 3600, 3640, 3659] ck=['974616'] minflt_median=11530 maxrss_delta_kb_median=2552
+mimir,burst512fifo,size=64: n=7 ns/op median=388.00 min=370 max=399 all=[370, 375, 381, 388, 389, 390, 399] ck=['3900000'] minflt_median=2694 maxrss_delta_kb_median=2040
+mimir,burst8,size=1024: n=7 ns/op median=33.00 min=32 max=37 all=[32, 32, 33, 33, 33, 34, 37] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,burst8,size=64: n=7 ns/op median=26.00 min=26 max=27 all=[26, 26, 26, 26, 27, 27, 27] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+mimir,inter1,size=1024: n=7 ns/op median=33.00 min=33 max=45 all=[33, 33, 33, 33, 34, 37, 45] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,inter1,size=64: n=7 ns/op median=28.00 min=28 max=32 all=[28, 28, 28, 28, 29, 31, 32] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+mimir,mixbatch512,size=0: n=7 ns/op median=1016.00 min=965 max=1054 all=[965, 1002, 1009, 1016, 1017, 1021, 1054] ck=['998400'] minflt_median=3168 maxrss_delta_kb_median=2232
+proto,burst128,size=1024: n=7 ns/op median=3072.00 min=2979 max=3108 all=[2979, 2980, 3049, 3072, 3075, 3086, 3108] ck=['974616'] minflt_median=9302 maxrss_delta_kb_median=504
+proto,burst128,size=64: n=7 ns/op median=303.00 min=297 max=315 all=[297, 297, 300, 303, 304, 310, 315] ck=['3900000'] minflt_median=400 maxrss_delta_kb_median=504
+proto,burst32,size=1024: n=7 ns/op median=1457.00 min=1438 max=1607 all=[1438, 1442, 1443, 1457, 1458, 1466, 1607] ck=['974616'] minflt_median=3185 maxrss_delta_kb_median=0
+proto,burst32,size=64: n=7 ns/op median=140.00 min=133 max=146 all=[133, 136, 137, 140, 142, 143, 146] ck=['3900000'] minflt_median=88 maxrss_delta_kb_median=0
+proto,burst512,size=1024: n=7 ns/op median=3544.00 min=3493 max=3655 all=[3493, 3528, 3532, 3544, 3553, 3620, 3655] ck=['974616'] minflt_median=11528 maxrss_delta_kb_median=2296
+proto,burst512,size=64: n=7 ns/op median=383.00 min=374 max=395 all=[374, 376, 380, 383, 384, 385, 395] ck=['3900000'] minflt_median=2693 maxrss_delta_kb_median=2040
+proto,burst512fifo,size=1024: n=7 ns/op median=3578.00 min=3538 max=3694 all=[3538, 3551, 3577, 3578, 3596, 3670, 3694] ck=['974616'] minflt_median=11528 maxrss_delta_kb_median=2548
+proto,burst512fifo,size=64: n=7 ns/op median=378.00 min=368 max=429 all=[368, 370, 373, 378, 381, 390, 429] ck=['3900000'] minflt_median=2694 maxrss_delta_kb_median=2040
+proto,burst8,size=1024: n=7 ns/op median=26.00 min=25 max=29 all=[25, 25, 26, 26, 27, 27, 29] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+proto,burst8,size=64: n=7 ns/op median=20.00 min=19 max=24 all=[19, 19, 19, 20, 20, 20, 24] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+proto,inter1,size=1024: n=7 ns/op median=42.00 min=41 max=47 all=[41, 41, 41, 42, 42, 44, 47] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+proto,inter1,size=64: n=7 ns/op median=35.00 min=35 max=40 all=[35, 35, 35, 35, 36, 36, 40] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+proto,mixbatch512,size=0: n=7 ns/op median=1021.00 min=986 max=1075 all=[986, 990, 1007, 1021, 1039, 1043, 1075] ck=['998400'] minflt_median=3084 maxrss_delta_kb_median=1784
+
+=== FOLD-IN SUMMARISER OUTPUT invocation 2 (summarize_z093.py on hidden_files/z093_raw2.txt, verbatim) ===
+glibc,burst128,size=1024: n=7 ns/op median=19.00 min=19 max=34 all=[19, 19, 19, 19, 21, 33, 34] ck=['974616'] minflt_median=35 maxrss_delta_kb_median=0
+glibc,burst128,size=64: n=7 ns/op median=10.00 min=10 max=14 all=[10, 10, 10, 10, 10, 11, 14] ck=['3900000'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst32,size=1024: n=7 ns/op median=12.00 min=12 max=13 all=[12, 12, 12, 12, 12, 12, 13] ck=['974616'] minflt_median=11 maxrss_delta_kb_median=0
+glibc,burst32,size=64: n=7 ns/op median=8.00 min=8 max=10 all=[8, 8, 8, 8, 8, 8, 10] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,burst512,size=1024: n=7 ns/op median=25.00 min=21 max=32 all=[21, 22, 22, 25, 26, 29, 32] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=232
+glibc,burst512,size=64: n=7 ns/op median=11.00 min=11 max=15 all=[11, 11, 11, 11, 12, 14, 15] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst512fifo,size=1024: n=7 ns/op median=28.00 min=22 max=36 all=[22, 23, 23, 28, 32, 35, 36] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=228
+glibc,burst512fifo,size=64: n=7 ns/op median=11.00 min=10 max=12 all=[10, 10, 11, 11, 12, 12, 12] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst8,size=1024: n=7 ns/op median=6.00 min=6 max=7 all=[6, 6, 6, 6, 6, 6, 7] ck=['974616'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst8,size=64: n=7 ns/op median=3.00 min=3 max=5 all=[3, 3, 3, 3, 3, 3, 5] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=1024: n=7 ns/op median=5.00 min=5 max=9 all=[5, 5, 5, 5, 5, 9, 9] ck=['974616'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=64: n=7 ns/op median=3.00 min=3 max=6 all=[3, 3, 3, 3, 5, 5, 6] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,mixbatch512,size=0: n=7 ns/op median=26.00 min=16 max=30 all=[16, 18, 18, 26, 29, 30, 30] ck=['998400'] minflt_median=49 maxrss_delta_kb_median=0
+mimir,burst128,size=1024: n=7 ns/op median=3024.00 min=2985 max=3073 all=[2985, 3013, 3016, 3024, 3028, 3065, 3073] ck=['974616'] minflt_median=9302 maxrss_delta_kb_median=504
+mimir,burst128,size=64: n=7 ns/op median=301.00 min=292 max=306 all=[292, 297, 300, 301, 301, 303, 306] ck=['3900000'] minflt_median=400 maxrss_delta_kb_median=504
+mimir,burst32,size=1024: n=7 ns/op median=1447.00 min=1398 max=1473 all=[1398, 1426, 1434, 1447, 1449, 1468, 1473] ck=['974616'] minflt_median=3185 maxrss_delta_kb_median=0
+mimir,burst32,size=64: n=7 ns/op median=144.00 min=143 max=157 all=[143, 143, 144, 144, 145, 154, 157] ck=['3900000'] minflt_median=88 maxrss_delta_kb_median=0
+mimir,burst512,size=1024: n=7 ns/op median=3557.00 min=3502 max=3648 all=[3502, 3504, 3522, 3557, 3598, 3604, 3648] ck=['974616'] minflt_median=11526 maxrss_delta_kb_median=2548
+mimir,burst512,size=64: n=7 ns/op median=380.00 min=376 max=388 all=[376, 378, 379, 380, 383, 387, 388] ck=['3900000'] minflt_median=2693 maxrss_delta_kb_median=2040
+mimir,burst512fifo,size=1024: n=7 ns/op median=3589.00 min=3517 max=3671 all=[3517, 3552, 3576, 3589, 3627, 3643, 3671] ck=['974616'] minflt_median=11531 maxrss_delta_kb_median=2488
+mimir,burst512fifo,size=64: n=7 ns/op median=385.00 min=370 max=399 all=[370, 381, 385, 385, 389, 391, 399] ck=['3900000'] minflt_median=2694 maxrss_delta_kb_median=2232
+mimir,burst8,size=1024: n=7 ns/op median=33.00 min=32 max=33 all=[32, 32, 33, 33, 33, 33, 33] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,burst8,size=64: n=7 ns/op median=26.00 min=25 max=31 all=[25, 26, 26, 26, 26, 27, 31] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+mimir,inter1,size=1024: n=7 ns/op median=33.00 min=33 max=53 all=[33, 33, 33, 33, 33, 33, 53] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,inter1,size=64: n=7 ns/op median=28.00 min=28 max=30 all=[28, 28, 28, 28, 28, 28, 30] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+mimir,mixbatch512,size=0: n=7 ns/op median=1037.00 min=986 max=1091 all=[986, 1004, 1036, 1037, 1041, 1043, 1091] ck=['998400'] minflt_median=3168 maxrss_delta_kb_median=2040
+proto,burst128,size=1024: n=7 ns/op median=2981.00 min=2963 max=3124 all=[2963, 2978, 2979, 2981, 3013, 3117, 3124] ck=['974616'] minflt_median=9303 maxrss_delta_kb_median=248
+proto,burst128,size=64: n=7 ns/op median=303.00 min=294 max=314 all=[294, 298, 302, 303, 310, 312, 314] ck=['3900000'] minflt_median=400 maxrss_delta_kb_median=504
+proto,burst32,size=1024: n=7 ns/op median=1410.00 min=1381 max=1470 all=[1381, 1388, 1393, 1410, 1426, 1461, 1470] ck=['974616'] minflt_median=3185 maxrss_delta_kb_median=184
+proto,burst32,size=64: n=7 ns/op median=140.00 min=130 max=145 all=[130, 133, 136, 140, 141, 141, 145] ck=['3900000'] minflt_median=88 maxrss_delta_kb_median=0
+proto,burst512,size=1024: n=7 ns/op median=3543.00 min=3492 max=3650 all=[3492, 3497, 3523, 3543, 3545, 3549, 3650] ck=['974616'] minflt_median=11527 maxrss_delta_kb_median=2296
+proto,burst512,size=64: n=7 ns/op median=383.00 min=370 max=391 all=[370, 380, 382, 383, 383, 384, 391] ck=['3900000'] minflt_median=2694 maxrss_delta_kb_median=2040
+proto,burst512fifo,size=1024: n=7 ns/op median=3572.00 min=3538 max=3646 all=[3538, 3551, 3559, 3572, 3576, 3579, 3646] ck=['974616'] minflt_median=11530 maxrss_delta_kb_median=2516
+proto,burst512fifo,size=64: n=7 ns/op median=380.00 min=369 max=389 all=[369, 375, 376, 380, 381, 387, 389] ck=['3900000'] minflt_median=2694 maxrss_delta_kb_median=2040
+proto,burst8,size=1024: n=7 ns/op median=26.00 min=25 max=27 all=[25, 25, 25, 26, 26, 26, 27] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+proto,burst8,size=64: n=7 ns/op median=19.00 min=18 max=22 all=[18, 19, 19, 19, 19, 20, 22] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+proto,inter1,size=1024: n=7 ns/op median=41.00 min=41 max=43 all=[41, 41, 41, 41, 41, 42, 43] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+proto,inter1,size=64: n=7 ns/op median=36.00 min=35 max=42 all=[35, 35, 36, 36, 38, 40, 42] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+proto,mixbatch512,size=0: n=7 ns/op median=1011.00 min=1005 max=1064 all=[1005, 1010, 1011, 1011, 1021, 1025, 1064] ck=['998400'] minflt_median=3093 maxrss_delta_kb_median=1784
