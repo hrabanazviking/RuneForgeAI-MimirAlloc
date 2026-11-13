@@ -3,7 +3,7 @@
 Slice: Z-108 - Campaign verdict (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md).
 Built 2026-11-13 by team-05. The six Mythic Engineering roles were run
 SEQUENTIALLY by the lead itself (evidence audit, per-workload standings
-review, loss-class review, non-latency standings review, owed/filings
+review, loss-class review, non-latency standings review, pending/filings
 review, gate/commit-scope review) - no sub-agents were spawned this
 run, and that is recorded plainly here and in CAMPAIGN_STATE.md.
 Base: merge e9d7247 of seat main 719b00d (banked Z-001..Z-105) into
@@ -16,19 +16,35 @@ merged tree before any Z-108 edit: GREEN 4988 checks / 0 failed / 77
 by-design skips, exit 0 (hidden_files/z108_baseline_gate.log).
 This slice derives no new measurement. Its only fresh executions are
 the baseline and final standing gates.
+Fold-in base: merge 1c6c51c of seat main 85b856f (banked
+Z-001..Z-107) into the same branch, clean, no conflicts; the
+merged tree was verified identical to the seat except this
+document before any fold-in edit (git diff 85b856f HEAD lists
+only docs/Z13_CAMPAIGN_VERDICT.md). CAMPAIGN_STATE.md was
+preserved uncommitted and untouched by the merge. Baseline
+standing gate on the fold-in merged tree: GREEN 4988 checks /
+0 failed / 77 by-design skips, exit 0
+(hidden_files/z108_foldin_baseline_gate.log); final gate on the
+fold-in tree likewise GREEN (hidden_files/z108_foldin_gate.log).
+The fold-in also derives no new measurement; its only fresh
+executions are its baseline and final standing gates. The six
+Mythic Engineering roles for the fold-in were likewise run
+SEQUENTIALLY by the lead itself (merge and verification,
+evidence re-read, standings re-grade, filings traceability,
+gate, commit-scope) - no sub-agents were spawned.
 
-STATUS: FINAL for every banked slice through Z-105; OWED for Z-106
-and Z-107, stated up front. Sections resting on Z-001..Z-105 are
-FINAL below, each traced to its banked recorded run or banked wave
-verdict, re-read first-hand from disk on the merged seat tree by this
-lead. Z-106 (documentation truth pass) and Z-107 (the closing
-head-to-head) are UNBANKED at this build: no verdict and no number
-from either appears anywhere in this document, their sections (7.1
-and 7.2) name what is missing and invent nothing, and the fold-in
-protocol of section 7.3 governs their completion - exactly as Z-099
-handled the then-unbanked Z-098, and Z-090 handled Z-087/Z-088. This
-slice banks last in Wave 12, after Z-106 and Z-107; the fold-in
-commit that discharges sections 7.1/7.2 completes the wave.
+STATUS: FINAL for every banked slice through Z-107, Z-106 and
+Z-107 included, folded in under section 7.3. Sections resting
+on Z-001..Z-105 are FINAL below, each traced to its banked
+recorded run or banked wave verdict, re-read first-hand from
+disk on the merged seat tree by this lead. Z-106
+(documentation truth pass) banked at seat 9a199ba and Z-107
+(the closing head-to-head) at seat 85b856f; their sections
+(7.1 and 7.2) now read FINAL with their banked numbers and
+grades, section 1 carries the Z-107 closing table, and no
+pending marker for either slice remains anywhere in this
+document. This slice banks last in Wave 12, after Z-106 and
+Z-107; this fold-in commit completes the wave (9 of 9).
 
 The headline the FINAL evidence supports: on this machine
 (purpleraider, ASUS ROG Flow Z13, Strix Halo, x86-64, 4 KiB pages)
@@ -37,8 +53,7 @@ almost every measured shape - and the campaign can now say exactly
 where, by how much, and why, in numbers it measured itself. One
 latency WIN is real and banked: repeated large allocations served
 from the mapping pool beat default glibc roughly tenfold - and even
-that WIN does not survive glibc with its cache raised (the fair
-fight, Z-098). Against the best tuned glibc per workload the final
+that WIN does not survive glibc with its cache raised (the fair fight, Z-098, confirmed at the close by Z-107). Against the best tuned glibc per workload the final
 oracle standings are LOSS on all four workloads. What the campaign
 won instead is everything around the speed: a public surface that
 grew from 4 to 13 honest exports with contracts, budgets, statistics
@@ -52,28 +67,54 @@ the hope (roadmap, Z-108).
 
 ## 1. The plain answer - final standings per workload
 
-The last full oracle re-run of record is Z-098 (the fair-fight leg,
-banked 1cfc4b8), quiet window, run of record attempt 6. Its mimir
-column is the near-final core; Z-107 will supersede this table when
-it banks and is folded in under section 7.3.
+The complete Wave-1 oracle was re-run at the close by Z-107
+(the closing head-to-head, banked at seat 85b856f), and its
+closing table supersedes Z-098's as the standings of record.
+Run of record: 2026-11-13 09:57:33 to 09:58:59 EST, filed as
+tests/perf/recorded_run_z13_z107.txt. The window was a
+CO-TENANT window, recorded honestly in the run: an Aesir mojo
+run_all was live throughout (loadavg 1.15 / 1.43 / 1.16 at
+start, 2.34 / 1.67 / 1.27 at end); the identical-leg control
+passed inside the Z-004 5% bound (worst 1.37%, large_batch)
+and cross-invocation drift passed the 8% bound on every
+headline column, so the run stands as the run of record under
+that stated load. This-machine numbers only.
 
-Against DEFAULT glibc (Z-098):
-- large_batch: WIN - mimir 98.07 vs glibc 685.65 ns/op (0.14x).
-- small_churn: LOSS. mixed_batch: LOSS. mixed_lifecycle: LOSS.
-  (Z-098 grades all three LOSS with reasons named; the same-window
-  factors of the previous full standings run, Z-054 run 2, were
-  small_churn 8.59x, mixed_batch 7.38x, mixed_lifecycle 71.93x.)
+CLOSING TABLE - latency (Z-107, median ns/op, invocation 1):
+Against DEFAULT glibc - LOSS on three of four:
+- small_churn: mimir 29.43 vs glibc 3.35 - LOSS 8.79x.
+- mixed_batch: mimir 29.12 vs glibc 3.72 - LOSS 7.83x.
+- large_batch: mimir 98.45 vs glibc 710.47 - WIN 0.14x.
+- mixed_lifecycle: mimir 531.01 vs glibc 7.12 - LOSS 74.58x.
+Against the BEST TUNED glibc per workload - LOSS on all four:
+- small_churn: mimir 29.43 vs tuned 3.35 - LOSS 8.79x.
+- mixed_batch: mimir 29.12 vs tuned 3.71 - LOSS 7.85x.
+- large_batch: mimir 98.45 vs tuned 9.08 - LOSS 10.84x - with
+  its cache raised, tuned glibc runs this workload about 11x
+  faster than MimirAlloc; the default-glibc WIN above does not
+  survive the fair fight at the close either.
+- mixed_lifecycle: mimir 531.01 vs tuned 3.16 - LOSS 168.04x.
+Against its own Z-009 baseline the final core improved on
+every workload (-68.5% small_churn, -92.7% mixed_batch,
+-96.8% large_batch, -40.9% mixed_lifecycle) and still loses
+three of four to default glibc. Counters grade the same
+pattern (the Z-107 run, section 7.2): large_batch cycles and
+instructions WIN 0.15x against default glibc and LOSS 4.39x /
+4.30x against tuned; every other counter cell is a LOSS
+(small_churn cycles 6.58x / 6.84x, instructions 6.40x /
+6.40x; mixed_batch cycles 5.34x / 5.74x, instructions 5.62x /
+5.62x; mixed_lifecycle cycles 51.48x / 103.94x, instructions
+44.83x / 95.86x; default column first, tuned second).
 
-Against the BEST TUNED glibc per workload (Z-098, folded into the
-Wave 11 verdict): LOSS on all four -
-- small_churn: mimir 29.27 vs tuned 3.32 ns/op (8.82x).
-- mixed_batch: mimir 29.35 vs tuned 3.71 ns/op (7.91x).
-- large_batch: mimir 98.07 vs tuned 8.92 ns/op (10.99x) - with its
-  cache raised, tuned glibc runs this workload about 11x faster
-  than MimirAlloc; the default-glibc WIN above does not survive
-  the fair fight.
-- mixed_lifecycle: mimir 517.89 vs tuned 3.01 ns/op (172.06x).
-Tuning itself graded: TUNING WIN on large_batch (-98.70%) and
+The previous full re-run of record (Z-098, the fair-fight leg,
+banked 1cfc4b8, quiet window) is superseded by the table above
+and retained here as the arc's penultimate point: against
+default glibc, large_batch WIN (98.07 vs 685.65 ns/op, 0.14x)
+with the other three LOSS; against best tuned glibc, LOSS on
+all four (small_churn 29.27 vs 3.32, 8.82x; mixed_batch 29.35
+vs 3.71, 7.91x; large_batch 98.07 vs 8.92, 10.99x;
+mixed_lifecycle 517.89 vs 3.01, 172.06x). Tuning itself graded
+at Z-098: TUNING WIN on large_batch (-98.70%) and
 mixed_lifecycle (-57.90%), TIE on small_churn and mixed_batch.
 
 The campaign arc on the same four workloads (medians, ns/op):
@@ -85,12 +126,13 @@ The campaign arc on the same four workloads (medians, ns/op):
   vs 3.32 (LOSS 8.59x), mixed_batch 27.15 vs 3.68 (LOSS 7.38x),
   large_batch 63.48 vs 658.29 (WIN, factor indicative ~0.10x, grade
   proven three ways), mixed_lifecycle 505.65 vs 7.03 (LOSS 71.93x).
-- Every mimir absolute improved across the campaign (93.43 -> 28.52
-  -> 29.27 small; 398.42 -> 27.15 -> 29.35 mixed_batch; 3064.69 ->
-  63.48 -> 98.07 large; 898.76 -> 505.65 -> 517.89 lifecycle;
-  cross-window movement, not grades). No workload except
-  large_batch ever changed grade, and large_batch's WIN holds only
-  against default glibc.
+- Every mimir absolute improved across the campaign against its
+  founding value (93.43 -> 28.52 -> 29.43 small; 398.42 -> 27.15
+  -> 29.12 mixed_batch; 3064.69 -> 63.48 -> 98.45 large; 898.76
+  -> 505.65 -> 531.01 lifecycle; the middle point is Z-054 run 2
+  and the last is the Z-107 closing run; cross-window movement,
+  not grades). No workload except large_batch ever changed
+  grade, and large_batch's WIN holds only against default glibc.
 
 Real-program standings (not the synthetic oracle):
 - Real traces (Z-094): the three canonical traces (python import
@@ -114,9 +156,13 @@ Real-program standings (not the synthetic oracle):
 ## 2. Final standings per loss class
 
 KL-A - single-thread small-op latency (small path vs glibc tcache).
-STILL LOST - REASON NAMED. Final same-window standings: LOSS 8.59x
+STILL LOST - REASON NAMED. Same-window standings: LOSS 8.59x
 (Z-054 run 2: 28.52 vs 3.32 ns/op) and LOSS 8.82x against tuned
-glibc (Z-098: 29.27 vs 3.32). The autopsy (Z-027) named the wound:
+glibc (Z-098: 29.27 vs 3.32). The closing run confirms the
+grade unmoved (Z-107: small_churn LOSS 8.79x against both
+glibc columns, 29.43 vs 3.35 ns/op; counters at the close
+still price the wound - instructions LOSS 6.40x against both
+columns, mimir 520.27 vs glibc 81.34 instructions/op). The autopsy (Z-027) named the wound:
 instruction count, not cache behaviour - 861.97 vs 82.99
 instructions/op and 175.65 vs 17.83 cycles/op at baseline (Z-005),
 with free the dearer small entry (Z-019 holds: free 85.9 cycles vs
@@ -151,8 +197,11 @@ miss traffic - REASON NAMED. Z-048's bounded exact-length mapping
 pool (64 mappings / 32 MiB) removed 97.6% of the mapping-path price
 on cycling traffic (pool 64.95 vs pre-pool 2747.67 ns/op), and
 large_batch stands at WIN ~0.10x vs default glibc (Z-054, factor
-indicative, grade proven) / 0.14x in Z-098's window - but LOSS
-10.99x vs tuned glibc (Z-098). On a pool miss (first, unique, or
+indicative, grade proven) / 0.14x in Z-098's window, and the closing run confirms the
+WIN against default glibc (Z-107: 98.45 vs 710.47 ns/op,
+0.14x) - but LOSS 10.84x vs tuned glibc at the close (Z-107:
+98.45 vs 9.08; Z-098's 10.99x figure superseded as the
+closing number). On a pool miss (first, unique, or
 over-bound sizes) the full fresh-mapping price stands, the ~80x
 cliff at 1025 B stands with it, and untouched huge alloc/free pairs
 stand at LOSS 1.10-1.22x (Z-051). The cutoff of record never moved:
@@ -168,7 +217,11 @@ the pool's own bounds).
 KL-D - mixed lifecycle. STILL LOST - REASON NAMED (fast half);
 slow half DISCHARGED. Fast half: LOSS 71.93x same-window (Z-054
 run 2: 505.65 vs 7.03 ns/op) and 172.06x against tuned glibc
-(Z-098: 517.89 vs 3.01) - the deepest standing wound of the line.
+(Z-098: 517.89 vs 3.01). The closing run confirms the grade
+unmoved and supersedes the closing figures (Z-107: LOSS
+74.58x against default glibc, 531.01 vs 7.12 ns/op, and LOSS
+168.04x against tuned glibc, 531.01 vs 3.16) - the deepest
+standing wound of the line.
 It exercises every path at once, and the paths it exercises most
 (the small path, KL-A; lifecycle bookkeeping across classes) were
 never rebuilt to glibc's per-op price. Slow half: an hour (Z-057)
@@ -249,7 +302,7 @@ NOTHING - every candidate that helped the traces broke the
 oracle (Z-095); -O3 adopted, -march=native and -flto refused
 (Z-096); the per-process tax priced (Z-097); the fair fight filed
 (Z-098, section 1).
-Wave 12 (Z-100..Z-105 FINAL; Z-106/Z-107 OWED, section 7): the
+Wave 12 (Z-100..Z-107 FINAL plus this verdict, section 7): the
 eight-hour soak (Z-100: no drift either leg, drain retention
 stable across 120 s / 1 h / 8 h - mimir retained net 36,400 KiB;
 one both-leg host anomaly at t=21600/25200 recorded honestly, full
@@ -263,12 +316,22 @@ scale (Z-103, section 5.3); the sanitizer/warning matrix clean
 with one filed portability LOSS (Z-104, section 6); release
 engineering - D-017 decides the next cut is 0.2.0, reproducible
 build proven byte-identical on this host (Z-105, section 6).
+The documentation truth pass (Z-106, seat 9a199ba, section
+7.1) filed the Z13 line into the platform, target and
+limitations registers without moving any grade those
+registers did not already carry. The closing head-to-head
+(Z-107, seat 85b856f, section 7.2) re-ran the complete
+Wave-1 oracle on the final allocator and filed the closing
+table of section 1. This verdict (Z-108, built on the
+Z-001..Z-105 base and folded in over the banked Z-106/Z-107
+per section 7.3) completes the wave: Wave 12 stands 9 of 9
+FINAL.
 
 ## 4. Correctness standings (the contract was not sold)
 
 The standing gate (Z-008) never moved: 4988 checks / 0 failed /
 77 by-design skips at the founding baseline (Z-001) and at every
-banked slice through Z-105, including under ASan, UBSan and
+banked slice through Z-107, including under ASan, UBSan and
 ASan+UBSan with zero sanitizer reports (Z-104). Roadmap Law 5
 held: no speed slice traded away bounded behaviour, audit
 surfaces, or the no-silent-corruption posture without a recorded
@@ -288,15 +351,45 @@ WIN on the lifecycle workload at one hour and eight hours
 retention 36,864 B in the storm battery, Z-101; pool bounded at
 64 mappings / 32 MiB, Z-048) and returned to exactly 0 under
 pressure (Z-060) and by trim in the battery's close (Z-101).
-5.2 Energy. Founding leg (Z-007, contended window): LOSS in
-direction on all four workloads - proven net factor 4.42x on
-large_batch, small_churn indicative, the two sub-55 ms workloads
-below idle-subtraction resolution. No later slice re-ran the
-energy leg on the near-final core; the standing of record is
-therefore the founding one, carried honestly: energy follows the
-instruction-count wound (Z-005), and no WIN or improved factor is
-claimed for the final core. A quiet-window energy re-run is a
-hand-off item (section 8).
+Closing RSS standings (Z-107) MOVE the oracle-workload half
+of this section, and the move is named plainly: on the final
+allocator the founding after-free standing is SUPERSEDED.
+Z-107's RSS leg (median Pss, 5% band; Pss_Anon grades mirror
+Pss in the recorded run) grades PEAK as LOSS on small_churn
+(+333.0% against both glibc columns), mixed_batch (+542.5% /
++531.6%) and mixed_lifecycle (+269.3% / +272.7%), with
+large_batch PEAK the only TIE (+3.5% / +3.2%); and
+AFTER_FREE_ALL as LOSS nearly everywhere - small_churn
++1008.3% against both columns, mixed_batch +542.5% /
++534.3%, mixed_lifecycle +268.4% / +271.8%, large_batch
++2519.9% against default glibc and TIE +3.2% against tuned.
+The Z-006/Z-009 after-free WIN on three of four workloads
+(the founding figures above) does NOT survive to the final
+core: retained bytes after free-all are, in Z-107's own
+words, the honest regression of this campaign close. The
+soak resident-shape WIN of section 2 (KL-D slow half, a
+different workload and method) is not moved by this leg and
+stands as recorded there.
+5.2 Energy. The closing energy leg is Z-107's, and it
+supersedes the founding leg (Z-007: LOSS in direction on all
+four workloads, proven net factor 4.42x on large_batch) as
+the standing of record for every cell it grades. Z-107 ran
+in a co-tenant window (not a quiet window) with idle
+baseline median 31.635 W. Graded cells: small_churn LOSS -
+mimir 319.73 net nJ/op vs glibc 112.41 (2.84x) and vs tuned
+98.20 (3.26x); large_batch WIN against default glibc -
+mimir 500.94 vs 2513.57 net nJ/op (0.20x). Ungraded cells:
+mixed_batch, large_batch against tuned, and
+mixed_lifecycle - the reference net figure is below
+idle-subtraction resolution, so no ratio is claimed; the
+gross medians run adverse (mixed_batch mimir 1128.91 vs
+glibc 173.18 / tuned 156.25; large_batch vs tuned mimir
+4270.83 vs 541.67; mixed_lifecycle mimir 21503.91 vs glibc
+360.24 / tuned 186.63 gross nJ/op). The pattern is the
+latency pattern in energy dress: energy follows the
+instruction-count wound (Z-005) everywhere except the pooled
+large path against default glibc. A quiet-window energy
+re-run remains a hand-off item (section 8).
 5.3 Corruption and integrity. Wave 8 standings (Z-072): 19 of 25
 J-006 probes DETECTED, 3 silences proven undetectable in this
 design and closed with controls, 2 wild-pointer classes
@@ -320,6 +413,9 @@ Zero-size/errno is a decided contract (D-013), budgets are
 enforced (D-014), diagnostics default OFF by ruling (D-011).
 The surface remains Proposed: contracts.md S5.5 promotion unmet,
 U-03 unresolved - 1.0 is withheld (Z-105 D-017).
+Z-106's documentation truth pass re-checked the platform,
+target and limitations registers against the banked wave
+verdicts (section 7.1) and moved none of these standings.
 5.5 Preload / interposition. The opt-in variant (20 exports,
 default library untouched) is CORRECT everywhere tried: 13/13
 smoke subjects byte-parity (Z-084), Python import storm + churn
@@ -348,7 +444,11 @@ tooling, performance-critical model loading) is ops law (Z-089).
   (D-015's contract proves "exactly 20") needing its own slice
   and decision entry. Owner per Z-105: the next gap-closure slice
   after Z-104, or this hand-off (section 8) if none is
-  commissioned.
+  commissioned. Z-106 carried the same filing as register
+  item Z13-N1 with the same owner; no gap-closure slice was
+  commissioned, so at this fold-in the owner resolves to
+  this hand-off (section 8), where the item is carried
+  traceably.
 - F-Z105-2 (Z-105, stale release record, discharged only at the
   cut): docs/REPRODUCIBLE_BUILD.md's pinned inputs and
   release/SHA256SUMS describe the Pi 0.1.0 tree state and cannot
@@ -358,8 +458,8 @@ tooling, performance-critical model loading) is ops law (Z-089).
 - D-017 execution note (Z-105): the next release cut is 0.2.0 -
   decided, NOT executed. VERSION stays 0.1.0 in-tree until the
   cut; cutting a public release is Volmarr's act (M-007
-  precedent), and Z-106/Z-107 should land first so the cut
-  carries the closing table. Signing remains deferred-by-absence
+  precedent); Z-106 and Z-107 have since landed
+  (section 7), so the cut can carry the closing table. Signing remains deferred-by-absence
   (owner Volmarr).
 - F-104-1 (Z-104, FILED PORTABILITY LOSS, owner: the next
   core-touching portability slice, PBR-053 line): clang 22.1.8
@@ -385,46 +485,100 @@ tooling, performance-critical model loading) is ops law (Z-089).
   MIMIR_CANARY stride variant for classes 320-1024, unbuilt);
   D-09's mmap-refusal fuzz-injection coverage.
 
-## 7. OWED sections - Z-106 and Z-107
+## 7. Closing sections - Z-106 and Z-107 (both FINAL)
 
-7.1 Z-106 - Documentation truth pass: OWED. At this build the
-slice is unbanked (seat main 719b00d carries no Z-106 commit) and
-no Z-106 artifact was read by this lead, because none exists on
-the merged tree. What is missing: the SUPPORTED_PLATFORMS /
-SUPPORTED_TARGETS Z13 line, the LIMITATIONS register addendum
-recording what this campaign changed and what it did not, and the
-docs-diff review against the wave verdicts. No claim in this
-verdict rests on it; where section 5.4 or section 6 touches a
-register, it cites the banked slice that owns the fact, not the
-owed pass. When Z-106 banks, the fold-in (7.3) adds its FINAL
-paragraph here and re-checks every doc claim this verdict makes
-against the banked diff.
-7.2 Z-107 - The closing head-to-head: OWED. At this build the
-slice is unbanked and unrun on this tree. What is missing: the
-complete Wave-1 oracle (latency, counters, RSS, energy) re-run on
-the final allocator against Z-009's baseline and BOTH glibc
-columns (default and Z-098 tuned), filed as recorded runs plus
-summary. Until it banks, section 1's table stands on Z-098 as
-the last full re-run of record and says so; no Z-107 number is
-quoted, estimated, or pre-graded anywhere in this document.
-When Z-107 banks, the fold-in (7.3) replaces section 1's
-standings with the closing table at source precision and marks
-this section FINAL.
-7.3 Fold-in protocol (the Z-099 section 6 pattern, binding on
-the fold-in lead): (1) merge the seat main carrying the banked
-Z-106 and Z-107 commits into this branch; verify the merged tree
-byte-identical to the seat before any edit; (2) run the baseline
-standing gate on the merged tree and record its counts from the
-log; (3) re-read the banked Z-106 diff and the Z-107 recorded
-runs first-hand from disk on the merged tree - no number enters
-from any report; (4) discharge 7.1 and 7.2 as FINAL paragraphs
-at the places named, replace section 1's table with Z-107's
-closing table, and re-grade sections 2 and 5 only where Z-107's
-evidence actually moves a standing, naming the move; (5) run
-the final standing gate; (6) commit as "Z-108: Campaign verdict"
-(fold-in) carrying only this document; the fold-in commit
-completes Wave 12. No number anywhere in this verdict may rest
-on an unbanked source at any stage of the fold-in.
+7.1 Z-106 - Documentation truth pass: FINAL. Banked at seat
+9a199ba (3 files, +245, documentation only), built on seat
+719b00d (banked Z-001..Z-105). What it filed, re-read
+first-hand from disk on the fold-in merged tree by this
+lead: (1) docs/SUPPORTED_PLATFORMS.md gains the Z13 line
+addendum - Linux, x86-64, glibc, 4 KiB pages on purpleraider
+is VERIFIED-RUN, scoped to this host and this tree,
+discharging the x86-64 section's earlier grade for this
+scope only; the pre-Z13 sections are preserved as their own
+record and the AArch64 rows rest on their own Pi evidence
+(this campaign re-ran nothing on AArch64). Its performance
+paragraph states the Z-098 tuned-glibc LOSS on all four
+workloads without softening and claims no performance win
+beyond the recorded cells. (2) docs/SUPPORTED_TARGETS.md
+section 8 adds exactly one row - the same Z13 host,
+VERIFIED-RUN - and changes no other grade; the 4 KiB
+AArch64, musl, Android, Termux, proot and SM-X400 grades
+stand exactly as the matrix records them.
+(3) docs/LIMITATIONS_AND_KNOWN_DEFECTS.md Part (v) records
+what this campaign changed and what it did not: discharged
+or superseded on this line - L-02 (extended public surface,
+13 default exports), L-03 and D-04 (budget enforcement,
+D-014), L-09 (zero-size/errno contract, D-013), the L-07
+gate ruled (D-011), D-01 and D-02 addressed (counters,
+D-010), L-04 partially discharged (public statistics,
+D-012), O-01 and O-06 discharged for the Z13 host scope,
+L-06 superseded in figures with its verdict unchanged in
+kind (still LOSS); standing unchanged - L-01 (no default
+interposition), L-05 (the central lock is the shipped
+default; lock-sharding is a build flag, not the default),
+L-08 (fork posture), the Proposed surface with 1.0 withheld
+and VERSION still 0.1.0, and every other platform row. New
+register items: Z13-N1 (F-Z105-1) and Z13-N2 (F-104-1),
+both filed with owners (section 6); Z13-N3 (corruption
+detection bounded, measured at scale, Z-103) and Z13-N4
+(soak honesty, Z-100). The fold-in re-checked every doc
+claim this verdict makes against the banked Z-106 diff: no
+claim in this verdict rests on a register entry the truth
+pass moved without naming the move (sections 5.1 and 5.2
+carry the Z-107 moves; section 6 carries the filings).
+Z-106's own gates, per its addenda: its baseline and final
+standing gates both read 4988 / 0 / 77.
+7.2 Z-107 - The closing head-to-head: FINAL. Banked at seat
+85b856f (4 files, +1182: the recorded run, the runner, the
+RSS runner and the summariser; no src/, API, ABI or Makefile
+change). The complete Wave-1 oracle (latency, counters, RSS,
+energy) was re-run on the final allocator against the Z-009
+baseline and BOTH glibc columns (default and Z-098 tuned);
+run of record 2026-11-13 09:57:33 to 09:58:59 EST in a
+co-tenant window (Aesir mojo run_all live throughout;
+loadavg 1.15 / 1.43 / 1.16 at start to 2.34 / 1.67 / 1.27 at
+end), identical-leg control PASS (worst 1.37%, large_batch,
+inside the Z-004 5% bound), cross-invocation drift PASS on
+every headline column, all four legs PASS - filed as
+tests/perf/recorded_run_z13_z107.txt and re-read first-hand
+from disk on the fold-in merged tree by this lead. Section
+1 now carries its closing table at source precision:
+latency LOSS on three of four against default glibc
+(large_batch WIN 0.14x) and LOSS on all four against tuned
+glibc; counters the same pattern; RSS LOSS nearly
+everywhere with the founding after-free WIN superseded
+(section 5.1); energy one graded WIN (large_batch vs
+default), one graded LOSS (small_churn), the rest ungraded
+below resolution with adverse gross direction (section
+5.2). Sections 2 and 5 were re-graded only where this
+evidence actually moves a standing, and each move is named
+where it lands (KL-A confirmed unmoved; KL-C and KL-D
+closing figures superseded; 5.1 after-free standing
+superseded; 5.2 standing of record replaced).
+7.3 Fold-in record (executed per the protocol filed in this
+section at the original build - the Z-099 section 6
+pattern): (1) seat main 85b856f, carrying the banked Z-106
+(9a199ba) and Z-107 (85b856f) commits, was merged into this
+branch as merge 1c6c51c; the merged tree was verified
+identical to the seat except this document before any
+fold-in edit (git diff 85b856f HEAD lists only
+docs/Z13_CAMPAIGN_VERDICT.md, 522 lines); CAMPAIGN_STATE.md
+was preserved uncommitted and untouched by the merge.
+(2) The baseline standing gate on the merged tree read
+GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0,
+from its log (hidden_files/z108_foldin_baseline_gate.log).
+(3) The banked Z-106 diff and the Z-107 recorded run were
+re-read first-hand from disk on the merged tree - no number
+entered from any report. (4) Sections 7.1 and 7.2 stand
+FINAL above; section 1's table is the Z-107 closing table;
+sections 2 and 5 were re-graded only where Z-107's evidence
+moves a standing, with the move named. (5) The final
+standing gate on the fold-in tree read GREEN 4988 / 0 / 77,
+exit 0, from its log (hidden_files/z108_foldin_gate.log).
+(6) This fold-in commit carries only this document and
+completes Wave 12. No number anywhere in this verdict rests
+on an unbanked source.
 
 ## 8. Hand-off notes to the production-and-beyond roadmap
 
@@ -444,9 +598,21 @@ on an unbanked source at any stage of the fold-in.
 - The fair fight is the honest target: any future speed claim
   must be graded against tuned glibc (Z-098's columns), not only
   default glibc, or it repeats the large_batch lesson.
-- Open filings with owners are listed in section 6; the
-  release cut (D-017, 0.2.0) is Volmarr's act and carries
-  F-Z105-2's regeneration with it.
+- Open filings with owners are listed in section 6; two are
+  carried here traceably by name, per Z-106's register:
+  F-Z105-1 (section 6; register item Z13-N1) - the
+  interposing variant's pre-Z-083 surface. Z-106 assigned it
+  to the next gap-closure slice after Z-104 or the Z-108
+  hand-off; no gap-closure slice was commissioned, so this
+  hand-off is its owner of record: it passes to the
+  production roadmap queue for a gap-closure slice with its
+  own decision entry on D-015's exactly-20 contract.
+  Carried, not discharged. F-104-1 (section 6; register
+  item Z13-N2) - the clang portability LOSS on
+  mimir_core.c; owner remains the next core-touching
+  portability slice (PBR-053 line). Carried, not
+  discharged. The release cut (D-017, 0.2.0) is Volmarr's
+  act and carries F-Z105-2's regeneration with it.
 - Wave 13 (Z-109..Z-116) is verdict-driven reserve: its pool
   choices are drawn from this verdict's evidence and recorded
   in WAVE_PLAN.md before each slice starts, per the roadmap.
@@ -456,7 +622,9 @@ on an unbanked source at any stage of the fold-in.
   section 6), huge-page-only large-pool variant (the pool-miss
   and PMD-alignment items, sections 2 and 6), profile-guided
   class table v2 (Z-095's per-class bin near-miss, section 6),
-  and the quiet-window energy re-run (section 5.2).
+  and the quiet-window energy re-run (section 5.2 -
+  Z-107's closing energy leg ran in a co-tenant window, so
+  the quiet-window run remains unrun).
 
 ## 9. Keeper stand-down checklist (attached per the Z-108 gate)
 
@@ -464,8 +632,8 @@ For the keeper, when the Z-108 fold-in banks and Wave 12 closes:
 [ ] Banked count from git (ls-remote + seat log) = Z-001..Z-108
     with no gaps, one slice per commit, subjects in house style.
 [ ] Z-106 and Z-107 sections of this verdict read FINAL; the
-    OWED grep over docs/Z13_CAMPAIGN_VERDICT.md returns zero
-    undischarged OWED markers outside section 7's history.
+    pending-marker grep over docs/Z13_CAMPAIGN_VERDICT.md
+    returns zero for Z-106/Z-107; section 7 reads FINAL.
 [ ] Standing gate GREEN 4988 / 0 / 77 on the seat tree after
     the fold-in bank, counts read from the seat gate log.
 [ ] WAVE_PLAN.md and PROJECT_MEMORY_MAP.md carry the Z-108
@@ -505,16 +673,22 @@ tree, re-read first-hand by this lead:
   WARNING_MATRIX.md + tests/abi/recorded_run_z13_z104.txt;
   docs/Z13_Z105_RELEASE_ENGINEERING.md + tests/abi/
   recorded_run_z13_z105.txt.
-- OWED sections 7.1/7.2 trace to absence, verified first-hand:
-  seat log at 719b00d ends at Z-105; no Z-106/Z-107 artifact
-  exists on the merged tree.
+- Wave 12 closing slices (Z-106/Z-107): the Z13 addendum
+  of docs/SUPPORTED_PLATFORMS.md, section 8 of
+  docs/SUPPORTED_TARGETS.md and Part (v) of
+  docs/LIMITATIONS_AND_KNOWN_DEFECTS.md (Z-106, seat
+  9a199ba); tests/perf/recorded_run_z13_z107.txt (Z-107,
+  seat 85b856f) - re-read first-hand on the fold-in tree.
 
 ## 11. Correctness gate for this slice
 
 Standing gate on the merged tree before any Z-108 edit (baseline)
 and on the final slice tree: both GREEN 4988 checks / 0 failed /
 77 by-design skips, exit 0 (hidden_files/z108_baseline_gate.log
-and z108_final_gate.log). This slice adds one document and no
+and z108_final_gate.log). Fold-in gates: baseline on the merged
+Z-001..Z-107 tree and final on the fold-in tree, both GREEN
+4988 / 0 / 77, exit 0 (hidden_files/z108_foldin_baseline_gate.log
+and z108_foldin_gate.log). This slice adds one document and no
 code, no tests, and no Makefile change; the gate guards the tree
 the verdict describes. Bugs discovered during this slice: none
 in allocator code. The Makefile merge conflict at base was a
