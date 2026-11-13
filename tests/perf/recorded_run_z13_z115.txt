@@ -1,0 +1,75 @@
+MimirAlloc Z13 recorded run - Z-115 Aesir KV-cache-shaped allocation specialisation
+slice: Z-115 - Reserve slice 7 (WAVE_PLAN Wave 13 pool choice: Aesir KV-cache-shaped allocation specialisation; reason: roadmap pool; the Z-087 boundary trial filed blockers B-087-1/2/3; success measure: KV-cache-shaped allocation pattern measured on this allocator vs both glibc columns (default and tuned, per Z-098/Z-107 practice), Aesir tree READ-ONLY throughout, blockers re-checked against the run. Gate: that measure + standing correctness gate.)
+date: run of record 2026-11-13T12:40:53-05:00 (hidden_files/z115_run.log, America/New_York)
+base: 8f0c55f (team branch yrsa/mimiralloc-team-01, merge of seat main 8ac7f52, banked Z-001..Z-114)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below from hidden_files/z115_host_truth.txt)
+artifacts: tests/perf/probe_z115.c (sha256 cfe0d337395d27eb4f79a1bd4d15cca695ea9f48999a91b628dc9210a2e9ce00), tests/perf/run_z115.sh (51f5bcb0dc73b17140835f945de264ed8979cb12da538a6490413c846601a046), tests/perf/summarize_z115.py (42ef9bc760cf620cbe9f97552dddf05ec3fcdb36e92170d40103edb79e8a0529), Makefile test-z115 block. Probe binaries: glibc f8d8c3fa26d89a4cd37173dc028763036b81fe4745d17787ba08e2d39e11b47f, mimir f1746f8bf7a5f4399009840ea65a510c107aa92ffa9c59853bf468a5e2484993. Slice doc: docs/Z13_Z115_KV_CACHE_AESIR.md. No src/ or API/ABI change; README.md untouched.
+team: lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly). All work in this worktree only.
+raw evidence: team hidden_files/z115_run.log (sha256 24b5da44586d9a6a85cfe5cfc8baedb3aa12cb6d307a8a1baf0cd1c0cfa85feb), tests/perf/raw_z115.txt (3c72eb171c7a8698dd962df7f3870fcc6a84d5b72ca4cdc96edf8225f6c0cecc), z115_host_truth.txt (a7053aa588ad45416b9993baf9f143036187d64d0c85abafb86590021dc18ac5), z115_gate.log (gate GREEN 4988/0/77).
+
+=== THE PATTERN - SYNTHETIC, MODELLED, NOT AESIR ===
+No Aesir code ran in this slice and none is claimed: the Z-087 blockers still stand (re-check below), so per the pool choice the KV-cache shape is modelled synthetically on this allocator (tests/perf/probe_z115.c). Three shapes, one process per shape, work fixed per shape so ops and checksum must be identical across legs (summariser asserts both; PASS): kv_append - 32 sequences each grown by 64 realloc appends of 4 KiB to 256 KiB, every step touched (the KV append path); kv_blocks - a resident pool of 256 x 64 KiB blocks held live (the cached prefix) while 4 KiB per-token blocks churn through a 128-slot FIFO ring, 2048 churn allocs per pass (ops count = churn allocs; elapsed includes the one-time resident build, identical for every leg); kv_mixed - resident 128 x 256 KiB plus 16 sequences append-grown 32 x 8 KiB plus eviction rotation (free oldest 32 residents, allocate fresh), the serving mix. Legs: mimiralloc (namespaced API), glibc default (GLIBC_TUNABLES unset), glibc tuned (GLIBC_TUNABLES=glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536, the Z-098 gcombo_cache string, tuned winner for the large-block oracle shapes at Z-098/Z-107). The tunable channel was proven live before any number was taken by the banked probe_z098 engagement proof inside the runner (hblkhd deltas default=0 mm4k=77824 mm1m=0: PASS). 5 rounds per shape, legs interleaved round by round, taskset -c 5; median ns/op graded on the Z-004 5% band.
+LOAD STATE: the battery ran at loadavg 0.22/0.45/1.21 at start and end (recorded in the run log) - a low-load window, NOT a verified quiet window by the Z-110 standard, and no quiet claim is made. An Aesir mojo run_all co-tenant was live at this slice's 12:29-12:30 EST recon (load then 0.93/1.55/1.99) and had exited before the 12:40 battery; no other campaign load was visible in the battery's ps snapshots. This-machine numbers only.
+
+=== VERDICT (median ns/op, 5% band; lower is better) ===
+kv_append: mimir 2496.52 vs glibc default 545.94 - LOSS 4.573x; vs glibc tuned 508.88 - LOSS 4.906x.
+kv_blocks: mimir 4020.76 vs glibc default 15.41 - LOSS 260.919x; vs glibc tuned 10.16 - LOSS 395.744x.
+kv_mixed: mimir 4068.22 vs glibc default 1056.25 - LOSS 3.852x; vs glibc tuned 1056.74 - LOSS 3.850x.
+VERDICT: LOSS on all three KV-cache shapes against BOTH glibc columns. The tuned column changes nothing in direction (it helps glibc on append and blocks, ties on mixed). The kv_blocks factor is the shape's own arithmetic: the ops denominator counts only the 4 KiB churn allocs while the elapsed time also carries this allocator's per-alloc cost on the resident build and ring path, where glibc's tcache serves the ring at ~10-15 ns/op; the factor is filed as measured, with the shape definition above, not smoothed. No KV-cache specialisation is adopted by this slice: the pool item asked for the measure, and the measure is a loss on every KV shape - the honest banked result, consistent in direction with the campaign's small/mixed standings. Any future KV work starts from these numbers: the append path (realloc growth) is the closest shape at ~4.6-4.9x.
+RUNNER CORRECTNESS: PASS - engagement proof PASS, 45/45 cells (3 legs x 3 shapes x 5 rounds), ops and checksums uniform per shape, probe stderr 0 bytes, Z-115 RESULT: PASS (verbatim summariser output below). Standing correctness gate GREEN 4988/0/77 (hidden_files/z115_gate.log).
+
+=== B-087 BLOCKER RE-CHECK (Aesir tree READ-ONLY throughout) ===
+Method: identity reads only - git status snapshots, sha256 and size/mtime of the three filed artifacts, fixture hash. Nothing was written, built, or executed in the Aesir tree by this slice.
+- B-087-1 (prebuilt root aesir_main segfaults in prefill on a plain run): artifact UNCHANGED - 645904 B, mtime 2026-11-11 21:50, sha256 713f7a760292d86bcaca93829336ca00edbd00676cc38a5ddebbf847b8e68d09, identical before and after the battery. Z-087 recorded size and build date but no hash, so identity rests on size+mtime plus this slice's before/after hash stability. STILL STANDS as filed. Not re-executed: the Aesir campaign is live on its own tree (its seat head moved under its own work during this slice), and re-running its stale prebuilt binary is that campaign's call, not this slice's.
+- B-087-2 (aesir_engine/aesir_main is an older canned-text stub): artifact UNCHANGED - 227456 B, mtime 2026-11-11 21:50, sha256 9b6bd709470c27d810dc2159bd74fcf5073904b174c9ad211c4b754cd496fca2, identical before and after. STILL STANDS as filed.
+- B-087-3 (aesir_engine/model.gguf is a 24-byte empty header): UNCHANGED - still 24 B, mtime 2026-11-11 21:50. STILL STANDS as filed. The fixture of record is unchanged too: hidden_files/fixtures/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf, 4920739232 B, sha256 7b064f5842bf9532c91456deda288a1b672397a54fa729aa665952863033557c verified this slice - byte-identical to Z-087's record.
+BOUNDARY PROOF: git -C ~/aesir-forge status --porcelain was snapshotted by the runner immediately before and after the battery: UNCHANGED across the battery (27 lines both sides, hidden_files/z115_aesir_status_runner_before.txt and _after.txt), and the blocker hashes above are identical on both sides. The Aesir seat head moved during this slice's wider window (b3930f7 at 12:30 recon to e20ab9646a3d5dde0c30f2a14d45a4f8070dc2fe at battery start; 28 to 27 status lines, the removed line being the Aesir campaign's own untracked hidden_files/run_seat_gate_a092.sh) - that is the co-tenant campaign's own live work on its own tree, named here so the drift is never mistaken for this slice's doing. Rollback for the whole slice: nothing to roll back on the Aesir side; no LD_PRELOAD was used.
+DEFECTS: none found in the allocator, the suite, or the harness. The losses above are performance standings, not correctness defects.
+=== HOST TRUTH (hidden_files/z115_host_truth.txt, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T17:40:53Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5109903
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 67%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.22 0.45 1.21
+
+=== SUMMARISER OUTPUT (verbatim from hidden_files/z115_run.log) ===
+leg          shape       med_ns/op        min        max n
+glibc        kv_append      545.94     472.25     573.22 5
+glibc        kv_blocks       15.41      15.41      15.79 5
+glibc        kv_mixed      1056.25    1042.44    1115.96 5
+glibc_tuned  kv_append      508.88     463.16     570.09 5
+glibc_tuned  kv_blocks       10.16      10.09      10.36 5
+glibc_tuned  kv_mixed      1056.74    1050.86    1073.12 5
+mimiralloc   kv_append     2496.52    2490.81    2586.28 5
+mimiralloc   kv_blocks     4020.76    3766.20    4053.49 5
+mimiralloc   kv_mixed      4068.22    4060.67    4186.31 5
+
+=== VERDICTS - mimiralloc vs both glibc columns (5% band) ===
+kv_append: mimir 2496.52 vs glibc 545.94 ns/op | factor 4.573x | LOSS
+kv_append: mimir 2496.52 vs glibc_tuned 508.88 ns/op | factor 4.906x | LOSS
+kv_blocks: mimir 4020.76 vs glibc 15.41 ns/op | factor 260.919x | LOSS
+kv_blocks: mimir 4020.76 vs glibc_tuned 10.16 ns/op | factor 395.744x | LOSS
+kv_mixed: mimir 4068.22 vs glibc 1056.25 ns/op | factor 3.852x | LOSS
+kv_mixed: mimir 4068.22 vs glibc_tuned 1056.74 ns/op | factor 3.850x | LOSS
+Z-115 RESULT: PASS (all cells present, ops and checksums uniform)

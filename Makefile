@@ -2649,3 +2649,23 @@ test-z113:
 	python3 tests/perf/summarize_z113.py tests/perf/raw_z113.txt
 
 .PHONY: test-z113
+# ------------------------------------------------------------------
+# Z-115: Wave 13 reserve (pool choice: Aesir KV-cache-shaped
+# allocation specialisation) -- synthetic KV-cache pattern
+# (tests/perf/probe_z115.c: kv_append realloc growth,
+# kv_blocks resident pool + churn, kv_mixed serving mix)
+# measured on this allocator vs both glibc columns (default
+# and the Z-098 gcombo_cache tuned string, engagement proven
+# by the banked probe_z098); Aesir tree read-only, Z-087
+# blockers re-checked in the runner. Runner
+# tests/perf/run_z115.sh; summariser
+# tests/perf/summarize_z115.py; slice doc
+# docs/Z13_Z115_KV_CACHE_AESIR.md; recorded run
+# tests/perf/recorded_run_z13_z115.txt. Standalone via
+# `make test-z115`; NOT part of `make test` (standing gate
+# counts untouched).
+# ------------------------------------------------------------------
+test-z115:
+	./tests/perf/run_z115.sh tests/perf/raw_z115.txt 5
+
+.PHONY: test-z115
