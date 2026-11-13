@@ -256,3 +256,142 @@ identity):
 Every entry above names its banked source; a reader with this tree
 can verify each in minutes. Items this register could not settle
 from the banked record were included and marked, never dropped.
+
+## Part (v) - Z13 line addendum (added by Z-106, documentation truth pass)
+
+Base: seat main 719b00d, banked Z-001..Z-105, on purpleraider
+(ASUS ROG Flow Z13, x86-64, 4 KiB pages, Ubuntu 26.10,
+kernel 7.3.0-10-generic, glibc 2.44). This addendum records
+what the Z13 campaign changed and what it did not, against
+the register above. The register text above is preserved as
+the M-008 record of the Pi line; where an entry is marked
+discharged below, the discharge is scoped to the Z13 line
+and cites its banked evidence. No claim here exceeds a
+recorded run or verdict in this tree.
+
+### Changed on the Z13 line (discharged or superseded, with evidence)
+
+- L-02 DISCHARGED on this line: an aligned-allocation and
+  extended public surface now exists. mimir_aligned_alloc
+  and mimir_posix_memalign (Z-074), mimir_usable_size
+  (Z-075, D-012), mimir_stats_snapshot with struct
+  mimir_stats_v1 (Z-076), mimir_trim and mimir_reallocarray
+  (Z-077), and mimir_memalign / mimir_valloc / mimir_pvalloc
+  (Z-083, D-016). The default library exports exactly 13
+  symbols (Z-105 recorded run). The four-symbol sentence
+  of L-02 is history for this line.
+- L-03 and D-04 DISCHARGED: budget enforcement was adopted
+  and is enforced at every backing-growth point, with
+  reclaim before refusal and refusals counted (Z-079,
+  D-014; INC-I001-14 discharged there).
+- L-09 DISCHARGED as contract: the zero-size and errno
+  postures were adopted as a defined contract - zero-size
+  is a defined non-failure null, realloc-to-zero preserves
+  the block, errno is never promised and checked refusals
+  leave it untouched (Z-078, D-013).
+- L-07 gate RULED: the diagnostics opt-in gate
+  (MIMIRALLOC_DIAG=1) stands as the permanent posture;
+  INC-J007-01 is discharged (Z-071, D-011). Detection
+  still does not repair; that half of L-07 stands.
+- D-01 and D-02 ADDRESSED: failed unlocks are counted
+  (Z-064) and the silent lock-failure courses at drain,
+  trim and free carry counters rather than silence
+  (Z-065, D-010).
+- L-04 PARTIALLY DISCHARGED: statistics are public via
+  mimir_stats_snapshot; INC-J002-01 and INC-J002-02 are
+  closed and INC-J002-05 is priced, not hidden (Z-076,
+  D-012 statistics entry). The counter-coverage limits
+  recorded there stand as the current truth.
+- O-01 DISCHARGED for the Z13 host scope: the hosted
+  x86-64 suite runs natively and repeatedly on the named
+  host (standing gate 4988/0/77). The Pi-line Phase 3 exit
+  grading is history and is not re-graded by this line.
+- O-06 DISCHARGED on this line: the suite runs on a
+  4,096-byte-page host as its native environment. The
+  AArch64 4 KiB-page run remains owed (see Part (v)
+  not-changed list and the SUPPORTED_TARGETS Z13 section).
+- L-06 SUPERSEDED for this line, verdict unchanged in kind:
+  the Phase 11 Pi figures are replaced for the Z13 host by
+  the Z13 measurements, and the standing is still LOSS.
+  Against the best tuned glibc per workload MimirAlloc
+  loses all four oracle workloads, by 8.82x, 7.91x, 10.99x
+  and 172.06x (Z-098; Wave 11 verdict section 4.5).
+  Batching loses (Wave 11, section 4.1); short-lived
+  process interposition pays +16.98 percent to +130.25
+  percent (Z-097); trace replay speed loses while replay
+  correctness ties (Z-094, Z-095). The closing sentence
+  of L-06 stands in full force: no document may claim a
+  universal performance win.
+
+### Not changed by this campaign (standing truth)
+
+- L-01 STANDS: no global interposition by default. The
+  interposing variant is a separate opt-in library
+  (Z-082, D-015); the default library interposes nothing.
+- L-05 STANDS as the shipped posture: the production
+  default remains the banked central lock. Lock-sharding
+  (geometry B, D-008) is built behind the build flag
+  MIMIR_LOCK_SHARD with zero production cost when off and
+  is NOT the default; per-thread and per-CCD arenas were
+  NOT taken (D-007, D-008). No document may describe the
+  sharded or arena geometry as the shipped allocator.
+- L-08 STANDS in substance: fork is supported quiescent
+  and fork+exec only; fork-while-busy remains
+  measured-unsupported (Z-044), re-proven inside the
+  combined storm battery (Z-101).
+- The public surface is still Proposed: the contracts.md
+  section 5.5 promotion is unmet, U-03 remains open, and
+  1.0 remains withheld (D-017). VERSION in-tree is still
+  0.1.0; 0.2.0 is a decided next cut, not a release that
+  has happened (Z-105).
+- Every other platform row is untouched: musl, Android,
+  Termux, proot, the SM-X400 device and the AArch64
+  4 KiB-page run stand exactly as the register and the
+  target matrix record them. This campaign measured one
+  x86-64 host and nothing else.
+- The Z-092 batch prototype is NOT a public surface: it
+  lives in the core only, with zero mimir_batch_* dynamic
+  exports (Z-105, section S1.2). Batching as a technique
+  LOSES on this machine (Wave 11 verdict, section 4.1).
+- Carried, not discharged: the Z-095 trace-tuning verdict
+  rests on its own three traces; re-validation against
+  the canonical Z-094 traces remains an owed follow-up
+  measurement (Wave 11 verdict, section 5, Carried
+  Item 1). No claim of canonical confirmation is made.
+
+### New items recorded by this line
+
+- Z13-N1 (F-Z105-1, filed, owner named): the interposing
+  variant carries the Z-082-era 10-name namespaced set
+  and does not carry the memalign family of Z-083, in
+  either its namespaced or its standard-name set; an
+  LD_PRELOAD user of that variant gets the pre-Z-083
+  surface. Owner: the next gap-closure slice after
+  Z-104, or the Z-108 hand-off if none is commissioned
+  (Z-105, section S4).
+- Z13-N2 (F-104-1, filed, owner named): clang 22 cannot
+  compile src/core/mimir_core.c - it rejects the atomic
+  builtins applied to _Atomic-qualified pointers (122
+  call sites). The shipped compiler is gcc, under which
+  the core is warning-clean; this is a portability LOSS
+  for a future clang build, not a defect in the shipped
+  build. Owner: the next core-touching portability slice
+  (Z-104 recorded run).
+- Z13-N3 Detection is bounded, measured at scale: over
+  520 corruption-chaos trials, descriptor single-bit
+  flips were detected at 96.7 percent, span pointer
+  flips produced the crash and hang classes, one flip
+  family stayed silent inside the recorded Wave-8
+  boundary, and the false-positive rate on clean runs
+  was 0.0 percent over 120 trials (Z-103). No claim of
+  repair of arbitrary corruption is made; D-12 stands
+  in kind, with its detection standing updated by
+  Z-066..Z-068 and priced again here.
+- Z13-N4 Soak honesty: the eight-hour soak records a
+  both-legs host-level anomaly at two samples, included
+  verbatim with cause not identified, and proves no
+  leak-over-time for either leg - drain retention was
+  stable across 120 seconds, one hour and eight hours
+  (Z-100 recorded run, findings F4 and F6). The soak
+  resident-shape WIN (F3) and batch-latency LOSS (F7)
+  are recorded at the same prominence.

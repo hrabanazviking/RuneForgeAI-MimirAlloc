@@ -137,3 +137,74 @@ banked evidence in this tree.
   difference is not silently dropped (A-003 gap I-1). No device,
   build, or test is recorded for either.
 
+
+---
+
+## Z13 line addendum - Linux, x86-64, glibc, 4 KiB pages (purpleraider)
+
+Added by slice Z-106 (documentation truth pass), following the
+D-05 disclosure pattern of this document, for the Z13 line
+only. Base: seat main 719b00d, banked Z-001..Z-105. Evidence
+is the banked Z13 recorded runs and wave verdicts in this
+tree, cited per claim. Where the sections above and this
+addendum disagree for the x86-64 row, this addendum governs
+for the Z13 host scope only. The AArch64 rows above are
+unchanged and still rest on their own Pi evidence; this
+campaign re-ran nothing on AArch64.
+
+- Environment: ASUS ROG Flow Z13 (host purpleraider), AMD
+  Ryzen AI MAX+ 395 with Radeon 8060S (Strix Halo, UMA),
+  x86-64, page size 4,096 bytes measured live, 128 GB UMA
+  class (MemTotal 127396532 kB in the Z-102 host truth),
+  Ubuntu 26.10, kernel 7.3.0-10-generic, glibc 2.44,
+  gcc 15.3.0. Sources: host truth annexes in
+  tests/perf/recorded_run_z13_z100.txt,
+  tests/perf/recorded_run_z13_z101.txt,
+  tests/perf/recorded_run_z13_z102.txt and
+  tests/abi/recorded_run_z13_z104.txt.
+- Status: VERIFIED-RUN, scoped to this host and this tree.
+  This discharges the OWED grade of the x86-64 section above
+  for this scope only; that section is preserved as the
+  pre-Z13 record.
+- What was actually run: the full standing gate repeatedly
+  on this host across the Z13 line, 4988 checks / 0 failed /
+  77 by-design skips (per-slice gates recorded in the
+  Z-100..Z-105 runs; the Z-106 baseline and final gates read
+  the same counts). The default library exports exactly 13
+  public symbols and the opt-in interposing variant exactly
+  20 (Z-105, tests/abi/recorded_run_z13_z105.txt). ASan,
+  UBSan and combined sanitizer builds of the full suite each
+  ran 4988/0/77 with zero sanitizer reports (Z-104,
+  tests/abi/recorded_run_z13_z104.txt). Two clean builds on
+  this host produced byte-identical release artifacts
+  (Z-105 reproducible-build proof; same-host scope only).
+- Performance truth, stated without softening: against the
+  best tuned glibc per workload, MimirAlloc records LOSS on
+  all four oracle workloads - small_churn 29.27 vs 3.32 ns/op
+  (8.82x), mixed_batch 29.35 vs 3.71 (7.91x), large_batch
+  98.07 vs 8.92 (10.99x), mixed_lifecycle 517.89 vs 3.01
+  (172.06x) (Z-098, folded into docs/Z13_WAVE11_VERDICT.md
+  section 4.5). The one win against default glibc,
+  large_batch 98.07 vs 685.65 ns/op, does not survive tuned
+  glibc. Batching LOSES (Wave 11 verdict, section 4.1); the
+  interposition tax is a LOSS on every short-lived shape
+  measured, +16.98 percent to +130.25 percent (Z-097);
+  canonical trace replay correctness is a TIE on both legs
+  while trace replay speed against glibc is a LOSS (Z-094,
+  Z-095). The eight-hour soak records a WIN on resident
+  shape for its workload and a LOSS on batch latency
+  (Z-100 recorded run, findings F3 and F7).
+- Consumer sentence: on this host class today, a user can
+  build with the shipped Makefile (shipped flags -O3, per
+  Z-096) and expect the recorded gate result and the
+  13-symbol surface; the allocator remains a research
+  artifact that loses most measured workloads to glibc on
+  this machine, and no performance win beyond the recorded
+  cells may be claimed.
+- Scope limits: this row verifies ONE host. It does not
+  verify any other x86-64 machine, kernel or glibc, and it
+  changes no grade for musl, Android, Termux or proot; those
+  rows stand exactly as graded above. No release has been
+  cut from this line: VERSION in-tree is still 0.1.0;
+  0.2.0 is the decided next cut (D-017, Z-105), not a
+  released version, and 1.0 remains withheld.

@@ -341,3 +341,38 @@ named discharge event happens and is recorded; an ANALOGY-ONLY
 cell is replaced only by a real run on that target, never by
 stronger reasoning; a PARTIAL-RUN row completes only when its
 named unrun half runs and passes in its own recorded run.
+
+## 8. Z13 line refresh (added by Z-106, documentation truth pass)
+
+Base: seat main 719b00d, banked Z-001..Z-105. Method: the
+M-006 discipline of this document - a grade never exceeds
+the banked evidence in this tree, and every changed cell
+cites its recorded run. This section adds exactly one new
+row and changes no other grade. The Section 1 headline is
+therefore extended, not replaced: a second target is now
+supported, in exactly one further scope, stated in the row.
+
+| Target | Grade | Role on this line | Evidence on record, with pointer and date |
+|---|---|---|---|
+| Linux x86-64 + glibc, 4 KiB pages, ASUS ROG Flow Z13 (purpleraider) | VERIFIED-RUN | Z13 hardware line: primary measured target of the MimirAlloc Z13 campaign | Native hosted runs on the physical host (no emulation): the standing gate scripts/z13/run_gate.sh reads 4988 checks / 0 failed / 77 by-design skips repeatedly across the line, including the Z-100..Z-105 slice gates and the Z-106 baseline and final gates, all on this host (Ubuntu 26.10, kernel 7.3.0-10-generic, glibc 2.44, gcc 15.3.0, page size 4096 measured live; host truth annexes in tests/perf/recorded_run_z13_z100.txt and tests/abi/recorded_run_z13_z104.txt). Default library exports exactly 13 symbols; opt-in interposing variant exactly 20 (Z-105, tests/abi/recorded_run_z13_z105.txt). Sanitizer matrix clean: ASan, UBSan and combined builds each 4988/0/77, zero reports (Z-104). Reproducible on this host: two clean builds byte-identical (Z-105, same-host scope only). Performance is graded separately and honestly in docs/SUPPORTED_PLATFORMS.md (Z13 addendum): LOSS against best tuned glibc on all four oracle workloads (Z-098 / Wave 11 verdict section 4.5). Native CI is not claimed: no CI run exists (manual-only by standing rule); these are real-device local runs, not CI. |
+
+What this refresh does NOT do:
+
+- It does not re-grade the AArch64 rows. The Pi line keeps
+  its VERIFIED-RUN grade on its own M-006 evidence; the Z13
+  campaign ran no AArch64 suite, and no Z13 number may be
+  read as an AArch64 result.
+- It does not discharge the 4 KiB-page AArch64 row, the musl
+  row, the Android row, Termux, proot, or the SM-X400 row.
+  Those grades stand exactly as Sections 2 and 3 record
+  them; the Z13 host is an x86-64 host, and a run there is
+  evidence for the x86-64 row only.
+- It does not generalise beyond the one named host: other
+  x86-64 machines, kernels and glibc versions are unrun on
+  this line until a run on them is recorded.
+- It records no release: VERSION in-tree remains 0.1.0.
+  The next cut is decided as 0.2.0 (D-017, Z-105) and is
+  executed at the cut itself, which is the project owner
+  act; no released 0.2.0 exists at this base, and 1.0
+  remains withheld (contracts.md section 5.5 promotion
+  unmet, U-03 unresolved).
