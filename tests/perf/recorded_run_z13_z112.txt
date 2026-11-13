@@ -1,0 +1,116 @@
+MimirAlloc Z13 recorded run - huge-page-only large-pool variant
+slice: Z-112 - Huge-page-only large-pool variant (Wave 13 reserve slice 4; pool choice, reason and success measure recorded in seat WAVE_PLAN.md BEFORE start: reason = Z-108 verdict S8 pool-miss and PMD-alignment items, S2 + S6; success measure: variant measured against the banked pool on pool-miss shapes, adopted only on a WIN/TIE with no regression elsewhere, else honest NO-ADOPTION recorded)
+date: 2026-11-13T12:14-12:20-05:00 (America/New_York) for the recorded executions; gate 12:19-05:00
+base: merge 8f34bd4 of seat main 58af001 (banked Z-001..Z-111, remote-verified) into yrsa/mimiralloc-team-04 - CLEAN merge, no conflicts; team branch previously at e4ab6a6 (Z-103)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA) - host truth annexed at the end of this file
+load state: SHARED window, recorded honestly. An Aesir forge mojo suite (aesir_engine/tests/run_all.mojo, ~258% CPU) was co-tenant through the whole recorded window; loadavg 3.70/2.61/2.04 before execution 1 and 3.56/2.60/2.04 after execution 3, on the 32-thread host; sibling MimirAlloc Z13 leads (Z-113/Z-114) were mustered in the same window. Probe pinned taskset -c 5. The headline metrics (minor-fault counts, AnonHugePages) are structural and load-insensitive; timing spreads across the 3 executions stayed within a few percent at every size. NO quiet-window claim is made.
+harness: tests/perf/probe_z112.c (sha256 e2a61087384988e2b6db30c9c406b7dba7d2b578cf2cb8af511bfc567b6b8463), runner tests/perf/run_z112.sh (sha256 14483b9068886cb1a2930e50ae11841c95ead98dd432231206f3fc2c93030c2d), summariser tests/perf/summarize_z112.py (sha256 22ea2bc52afaa75640e224a4aee7974af06a233792ff018fc01ea9dc71615cd5); probe binary sha256 39634e48e59ca11422a0443be462f490bf48acd7f4349376c665c55bc3c9ea5e identical across all 3 executions (runner prints hashes per execution). Built with the repo flags -std=c11 -Wall -Wextra -Werror -pthread -O2 into build/z112/ (standalone, no Makefile target, NOT part of make test; no production code changed by this slice).
+method: per usable size in {64 KiB control, 2 MiB, 4 MiB, 20 MiB, 40 MiB (over the banked pool's 32 MiB byte bound)}: banked shape = mmap(4096 + size), descriptor byte in page 0, usable at base + 4096, no huge advise (the banked core issues no MADV_HUGEPAGE anywhere, grep-verified); variant shape = mapping padded so the usable extent is 2 MiB aligned, descriptor in the page immediately before the usable extent, MADV_HUGEPAGE on the usable extent only (control size measured banked-only: the variant admits >= 2 MiB by construction). Phases: untouched alloc/free pair; touched leg (one byte per 4 KiB page over the whole usable extent timed + minor-fault delta from /proc/self/stat + smaps AnonHugePages of the usable VMA + read-sum checksum). Pool-hit witness: 200 cycles of endpoint-touch reuse of one kept mapping at 256 KiB / 1 MiB (banked pool-hit price) vs 200 fresh banked-shape mappings (the price the huge-page-only pool imposes there by construction). REPS=5 per config, leg order alternating per rep; recorded run = 3 consecutive executions; headline = median-of-medians by summarize_z112.py. Read checksums identical across legs and reps for every size in every execution (probe enforces; RESULT: PASS in all 3) - workload equivalence proven.
+pre-registered rule (fixed in summarize_z112.py before the recorded executions, from the WAVE_PLAN success measure): miss-shape WIN iff huge backing actually formed (variant AnonHugePages > 0) AND touched-total improvement >= 10% AND no miss metric (pair, total) regresses > 10%; TIE iff every miss metric within +/-5%. Regression elsewhere = untouched pair regressing > 10% at any size, OR the pool-hit witness showing replacement regression (variant fresh > banked hit by > 10%). ADOPT iff every miss shape WIN/TIE AND huge backing everywhere AND no regression elsewhere; otherwise NO-ADOPTION with the blocking regression named.
+correctness gate: bash scripts/z13/run_gate.sh on the final tree, log hidden_files/z112_gate.log (team-local, not banked): GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN - identical to the Z-001 baseline (probe is standalone; no Makefile change; no production code). NOTE: a first gate invocation under sh (dash) failed on the script's bash-only BASH_SOURCE lines before running any test - an invocation error by this lead, recorded here; the bash re-run above is the gate of record.
+
+=== SYNTHESIS (summarize_z112.py, median-of-medians) ===
+synthesis: median-of-medians across 3 executions
+size=2097152 label=2MiB total banked=250298.0 variant=57948.0 improve=76.85; pair banked=1753.0 variant=1433.0 improve=18.25; minflt banked=512.0 variant=1.0; anon_huge_variant=2048.0 KiB; grade=WIN
+size=4194304 label=4MiB total banked=469979.0 variant=79779.0 improve=83.02; pair banked=1713.0 variant=1442.0 improve=15.82; minflt banked=1024.0 variant=2.0; anon_huge_variant=4096.0 KiB; grade=WIN
+size=20971520 label=20MiB total banked=2804983.0 variant=470850.0 improve=83.21; pair banked=2144.0 variant=1913.0 improve=10.77; minflt banked=5120.0 variant=10.0; anon_huge_variant=20480.0 KiB; grade=WIN
+size=41943040 label=40MiB-overbound total banked=5766409.0 variant=903940.0 improve=84.32; pair banked=3606.0 variant=2195.0 improve=39.13; minflt banked=10240.0 variant=20.0; anon_huge_variant=40960.0 KiB; grade=WIN
+witness size=262144 banked_pool_hit_ns=5.0 variant_fresh_ns=2897 ratio=579.4 regression=True
+witness size=1048576 banked_pool_hit_ns=3.0 variant_fresh_ns=4158 ratio=1386.0 regression=True
+witness size=262144 banked_pool_hit_ns=4.0 variant_fresh_ns=3952 ratio=988.0 regression=True
+witness size=1048576 banked_pool_hit_ns=3.0 variant_fresh_ns=4118 ratio=1372.67 regression=True
+witness size=262144 banked_pool_hit_ns=6.0 variant_fresh_ns=2926 ratio=487.67 regression=True
+witness size=1048576 banked_pool_hit_ns=3.0 variant_fresh_ns=2961 ratio=987.0 regression=True
+control size=65536: variant does not serve sub-PMD sizes by construction; banked pool unchanged there (no-regression witness is the witness lines above, not this size)
+pair_regression=False witness_regression=True huge_backing_all=True miss_all_win_or_tie=True
+DECISION: NO-ADOPTION
+reason: miss shapes WIN/TIE, but adoption as a replacement for the banked pool regresses sub-PMD pool-hit traffic by construction (witness); NO-ADOPTION as a replacement, miss-shape WIN banked as evidence
+  run1 verdict,checksum_equivalence=PASS
+  run1 RESULT: PASS
+  run2 verdict,checksum_equivalence=PASS
+  run2 RESULT: PASS
+  run3 verdict,checksum_equivalence=PASS
+  run3 RESULT: PASS
+
+=== PER-EXECUTION MEDIANS ===
+-- execution 1 --
+median,size=65536,leg=banked,pair_ns=2234,total_ns=106909,touch_ns=10529,minflt=16,huge_kib=0
+median,size=2097152,leg=banked,pair_ns=1753,total_ns=252192,touch_ns=181569,minflt=512,huge_kib=0
+median,size=2097152,leg=variant,pair_ns=1593,total_ns=58479,touch_ns=19115,minflt=1,huge_kib=2048
+median,size=4194304,leg=banked,pair_ns=1713,total_ns=469187,touch_ns=357829,minflt=1024,huge_kib=0
+median,size=4194304,leg=variant,pair_ns=1533,total_ns=81382,touch_ns=37841,minflt=2,huge_kib=4096
+median,size=20971520,leg=banked,pair_ns=2144,total_ns=2804983,touch_ns=2351827,minflt=5120,huge_kib=0
+median,size=20971520,leg=variant,pair_ns=1913,total_ns=470850,touch_ns=383306,minflt=10,huge_kib=20480
+median,size=41943040,leg=banked,pair_ns=4128,total_ns=5766409,touch_ns=4840639,minflt=10240,huge_kib=0
+median,size=41943040,leg=variant,pair_ns=2195,total_ns=942011,touch_ns=719024,minflt=20,huge_kib=40960
+median,witness_size=262144,banked_pool_hit_ns=5,variant_fresh_ns=2897
+median,witness_size=1048576,banked_pool_hit_ns=3,variant_fresh_ns=4158
+verdict,checksum_equivalence=PASS
+RESULT: PASS
+-- execution 2 --
+median,size=65536,leg=banked,pair_ns=2385,total_ns=104045,touch_ns=11101,minflt=16,huge_kib=0
+median,size=2097152,leg=banked,pair_ns=1753,total_ns=247643,touch_ns=177843,minflt=512,huge_kib=0
+median,size=2097152,leg=variant,pair_ns=1423,total_ns=57948,touch_ns=18935,minflt=1,huge_kib=2048
+median,size=4194304,leg=banked,pair_ns=1472,total_ns=475018,touch_ns=365744,minflt=1024,huge_kib=0
+median,size=4194304,leg=variant,pair_ns=1442,total_ns=79779,touch_ns=36588,minflt=2,huge_kib=4096
+median,size=20971520,leg=banked,pair_ns=1894,total_ns=2744471,touch_ns=2305940,minflt=5120,huge_kib=0
+median,size=20971520,leg=variant,pair_ns=2144,total_ns=481060,touch_ns=401139,minflt=10,huge_kib=20480
+median,size=41943040,leg=banked,pair_ns=3116,total_ns=5845477,touch_ns=4903567,minflt=10240,huge_kib=0
+median,size=41943040,leg=variant,pair_ns=2796,total_ns=903940,touch_ns=714415,minflt=20,huge_kib=40960
+median,witness_size=262144,banked_pool_hit_ns=4,variant_fresh_ns=3952
+median,witness_size=1048576,banked_pool_hit_ns=3,variant_fresh_ns=4118
+verdict,checksum_equivalence=PASS
+RESULT: PASS
+-- execution 3 --
+median,size=65536,leg=banked,pair_ns=2585,total_ns=100548,touch_ns=10870,minflt=16,huge_kib=0
+median,size=2097152,leg=banked,pair_ns=1643,total_ns=250298,touch_ns=177823,minflt=512,huge_kib=0
+median,size=2097152,leg=variant,pair_ns=1433,total_ns=57778,touch_ns=18685,minflt=1,huge_kib=2048
+median,size=4194304,leg=banked,pair_ns=1984,total_ns=469979,touch_ns=359432,minflt=1024,huge_kib=0
+median,size=4194304,leg=variant,pair_ns=1383,total_ns=79689,touch_ns=37100,minflt=2,huge_kib=4096
+median,size=20971520,leg=banked,pair_ns=2445,total_ns=2847163,touch_ns=2393945,minflt=5120,huge_kib=0
+median,size=20971520,leg=variant,pair_ns=1673,total_ns=381954,touch_ns=301683,minflt=10,huge_kib=20480
+median,size=41943040,leg=banked,pair_ns=3606,total_ns=5730423,touch_ns=4813108,minflt=10240,huge_kib=0
+median,size=41943040,leg=variant,pair_ns=2084,total_ns=844218,touch_ns=656938,minflt=20,huge_kib=40960
+median,witness_size=262144,banked_pool_hit_ns=6,variant_fresh_ns=2926
+median,witness_size=1048576,banked_pool_hit_ns=3,variant_fresh_ns=2961
+verdict,checksum_equivalence=PASS
+RESULT: PASS
+
+=== VERDICT (roadmap grades, this machine only) ===
+Pool-miss shapes, variant vs banked shape, median-of-medians:
+  2 MiB:  total 250,298 -> 57,948 ns (76.85% better); pair 1,753 -> 1,433 ns; minflt 512 -> 1; AnonHugePages variant 2048 KiB (banked 0) - WIN
+  4 MiB:  total 469,979 -> 79,779 ns (83.02%); pair 1,713 -> 1,442 ns; minflt 1024 -> 2; huge 4096 KiB - WIN
+  20 MiB: total 2,804,983 -> 470,850 ns (83.21%); pair 2,144 -> 1,913 ns; minflt 5120 -> 10; huge 20480 KiB - WIN
+  40 MiB (over-bound): total 5,766,409 -> 903,940 ns (84.32%); pair 3,606 -> 2,195 ns; minflt 10240 -> 20; huge 40960 KiB - WIN
+Untouched pairs: NO regression at any size (variant faster by 10.77% to 39.13% in the synthesis medians).
+Pool-hit witness (regression elsewhere): banked cached reuse 3-6 ns/cycle vs fresh 2,897-4,158 ns/cycle at 256 KiB and 1 MiB across the 3 executions - factor 488x to 1,386x. A huge-page-only pool adopted AS A REPLACEMENT for the banked pool evicts this traffic by construction (it admits nothing below 2 MiB); this is the banked pool's home shape (K-002 large_batch stands at WIN ~0.10x vs glibc on this reuse, Z-048/Z-054/Z-107).
+DECISION: NO-ADOPTION (as a replacement for the banked pool), per the pre-registered rule. The miss-shape WIN is banked as priced evidence: the win lives on the FRESH-mapping (miss) path, not in the pool's membership rule. Named follow-on (not built or claimed here): PMD-align + huge-advise fresh large mappings on the miss path while keeping the banked exact-length pool for hit traffic; costs recorded in docs/Z13_Z112_HUGE_PAGE_POOL.md (up to +2 MiB VA padding per fresh mapping, one madvise per fresh mapping, descriptor page immediately before a PMD-aligned usable extent = a reserve-layout change).
+Honesty bounds: raw-mapping-level pricing (Z-049 precedent), not allocator-level; witness hit price is a raw-mapping lower bound, so its ratio is indicative in size and certain in direction and class. No production code changed; no bug in repo code was found by this slice (the only failure encountered was this lead's sh-vs-bash gate invocation, recorded above and in CAMPAIGN_STATE.md). Team structure: 1 lead running all six Mythic Engineering roles SEQUENTIALLY (no sub-agents spawned by this lead): design (pre-registered rule + witness), implementation (probe/runner/summariser), measurement (3 executions + synthesis), gate verification, risk/scope review, banking-scope review (slice artifacts only).
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, captured in the run window, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T17:17:35Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 4841594
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 86%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 3.51 2.66 2.07
