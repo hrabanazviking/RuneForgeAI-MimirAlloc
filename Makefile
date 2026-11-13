@@ -2377,3 +2377,17 @@ test-z083: $(BUILD)/test_z083 $(BUILD)/test_z083_dyn $(BUILD)/test_z083_cpp $(BU
 	./$(BUILD)/test_z083_cpp
 
 .PHONY: test-z083
+# ------------------------------------------------------------------
+# Z-086: desktop battery (tests/abi/run_z086.sh) - KDE
+# applications under the Z-082 interposing variant inside
+# a contained session (private HOME/XDG root, private
+# dbus-run-session, headless Qt platform); the script is
+# the battery and its stdout is the recorded run
+# (tests/abi/recorded_run_z13_z086.txt). Standalone via
+# `make test-z086`; NOT part of `make test` (standing gate
+# counts untouched).
+
+test-z086: $(IPOLIB)
+	bash tests/abi/run_z086.sh
+
+.PHONY: test-z086

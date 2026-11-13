@@ -1,0 +1,96 @@
+=== Z-086 desktop battery recorded run ===
+date_utc: 2026-11-13T01:10:24Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: e4c2a6483cbf6989ea61fd1594a61fcaf46635d2
+branch: yrsa/mimiralloc-team-02
+loadavg: 0.54 0.64 0.54 2/1291 1513663
+page_size: 4096
+containment: private mktemp HOME/XDG root + dbus-run-session (private bus) + QT_QPA_PLATFORM=offscreen + DISPLAY/WAYLAND_DISPLAY unset + setsid process group, torn down per run
+preload: /home/volmarr/mimiralloc-team-02/build/libmimiralloc_interpose.so (Z-082 interposing variant)
+rollback: unset LD_PRELOAD
+=== S0 host inventory and live-session hands-off record ===
+kcalc: /usr/bin/kcalc
+kwrite: MISSING
+kate: /usr/bin/kate
+dolphin: /usr/bin/dolphin
+gwenview: /usr/bin/gwenview
+okular: /usr/bin/okular
+plasmashell: /usr/bin/plasmashell
+plasmawindowed: /usr/bin/plasmawindowed
+dbus-run-session: /usr/bin/dbus-run-session
+Xvfb: absent on this host (headless Qt platform used instead)
+live plasmashell pids before: 19610 
+live kwin_wayland pids before: 19417 
+=== S1 build the interposing variant ===
+  [ok] make lib-interpose (log hidden_files/z086_build_interpose.log)
+-rwxr-xr-x 1 volmarr volmarr 51280 Nov 12 20:05 build/libmimiralloc_interpose.so
+interpose defined dynamic exports: 20
+  [ok] interpose export count == 20 (10 namespaced + 10 standard)
+=== S2 neighbour evidence: Z-082 suite still green on this tree ===
+  [ok] make test-z082 (log hidden_files/z086_test_z082.log)
+./build/test_z082_pre | grep -q 'PRELOAD-VERDICT: GLIBC'
+LD_PRELOAD=/home/volmarr/mimiralloc-team-02/build/libmimiralloc_interpose.so ./build/test_z082_pre | grep -q 'PRELOAD-VERDICT: MIMIR'
+=== S3 the battery: control vs preload per application ===
+-- kwrite: MISSING-APP (no /usr/bin/kwrite on this host) --
+  [ok] kwrite row carried by kate below (same KTextEditor family, the kwrite-class editor)
+-- kcalc: /usr/bin/kcalc (window 8s) --
+  control: rc=124 class=ALIVE
+  preload: rc=124 class=ALIVE
+  preload log tail:
+    This plugin does not support propagateSizeHints()
+  [ok] kcalc PASS under preload (ALIVE; control ALIVE)
+-- kate: /usr/bin/kate (window 8s) --
+  control: rc=0 class=EXITED-CLEAN
+  preload: rc=0 class=EXITED-CLEAN
+  preload log tail:
+  [ok] kate PASS under preload (EXITED-CLEAN; control EXITED-CLEAN)
+-- dolphin: /usr/bin/dolphin (window 8s) --
+  control: rc=124 class=ALIVE
+  preload: rc=124 class=ALIVE
+  preload log tail:
+    org.kde.dolphin: Unknown class  ""  in session saved data!
+    This plugin does not support propagateSizeHints()
+    kf.kio.widgets: QApplication::clipboard()->mimeData() is 0!
+  [ok] dolphin PASS under preload (ALIVE; control ALIVE)
+-- gwenview: /usr/bin/gwenview (window 8s) --
+  control: rc=124 class=ALIVE
+  preload: rc=124 class=ALIVE
+  preload log tail:
+    QPainter::setOpacity: Painter not active
+    QPainter::end: Painter not active, aborted
+    This plugin does not support propagateSizeHints()
+  [ok] gwenview PASS under preload (ALIVE; control ALIVE)
+-- okular: /usr/bin/okular (window 8s) --
+  control: rc=124 class=ALIVE
+  preload: rc=124 class=ALIVE
+  preload log tail:
+    This plugin does not support propagateSizeHints()
+    This plugin does not support propagateSizeHints()
+  [ok] okular PASS under preload (ALIVE; control ALIVE)
+=== S4 plasmashell component in containment ===
+-- plasmawindowed: /usr/bin/plasmawindowed org.kde.plasma.digitalclock (window 8s) --
+  control: rc=124 class=ALIVE
+  preload: rc=124 class=ALIVE
+  preload log tail:
+    kf.iconthemes: Icon theme "breeze-internal" not found.
+    dbus-daemon[1515004]: [session uid=1000 pid=1515004 pidfd=5] Activated service 'org.kde.ActivityManager' failed: Process org.kde.ActivityManager received signal 6
+    kf.plasma.quick: Couldn't create KWindowShadow for PlasmaQuick::PlasmaWindow(0x7801ca45cce0)
+  [ok] plasmawindowed PASS under preload (ALIVE; control ALIVE)
+-- plasmashell: /usr/bin/plasmashell --no-respawn (window 10s) --
+  control: rc=139 class=FAILED(rc=139)
+  preload: rc=139 class=FAILED(rc=139)
+  preload log tail:
+    KCrash: Application 'plasmashell' crashing... crashRecursionCounter = 2
+  [ok] plasmashell ENV-ONLY: control also FAILED(rc=139) in containment; not an allocator result (cause named from the per-app logs)
+=== S5 rollback proof: unset LD_PRELOAD restores the glibc run ===
+  kcalc with LD_PRELOAD unset: rc=124 class=ALIVE
+  [ok] rollback by unsetting LD_PRELOAD: kcalc runs on glibc (ALIVE)
+=== S6 teardown and live-session proof ===
+  [ok] containment root deleted (/tmp/z086_battery.P1AMHO)
+live plasmashell pids after: 19610 
+live kwin_wayland pids after: 19417 
+  [ok] live plasmashell untouched (same pids before and after)
+  [ok] live kwin_wayland untouched (same pids before and after)
+loadavg: 0.59 0.62 0.54 1/1283 1515436
+=== Z-086 DESKTOP BATTERY RESULT: PASS ===
