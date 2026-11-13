@@ -1,0 +1,180 @@
+MimirAlloc Z13 recorded run - Z-098 The fair-fight leg
+slice: Z-098 - The fair-fight leg (tuned glibc matrix) (Wave 11; glibc measured under its own tunables at their best for each workload; gate: tunables matrix recorded, the tuned-glibc column exists in the Z-107 closing table raw data - the Z-107 RAW DATA block in the summariser output below is that column source)
+date: 2026-11-13T08:07:02-05:00 (run of record; five earlier attempts on 2026-11-12/13 were refused by the identical-leg control under the Z-100 soak co-tenant and were never graded - see team CAMPAIGN_STATE.md Z-098 record)
+base: f72d41b (team branch yrsa/mimiralloc-team-02, clean merge of seat main 3894db0, banked Z-001..Z-097)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: tests/perf/probe_z098.c (tunables engagement proof), tests/perf/run_z098.sh (runner), tests/perf/summarize_z098.py (matrix summariser), this recorded run. Harness: tests/perf/bench_k002.c (Wave-1 oracle, byte-identical workload code for every leg; sha256 30dd0d9a... in the runner log). No src/, API, ABI or Makefile change; README.md untouched.
+team: lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly).
+method: 15 configurations (gdefault, gdefault_dup identical-leg control, tcache_count axis 0/1/16/64, tcache_max axis 512/4096/65536, mmap_threshold axis 4096/32768/1048576, gcombo_cache, gcombo_fair, mimir) driven under GLIBC_TUNABLES on the glibc binary; the MimirAlloc binary links the three allocator objects built with the shipped -O3 flag set (Z-096 adoption), its bench TU at -O2, identical for both binaries. Tunable engagement proven FIRST by probe_z098: 64 KiB block on heap under default (hblkhd_delta=0) and under mmap_threshold=1048576 (0), mmap-served under mmap_threshold=4096 (hblkhd_delta=77824); tcache_count=0 timing signature 9.72 ns/op vs 2.89 ns/op default on the 64-byte probe - engagement proof PASS. Every process pinned taskset -c 5; 3 warm-up rounds over all legs discarded; 9 measured reps, legs interleaved round-robin; TWO full invocations (raw: team hidden_files/z098_attempt6_raw1.txt, z098_attempt6_raw2.txt; runner log hidden_files/z098_attempt6_run.log). The summariser hard-fails on any checksum/ops mismatch, on an identical-leg control breach beyond the Z-004 5% bound, and on cross-invocation drift beyond 8% or best-config disagreement. Runner exit 0, runner correctness PASS.
+load honesty: QUIET WINDOW (soak-free). The Z-100 eight-hour soak completed at about 08:02 EST the same morning; before this run the keeper and this lead verified no probe_z56/probe_glibc/probe_mimir processes remained and no other team gate (make test / run_gate.sh) was running; a transient Aesir mojo build seen at 08:06 EST had finished before the run started. loadavg 0.29/1.31/1.55 at run start, 0.35/1.31/1.54 mid-run and at end (the 5/15-minute figures are decaying history of earlier shared-host work; the 1-minute figure stayed at 0.29-0.35 and the top CPU consumers throughout were desktop daemons under 1%). Identical-leg control (Z-004 bound 5%): invocation 1 worst 1.40% (large_batch), invocation 2 worst 4.53% (large_batch) - PASS both; cross-invocation agreement PASS (worst drift 1.64%, mixed_batch mimir). This-machine numbers under that stated load.
+correctness gate (baseline, pre-slice tree f72d41b): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips (team hidden_files/z098_gate_baseline.log). Final gate on the committed tree is recorded in team CAMPAIGN_STATE.md.
+
+=== VERDICT (headline = invocation 1 medians; grades on the Z-004 5% band) ===
+The fair fight changes the standing on exactly one workload. Against DEFAULT glibc, MimirAlloc records WIN on large_batch only and LOSS on the other three. Against the BEST TUNED glibc per workload - the column this slice exists to create - MimirAlloc records LOSS on all four workloads. Tuning itself: TUNING WIN on large_batch (-98.70%) and mixed_lifecycle (-57.90%), TIE on small_churn and mixed_batch (no tuned config beats default beyond noise).
+small_churn: mimir 29.27 ns/op vs default glibc 3.34 (8.76x, LOSS) and vs best tuned 3.32 [gmm32k, mmap_threshold=32768] (8.82x, LOSS). Tuning TIE (-0.60%).
+mixed_batch: mimir 29.35 ns/op vs default 3.72 (7.89x, LOSS) and vs best tuned 3.71 [gtmax64k, tcache_max=65536] (7.91x, LOSS). Tuning TIE (-0.27%).
+large_batch: mimir 98.07 ns/op vs default 685.65 (0.14x, WIN, -85.70%) but vs best tuned 8.92 [gcombo_cache, tcache_count=64 + tcache_max=65536] (10.99x, LOSS vs tuned). REASON NAMED: default glibc pays the mmap path for every large block (685.65 ns/op); raising tcache_max to 65536 with tcache_count=64 lets tuned glibc cache and reuse those blocks at 8.92 ns/op, a -98.70% TUNING WIN that erases the default-leg advantage MimirAlloc holds. MimirAlloc large path still pays its per-op mapping/registry cost (98.07 ns/op), so the win over default glibc does not survive the fair fight.
+mixed_lifecycle: mimir 517.89 ns/op vs default 7.15 (72.43x, LOSS) and vs best tuned 3.01 [gcombo_cache] (172.06x, LOSS). REASON NAMED: the per-allocation small-path cost documented since Z-003/Z-024 (registry/span walks) dominates the lifecycle shape, and tuning widens the gap (glibc gains -57.90% from the combo cache while MimirAlloc pays the same fixed path cost).
+Roadmap gate: MET - the tunables matrix is recorded below in full for both invocations, and the tuned-glibc column for the Z-107 closing table exists in the Z-107 RAW DATA blocks emitted by the summariser from this run raw data (invocation 1 block is the headline source; invocation 2 names its tied-at-top winners in the agreement section).
+bugs: none in the allocator, the suite, or the slice harness. The engagement proof passed, checksums and ops agreed in every cell of both invocations, and the runner correctly refused the five earlier contention-noised windows - that refusal was the harness working as designed, and the 5% bound was never weakened.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T13:11:05Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 60%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.14 0.66 1.22
+
+=== SUMMARISER OUTPUT (summarize_z098.py on hidden_files/z098_attempt6_raw1.txt + z098_attempt6_raw2.txt, verbatim) ===
+=== Z-098 TUNABLES MATRIX (invocation 1) - median ns/op, delta % vs default glibc ===
+config                       small_churn               mixed_batch               large_batch           mixed_lifecycle
+gdefault               3.34 ( +0.00%)            3.72 ( +0.00%)          685.65 ( +0.00%)            7.15 ( +0.00%)   
+gdefault_dup           3.33 ( -0.30%)            3.74 ( +0.54%)          695.25 ( +1.40%)            7.12 ( -0.42%)   
+gtc0                   9.56 (+186.23%)           10.24 (+175.27%)          669.85 ( -2.30%)           10.53 (+47.27%)   
+gtc1                   3.36 ( +0.60%)           13.77 (+270.16%)          603.92 (-11.92%)           11.26 (+57.48%)   
+gtc16                  3.34 ( +0.00%)            3.72 ( +0.00%)          682.52 ( -0.46%)            7.23 ( +1.12%)   
+gtc64                  3.34 ( +0.00%)            3.73 ( +0.27%)          688.02 ( +0.35%)            4.69 (-34.41%)   
+gtmax512               3.34 ( +0.00%)            5.33 (+43.28%)          652.76 ( -4.80%)            8.02 (+12.17%)   
+gtmax4k                3.34 ( +0.00%)            3.84 ( +3.23%)          475.95 (-30.58%)            6.84 ( -4.34%)   
+gtmax64k               3.36 ( +0.60%)            3.71 ( -0.27%)            8.96 (-98.69%)            6.01 (-15.94%)   
+gmm4k                  3.33 ( -0.30%)            3.81 ( +2.42%)         1527.45 (+122.77%)           29.34 (+310.35%)   
+gmm32k                 3.32 ( -0.60%)            3.71 ( -0.27%)         1323.26 (+92.99%)           21.61 (+202.24%)   
+gmm1m                  3.32 ( -0.60%)            3.90 ( +4.84%)          910.65 (+32.82%)           20.38 (+185.03%)   
+gcombo_cache           3.36 ( +0.60%)            3.71 ( -0.27%)            8.92 (-98.70%)            3.01 (-57.90%)   
+gcombo_fair            3.36 ( +0.60%)            3.71 ( -0.27%)          502.66 (-26.69%)            3.18 (-55.52%)   
+mimir                 29.27 (+776.35%)           29.35 (+688.98%)           98.07 (-85.70%)          517.89 (+7143.22%)   
+
+=== IDENTICAL-LEG CONTROL (Z-004 bound: 5%) ===
+small_churn      default=      3.34 dup=      3.33 agreement=0.30%
+mixed_batch      default=      3.72 dup=      3.74 agreement=0.54%
+large_batch      default=    685.65 dup=    695.25 agreement=1.40%
+mixed_lifecycle  default=      7.15 dup=      7.12 agreement=0.42%
+worst agreement: 1.40% (bound 5.00%) - PASS
+
+=== PER-WORKLOAD VERDICT: best tuned glibc + MimirAlloc standing ===
+small_churn:
+  default glibc              3.34 ns/op
+  best tuned glibc           3.32 ns/op  [gmm32k: glibc.malloc.mmap_threshold=32768]  gain -0.60% - TIE (no gain beyond noise)
+  mimiralloc                29.27 ns/op
+  mimir vs default:      8.76x  LOSS    mimir vs tuned:   8.82x  LOSS
+mixed_batch:
+  default glibc              3.72 ns/op
+  best tuned glibc           3.71 ns/op  [gtmax64k: glibc.malloc.tcache_max=65536]  gain -0.27% - TIE (no gain beyond noise)
+  mimiralloc                29.35 ns/op
+  mimir vs default:      7.89x  LOSS    mimir vs tuned:   7.91x  LOSS
+large_batch:
+  default glibc            685.65 ns/op
+  best tuned glibc           8.92 ns/op  [gcombo_cache: glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536]  gain -98.70% - TUNING WIN
+  mimiralloc                98.07 ns/op
+  mimir vs default:      0.14x  WIN    mimir vs tuned:  10.99x  LOSS
+mixed_lifecycle:
+  default glibc              7.15 ns/op
+  best tuned glibc           3.01 ns/op  [gcombo_cache: glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536]  gain -57.90% - TUNING WIN
+  mimiralloc               517.89 ns/op
+  mimir vs default:     72.43x  LOSS    mimir vs tuned: 172.06x  LOSS
+
+=== Z-107 RAW DATA (tuned-glibc column source) ===
+z107,small_churn,glibc_default,,3.34
+z107,small_churn,glibc_tuned,gmm32k:glibc.malloc.mmap_threshold=32768,3.32
+z107,small_churn,mimiralloc,,29.27
+z107,mixed_batch,glibc_default,,3.72
+z107,mixed_batch,glibc_tuned,gtmax64k:glibc.malloc.tcache_max=65536,3.71
+z107,mixed_batch,mimiralloc,,29.35
+z107,large_batch,glibc_default,,685.65
+z107,large_batch,glibc_tuned,gcombo_cache:glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536,8.92
+z107,large_batch,mimiralloc,,98.07
+z107,mixed_lifecycle,glibc_default,,7.15
+z107,mixed_lifecycle,glibc_tuned,gcombo_cache:glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536,3.01
+z107,mixed_lifecycle,mimiralloc,,517.89
+
+=== Z-098 TUNABLES MATRIX (invocation 2) - median ns/op, delta % vs default glibc ===
+config                       small_churn               mixed_batch               large_batch           mixed_lifecycle
+gdefault               3.33 ( +0.00%)            3.72 ( +0.00%)          683.17 ( +0.00%)            7.10 ( +0.00%)   
+gdefault_dup           3.34 ( +0.30%)            3.71 ( -0.27%)          714.10 ( +4.53%)            7.19 ( +1.27%)   
+gtc0                   9.29 (+178.98%)           10.25 (+175.54%)          589.97 (-13.64%)           10.47 (+47.46%)   
+gtc1                   3.35 ( +0.60%)           13.66 (+267.20%)          604.12 (-11.57%)           11.29 (+59.01%)   
+gtc16                  3.34 ( +0.30%)            3.71 ( -0.27%)          678.83 ( -0.64%)            7.22 ( +1.69%)   
+gtc64                  3.33 ( +0.00%)            3.73 ( +0.27%)          672.21 ( -1.60%)            4.70 (-33.80%)   
+gtmax512               3.33 ( +0.00%)            5.43 (+45.97%)          657.04 ( -3.82%)            8.04 (+13.24%)   
+gtmax4k                3.34 ( +0.30%)            3.72 ( +0.00%)          480.40 (-29.68%)            6.77 ( -4.65%)   
+gtmax64k               3.33 ( +0.00%)            3.71 ( -0.27%)            9.01 (-98.68%)            5.95 (-16.20%)   
+gmm4k                  3.32 ( -0.30%)            3.71 ( -0.27%)         1535.89 (+124.82%)           29.62 (+317.18%)   
+gmm32k                 3.34 ( +0.30%)            3.71 ( -0.27%)         1313.54 (+92.27%)           21.46 (+202.25%)   
+gmm1m                  3.35 ( +0.60%)            3.72 ( +0.00%)          914.01 (+33.79%)           20.12 (+183.38%)   
+gcombo_cache           3.33 ( +0.00%)            3.72 ( +0.00%)            9.03 (-98.68%)            3.03 (-57.32%)   
+gcombo_fair            3.36 ( +0.90%)            3.71 ( -0.27%)          473.47 (-30.70%)            3.18 (-55.21%)   
+mimir                 29.43 (+783.78%)           28.87 (+676.08%)           98.03 (-85.65%)          517.95 (+7195.07%)   
+
+=== IDENTICAL-LEG CONTROL (Z-004 bound: 5%) ===
+small_churn      default=      3.33 dup=      3.34 agreement=0.30%
+mixed_batch      default=      3.72 dup=      3.71 agreement=0.27%
+large_batch      default=    683.17 dup=    714.10 agreement=4.53%
+mixed_lifecycle  default=      7.10 dup=      7.19 agreement=1.27%
+worst agreement: 4.53% (bound 5.00%) - PASS
+
+=== PER-WORKLOAD VERDICT: best tuned glibc + MimirAlloc standing ===
+small_churn:
+  default glibc              3.33 ns/op
+  best tuned glibc           3.32 ns/op  [gmm4k: glibc.malloc.mmap_threshold=4096]  gain -0.30% - TIE (no gain beyond noise)
+  mimiralloc                29.43 ns/op
+  mimir vs default:      8.84x  LOSS    mimir vs tuned:   8.86x  LOSS
+mixed_batch:
+  default glibc              3.72 ns/op
+  best tuned glibc           3.71 ns/op  [gtc16: glibc.malloc.tcache_count=16]  gain -0.27% - TIE (no gain beyond noise)
+  mimiralloc                28.87 ns/op
+  mimir vs default:      7.76x  LOSS    mimir vs tuned:   7.78x  LOSS
+large_batch:
+  default glibc            683.17 ns/op
+  best tuned glibc           9.01 ns/op  [gtmax64k: glibc.malloc.tcache_max=65536]  gain -98.68% - TUNING WIN
+  mimiralloc                98.03 ns/op
+  mimir vs default:      0.14x  WIN    mimir vs tuned:  10.88x  LOSS
+mixed_lifecycle:
+  default glibc              7.10 ns/op
+  best tuned glibc           3.03 ns/op  [gcombo_cache: glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536]  gain -57.32% - TUNING WIN
+  mimiralloc               517.95 ns/op
+  mimir vs default:     72.95x  LOSS    mimir vs tuned: 170.94x  LOSS
+
+=== Z-107 RAW DATA (tuned-glibc column source) ===
+z107,small_churn,glibc_default,,3.33
+z107,small_churn,glibc_tuned,gmm4k:glibc.malloc.mmap_threshold=4096,3.32
+z107,small_churn,mimiralloc,,29.43
+z107,mixed_batch,glibc_default,,3.72
+z107,mixed_batch,glibc_tuned,gtc16:glibc.malloc.tcache_count=16,3.71
+z107,mixed_batch,mimiralloc,,28.87
+z107,large_batch,glibc_default,,683.17
+z107,large_batch,glibc_tuned,gtmax64k:glibc.malloc.tcache_max=65536,9.01
+z107,large_batch,mimiralloc,,98.03
+z107,mixed_lifecycle,glibc_default,,7.10
+z107,mixed_lifecycle,glibc_tuned,gcombo_cache:glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536,3.03
+z107,mixed_lifecycle,mimiralloc,,517.95
+
+=== CROSS-INVOCATION AGREEMENT (drift bound: 8%) ===
+small_churn      best1=gmm32k best2=gmm4k (tied-at-top) drift default=0.30% best=0.00% mimir=0.55% - OK
+  note: gmm32k [glibc.malloc.mmap_threshold=32768] and gmm4k [glibc.malloc.mmap_threshold=4096] are within noise of each other in both invocations; the tuned column takes invocation 1's winner and names the tie.
+mixed_batch      best1=gtmax64k best2=gtc16 (tied-at-top) drift default=0.00% best=0.00% mimir=1.64% - OK
+  note: gtmax64k [glibc.malloc.tcache_max=65536] and gtc16 [glibc.malloc.tcache_count=16] are within noise of each other in both invocations; the tuned column takes invocation 1's winner and names the tie.
+large_batch      best1=gcombo_cache best2=gtmax64k (tied-at-top) drift default=0.36% best=1.01% mimir=0.04% - OK
+  note: gcombo_cache [glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536] and gtmax64k [glibc.malloc.tcache_max=65536] are within noise of each other in both invocations; the tuned column takes invocation 1's winner and names the tie.
+mixed_lifecycle  best1=gcombo_cache best2=gcombo_cache (same) drift default=0.70% best=0.66% mimir=0.01% - OK
+agreement: PASS
