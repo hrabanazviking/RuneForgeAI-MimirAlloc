@@ -1,0 +1,260 @@
+MimirAlloc Z13 recorded run - Trace-driven tuning
+slice: Z-095 - Trace-driven tuning (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md:
+  class table and cache sizes re-tuned against the traces;
+  before/after measured on traces AND the synthetic oracle;
+  gate: tuning deltas recorded for both suites; regressions in
+  either block adoption and are reported, not hidden)
+date: 2026-11-12 evening EST (America/Indiana/Indianapolis);
+  captures 22:47 EST, measure run of record 22:52-22:55 EST,
+  standing gate 22:55 EST
+base: team branch yrsa/mimiralloc-team-05 at dca1424 (Z-090
+  fold-in 2) plus merge 6dd9b7d of seat main 4188da8 (banked
+  Z-001..Z-092, remote-verified by the keeper) - clean merge,
+  no conflicts; the merge added exactly the banked Z-091 +
+  Z-092 artifacts (10 files, +1146) and the post-merge tree is
+  identical to the seat (git diff seat..HEAD empty), so the
+  banked Z-090 verdict doc is byte-identical to the seat copy
+  and nothing of this team's Z-090 work was lost.
+host: purpleraider (ASUS ROG Flow Z13, AMD RYZEN AI MAX+ 395
+  w/ Radeon 8060S, x86-64, 4 KiB pages, 128 GB UMA), Ubuntu
+  26.10, kernel 7.3.0-10-generic, glibc 2.44, Python 3.14.8,
+  git 2.55.0, ollama 0.40.16, model qwen2.5:0.5b (digest per
+  Z-085 record). Full header: hidden_files/z095_host_truth.txt
+  (scripts/z13/host_truth.sh at run time).
+team: fresh lead (keeper-dispatched) running the six Mythic
+  Engineering roles sequentially itself - no sub-agents were
+  spawned (platform depth limit for this dispatch); recorded
+  plainly per the muster rule. Roles: trace-method design,
+  capture-shim build, histogram analysis, variant design,
+  measurement + adoption-bar grading, gate/ledger/commit
+  review. All work in this worktree only; no push from here.
+
+=== DEPENDENCY POSTURE (Z-093 / Z-094) ===
+Z-095's named input is Z-094's canonical traces (audit-hook
+route: python import storm, git object churn, an Ollama
+session, replay checksums). At build time Z-093 and Z-094
+are being built concurrently by teams 01/02 in their own
+worktrees and are NOT banked; seat main is at Z-092. This
+slice therefore does not consume or assume their unbanked
+work. Instead it captures its OWN three real traces on this
+host with the same workload shapes Z-094 names, using its
+own capture road (below), tunes against them, and records
+the re-validation against Z-094's canonical traces as OWED
+(see OWED at the end). Z-093 (batch verdict) is not an input
+to this slice's gate: no Z-095 candidate touches the batch
+API.
+
+=== CAPTURE ROAD (tests/perf/trace_capture_z095.c) ===
+An LD_PRELOAD shim forwarding the malloc family to host
+glibc (dlsym RTLD_NEXT) and logging every operation as a
+32-byte binary record (op, size, ptr, ptr2): allocation,
+realloc, free, incl. the memalign family folded to plain
+allocations. No stdio and no allocation inside the logging
+path (raw write(2) from a static 1 MiB buffer under a
+spinlock; a thread-local guard defeats recursion; dlsym's
+bootstrap calloc is served from a static arena and never
+logged). Record order under concurrency is one valid
+interleaving, not per-thread program order; the converter
+replays that order single-threaded and this record says so.
+Converter (tests/perf/convert_z095.py) drops, each counted,
+never silently: zero-size allocations (MimirAlloc's D-013
+contract refuses them by design - not replayable events),
+allocations above 64 MiB (pattern-write cost would dominate
+replay), frees/reallocs of unknown pointers. Replay cap
+300,000 ops; histograms cover the FULL capture.
+
+=== THE THREE TRACES (captured 22:47 EST, this host) ===
+python (tests/perf/traces_z095/python.trace, sha256
+  d4941de7dfe1632b1fbbfec2f72114aec3e8dcdd4a51e969f1f3a9e9d65f6f93):
+  import storm over 46 stdlib modules + 300k seeded churn
+  objects in a 4096-object rolling window (the Z-085 workload
+  shape, run under glibc). Capture 261,664 records; replay
+  261,664 ops (uncapped - the whole stream). Requests:
+  133,571 total, 99,499 small, 34,072 above 1024, 0 zero.
+  Small-class histogram is dominated by the top four classes:
+  640: 31.18%, 768: 21.08%, 896: 19.68%, 1024: 20.91% of
+  small (requests spread across 513..1024: hottest exact
+  992x1648, 1024x1076, 640x907, 520x846, 528x845, 544x843).
+  Internal waste on small: 8.79%. Peak live 7,677,203 B.
+git (tests/perf/traces_z095/git.trace, sha256
+  78ace5033808e105c17c7de21fc62f57f8fd83accbed10a1c6e190287c155954):
+  git log --oneline -3000, status, diff --stat HEAD~5..HEAD,
+  log --stat -200 in this worktree, read-only ops under
+  glibc. Capture 73,801 records; replay 70,957 ops.
+  Requests: 38,906 total, 25,136 small, 12,348 above 1024,
+  1,422 zero (dropped, counted; their 1,422 frees drop with
+  them). Broad small spread: 32: 21.61%, 48: 14.91%, 64:
+  10.12%, 80: 9.59%, 128: 8.27%, 16: 7.46%, 160: 6.10%.
+  Hottest exact: 24x3427, 48x2356, 72x1441, 32x936, 56x853.
+  Internal waste on small: 9.99%. Peak live 9,869,113 B.
+ollama (tests/perf/traces_z095/ollama.trace, sha256
+  8cc3f27e946f3da5f92279c97f35d73122aa158c392ad422ad4fc9002158ac3f):
+  private server on 127.0.0.1:11499 (OLLAMA_MODELS taken
+  from the host service, /mnt/vault/models/ollama; the
+  user's :11434 service never touched), one generate of
+  qwen2.5:0.5b, 16 tokens, temperature 0, under glibc.
+  Correctness: response exactly "The capital of France is
+  Paris.", done:true (hidden_files/z095_ollama_gen.json).
+  Capture 2,064,384 records; replay = first 300,000 ops
+  (cap), histograms over the full capture. Requests:
+  1,206,931 total, 1,205,391 small, 1,540 above 1024, 0
+  zero, 1 huge drop (>64 MiB). Extremely concentrated:
+  exact 56 x309,445 (served by class 64), 88 x305,428
+  (class 96), 31 x103,947 (class 32), 24 x62,657, 48
+  x40,181; class shares: 32: 30.49%, 64: 26.89%, 96:
+  26.12%, 48: 8.79%, 16: 4.46%. Internal waste on small:
+  12.82% - the worst of the three, driven by 56->64 and
+  88->96. Peak live (replay prefix) 34,662,962 B.
+Full per-class tables: hidden_files/z095_stats_{python,git,
+ollama}.txt (converter output, team-local). Raw captures:
+hidden_files/z095_cap_{python,git,ollama}.bin (team-local,
+not banked; the converted traces above are the banked form).
+
+=== CANDIDATES (variant builds, scratch copies only) ===
+Variants are built by tests/perf/run_z095.sh (measure) from
+scratch copies of src/+include/+the Z-028 header under
+build/z95/<variant>/ - production sources are never edited
+by the harness.
+  v0 baseline: banked 20-class table; TLS bin 16 / batch 8
+    (Z-028 contract constants).
+  v1 cache-large: TLS bin 32 / batch 16, banked table.
+  v2 cache-small: TLS bin 8 / batch 4, banked table.
+  v3 class-respace (histogram-driven, still 20 classes,
+    max 1024): 16,32,48,56,64,80,88,96,128,160,192,256,320,
+    384,512,640,768,896,960,1024 - adds exact classes for
+    Ollama's two hottest sizes (56, 88) and a 960 split for
+    the Python top band; drops 112, 224, 448 (their banked-
+    histogram shares are 0.2-1.5% per trace).
+Adoption bar (registered in summarize_z095.py before the
+verdict, Z-032 style): adoptable only if (a) trace-suite
+median ns/op improves >= 3% on at least 2 of 3 traces and
+regresses no trace by > 2%, AND (b) the synthetic oracle
+regresses no workload's median ns/op by > 2%. Adoption of a
+TLS variant would additionally require amending the Z-028
+contract header + doc in the same commit, per that
+contract's own terms; adoption of v3 would require the
+G-002 class-table record amended likewise. Neither is done
+here, because no candidate met the bar (below).
+
+=== MEASUREMENT (Z-004 shape) ===
+Replay probe tests/perf/probe_z095.c: one source, two legs
+(mimir objects / glibc), warm-up replay at 1/10 scale, one
+timed full replay per process, taskset -c 5, 5 measured
+reps, variants and legs interleaved round-robin, medians by
+tests/perf/summarize_z095.py. Every block is pattern-written
+and verified before free/realloc; the replay checksum folds
+sizes and verified bytes. Checksum agreement: exactly one
+checksum per trace across ALL legs and variants (git
+6416305113655138971, ollama 15331781088169455270, python
+5709150665220454102) - the streams are identical work.
+Oracle: bench_k002.c rebuilt per variant, same protocol.
+Raw: hidden_files/z095_replay.raw, z095_oracle.raw;
+summary: hidden_files/z095_summary.txt.
+Load honesty: quiet window throughout - capture start
+0.28/0.39/0.83, measure start 0.22/0.27/0.64, measure end
+0.83/0.46/0.68, gate end 0.38/0.39/0.64 (1-min first). No
+cross-campaign benchmark was running; deltas of 5-1500%
+below are far outside any plausible contention noise, and
+the near-tie cells are called ties, not wins.
+
+=== RESULTS - TRACE SUITE (median ns/op, MimirAlloc leg) ===
+trace            v0        v1 (32/16)     v2 (8/4)      v3 (respace)
+git            343.63     339.01 -1.34%  374.10 +8.87%  347.63 +1.16%
+ollama         558.04     480.64 -13.87% 706.81 +26.66% 521.13 -6.61%
+python        2907.94    2751.81 -5.37%  3072.07 +5.64% 2889.68 -0.63%
+glibc context (v0 build): git 31.58, ollama 16.66, python
+12.37 ns/op - MimirAlloc's replay LOSS vs glibc stands, in
+line with the Wave 10 verdict; this slice grades TUNING
+deltas, not the leg gap.
+
+=== RESULTS - SYNTHETIC ORACLE bench_k002 (median ns/op) ===
+workload         v0        v1             v2              v3
+large_batch     98.97     98.69 -0.28%   98.65 -0.32%    99.49 +0.53%
+mixed_batch     32.77     31.39 -4.21%  551.22 +1582.09% 245.63 +649.56%
+mixed_lifecycle 538.44   294.58 -45.29% 799.23 +48.43%  592.57 +10.05%
+small_churn     33.62     35.68 +6.13%   31.79 -5.44%    33.22 -1.19%
+
+=== VERDICT (roadmap grades, this machine only) ===
+v1 (TLS bin 32 / batch 16): trace suite WIN on ollama
+  (-13.87%) and python (-5.37%), TIE on git (-1.34%);
+  oracle WIN on mixed_lifecycle (-45.29%) and mixed_batch
+  (-4.21%), TIE on large_batch (-0.28%) - but small_churn
+  REGRESSES +6.13%, past the 2% bar. NOT ADOPTED: the
+  regression blocks adoption under the gate's own words
+  and is reported here, not hidden. v1 is the recorded
+  near-miss: the trace evidence says bigger bins pay on
+  real streams, the oracle says a uniform 32 costs the
+  small-class churn leg - the natural next step is a
+  per-class bin sizing slice, not a uniform change.
+v2 (TLS bin 8 / batch 4): LOSS everywhere it matters -
+  traces +8.87% / +26.66% / +5.64%, oracle mixed_batch
+  +1582.09% (the 256-live mixed cycle starves on 8-deep
+  bins and falls to the locked core path). REJECTED.
+v3 (class respace): trace TIE-to-WIN (ollama -6.61% from
+  the exact 56/88 classes, python -0.63%, git +1.16%) but
+  oracle mixed_batch REGRESSES +649.56% and
+  mixed_lifecycle +10.05%: the dropped mid classes
+  (112/224/448) and the changed span geometry punish the
+  all-20-classes synthetic cycle far more than the exact-
+  size wins repay. REJECTED, regression reported in full.
+ADOPTED TUNING: NONE. The banked class table and the
+Z-028 TLS constants (bin 16 / batch 8) stand unchanged -
+not by inertia but by measurement: every candidate that
+improved the traces broke the oracle, and the gate's rule
+is that regressions in either suite block adoption.
+Production sources, the Z-028 contract header, and the
+Makefile are untouched by this slice.
+
+=== DEFECTS FOUND AND FIXED IN SCOPE ===
+Two defects in THIS SLICE's own harness, both found by the
+first measure run and fixed before the run of record:
+(1) probe_z095.c pattern write/check overlapped bytes on
+  blocks of size 1-2 (last-byte and middle-byte writes land
+  on byte 0), so every replay failed its warmup pattern
+  check on traces containing tiny allocations. Fixed by
+  guarding each pattern byte by size; proven on a synthetic
+  1/2/3-byte trace before re-measurement.
+(2) run_z095.sh read probe/bench exit codes through a pipe
+  to sed, whose exit status masked failures - the first
+  measure run "completed" with an empty replay raw. Fixed
+  by capturing output to a file and checking the exit code
+  before tagging; a failed run now stops the runner.
+No allocator defect was found: variant and baseline
+replays agree on checksums exactly, and the standing gate
+is green (below).
+
+=== GATE ===
+scripts/z13/run_gate.sh on the final tree (hidden_files/
+z095_gate.log): GATE COUNTS checks=4988 failed=0 skips=77,
+GATE RESULT: GREEN, exit 0 - identical to the Z-001
+baseline (4988/0/77), as expected: this slice adds no suite
+tests and changes no production source. Slice's own tests:
+the three trace replays x (4 variants + glibc) x 5 reps =
+75 processes, all exit 0 with pattern verification and
+checksum agreement; the oracle 4 workloads x (4 variants +
+glibc) x 5 reps = 100 processes, all exit 0.
+
+=== OWED ===
+- Re-validation against Z-094's canonical traces when they
+  bank: re-run run_z095.sh measure with Z-094's replay
+  traces in tests/perf/traces_z095/ form (or its banked
+  successor location) and confirm the no-adoption verdict
+  and v1's near-miss under the canonical streams. Until
+  then this slice's tuning verdict rests on its own three
+  captured traces, named above with their provenance.
+- Z-093's batch verdict does not block this slice (no
+  shared surface), but Wave 11's verdict slice should cite
+  both when they bank.
+- Follow-up proposal (not this slice): per-class TLS bin
+  sizing - v1's trace wins with its small_churn oracle
+  regression named is the evidence packet for it.
+
+=== ARTIFACT HASHES (sha256) ===
+trace_capture_z095.c 2ecef783f9caf11ef4153f8743c002ff3c6007bc6060eb811f9b0ce344fdff45
+probe_z095.c         2a120aeed7af12e90fc67165d441f40e415b53861ce83993029a1506cfe2eee2
+convert_z095.py      e89fae7e807cea93681e2434ea77ebb2957b97fcc217de850dc9643394491d3c
+summarize_z095.py    20f4b644537b5c1d89fad92873cae25d11df52be24df8e31aa5989e861cdda4f
+run_z095.sh          0f32ac02424b9f24e7c2e1711035759ef60b0f3ad020542336944a3214004902
+traces_z095/git.trace    78ace5033808e105c17c7de21fc62f57f8fd83accbed10a1c6e190287c155954
+traces_z095/ollama.trace 8cc3f27e946f3da5f92279c97f35d73122aa158c392ad422ad4fc9002158ac3f
+traces_z095/python.trace d4941de7dfe1632b1fbbfec2f72114aec3e8dcdd4a51e969f1f3a9e9d65f6f93
