@@ -12,20 +12,35 @@ exactly the banked Z-094, Z-095 and Z-096 artifacts (24 files) on top
 of this branch's banked Z-097 commit b196ddb. Baseline standing gate
 on the merged tree before any Z-099 edit: GREEN 4988 checks / 0 failed
 / 77 by-design skips (hidden_files/z099_baseline_gate.log).
+FOLD-IN (2026-11-13, this amendment): seat main 1cfc4b8
+(banked Z-098; team-02 commit b95d2b6; ls-remote verified
+1cfc4b82c7ca5138f6a64ee580e5c57ed53aa3a4) merged into
+yrsa/mimiralloc-team-01 as b795757 - clean merge, no
+conflicts; the merge added exactly the banked Z-098 artifacts
+(4 files) alongside the seat's own intervening docs commits.
+Baseline standing gate on the fold-in merged tree before any
+fold-in edit: GREEN 4988 checks / 0 failed / 77 by-design
+skips (hidden_files/z099_foldin_baseline_gate.log). The six
+Mythic Engineering roles were again run SEQUENTIALLY by the
+lead.
 
-STATUS: FINAL for Z-091..Z-097; OWED for Z-098, stated up front.
-Wave 11 is 8 of 9 slices FINAL; one section remains OWED.
+STATUS: FINAL, stated up front. Wave 11 is 9 of 9 slices
+FINAL; no pending sections remain.
 FINAL below: Z-091 (banked at the seat as 942369e), Z-092 (4188da8),
 Z-093 (2b904be, fold-in 3e54613), Z-094 (203a469), Z-095 (11d41cc),
-Z-096 (cfbca07) and Z-097 (3894db0) - all banked at the seat and
-re-read first-hand from disk on the merged seat tree by this lead.
-OWED: Z-098, the fair-fight leg (team-02, in flight, not banked;
-verified at build time: seat main is 3894db0 with no Z-098 commit,
-team-02 has merged the seat and holds no Z-098 artifact). Its
-section (3.8) names what is missing and invents no verdict and no
-number; a fold-in amendment completes it when the slice banks,
-exactly as Z-090 handled Z-087/Z-088. No number anywhere in this
-verdict rests on an unbanked source.
+Z-096 (cfbca07), Z-097 (3894db0) and Z-098 (1cfc4b8) - all banked
+at the seat and re-read first-hand from disk on the merged seat
+tree by this lead.
+Fold-in history, for the record: Z-098, the fair-fight leg,
+stood pending in this verdict's first commit (c9e690f) - at
+that build time it was unbanked (seat main 3894db0, no Z-098
+commit; team-02 held no Z-098 artifact), its section named
+what was missing and invented no verdict and no number, and
+the fold-in protocol of the original section 6 governed its
+completion. The slice has since banked and is FOLDED IN as
+FINAL by this amendment (section 3.8), exactly as Z-090
+handled Z-087/Z-088. No number anywhere in this verdict rests
+on an unbanked source.
 The headline the FINAL evidence supports: batching's second trial
 is closed - batching LOSES on this machine, for one named reason
 (the live-set metadata walk), and the batch API prototype TIES the
@@ -34,6 +49,12 @@ The real traces are canonical and replay-proven on both allocator
 legs; trace-driven tuning adopted NOTHING, because every candidate
 that helped the traces broke the synthetic oracle. The wave's one
 adoption is a build flag: -O3 replaces the shipped -O2 -flto set.
+The fair fight (folded in) changes exactly one standing:
+MimirAlloc's large_batch WIN over default glibc does not
+survive tuned glibc - with its cache raised, tuned glibc runs
+that workload 10.99x faster than MimirAlloc - and against the
+best tuned glibc per workload MimirAlloc records LOSS on all
+four oracle workloads.
 And preload's per-process tax is now priced: even a process that
 never allocates pays +17% for the interposition library, and a
 working short-lived process pays 2.30x.
@@ -100,12 +121,18 @@ SHORT-LIVED PROCESSES (final standing, section 4.4):
   +203 ms per 1,000 churn-shaped processes, +2.03 s per 10,000 -
   the concrete price on shell scripts and build farms.
 
-FAIR FIGHT (OWED, section 3.8):
-- Z-098 (glibc under its own best tunables) is not banked. Every
-  FINAL comparison in this verdict is against DEFAULT glibc.
-  Whether tuning glibc narrows any gap above is an open question
-  of record, not a gap this verdict papers over; the tuned-glibc
-  column the Z-107 closing table needs does not exist yet.
+FAIR FIGHT (final standing, section 4.5):
+- Against DEFAULT glibc, MimirAlloc records WIN on large_batch
+  only (98.07 vs 685.65 ns/op, 0.14x) and LOSS on the other
+  three oracle workloads. Against the BEST TUNED glibc per
+  workload (Z-098, folded in), MimirAlloc records LOSS on all
+  four: small_churn 29.27 vs 3.32 (8.82x), mixed_batch 29.35
+  vs 3.71 (7.91x), large_batch 98.07 vs 8.92 (10.99x),
+  mixed_lifecycle 517.89 vs 3.01 (172.06x). Tuning itself is a
+  TUNING WIN on large_batch (-98.70%) and mixed_lifecycle
+  (-57.90%) and a TIE on small_churn and mixed_batch. The
+  tuned-glibc column the Z-107 closing table needs now exists
+  in Z-098's recorded run.
 
 ## 2. Scope and honesty - read first
 
@@ -115,21 +142,24 @@ FAIR FIGHT (OWED, section 3.8):
   verdict run that graded both (Z-093), canonical traces from
   real programs (Z-094), tuning measured against traces (Z-095),
   the final flag matrix (Z-096), the short-lived process tax
-  (Z-097), the fair-fight leg (Z-098, OWED), and this verdict.
+  (Z-097), the fair-fight leg (Z-098, folded in), and this verdict.
 - The roadmap's Z-099 text asks for: batching's final standing
   and the trace standings, stated per workload with reasons;
   gate: verdict doc traceable to recorded runs. Section 1 is the
   plain statement, section 4 is the per-workload standings with
   reasons, and section 8 is the traceability index. The gate is
-  met for every FINAL section; the OWED section names itself.
+  met for every section. After the fold-in no pending sections
+  remain; the fold-in history is kept visible in sections 3.8
+  and 6 rather than hidden.
 - Every FINAL number below traces to a banked recorded run,
   re-read first-hand from disk on the merged seat tree by this
   lead. Grades use the roadmap's own WIN / TIE / LOSS vocabulary,
   this machine only. Load stamps travel with their numbers:
   where a source run was contended, the standing says so and no
   baseline is claimed from it.
-- Z-093 and Z-095 are cited TOGETHER wherever the trace-tuning
-  OWED is handled (section 5), exactly as Z-095's own record
+- Z-093 and Z-095 are cited TOGETHER wherever the carried
+  trace-tuning re-validation is handled (section 5), exactly
+  as Z-095's own record
   directs ("Wave 11's verdict slice should cite both when they
   bank"). Z-093's batch verdict does not block Z-095 (no shared
   surface), and Z-095 does not soften Z-093: batching lost on
@@ -205,7 +235,7 @@ mimir 1137 vs glibc 22 ns/pair (51.7x). burst8 again free
 batching LOSS again, reason named = the live-set metadata walk
 (Z-091 F-4). P-1 CLOSED, reaffirmed: this run's fault counts
 match Z-091's, so the pricing that closed P-1 stands.
-The prototype leg was OWED at the original run (Z-092 not yet
+The prototype leg was pending at the original run (Z-092 not yet
 in that tree - probed, not assumed: 0 batch hits in the public
 header, 0 batch exports) and is DISCHARGED by the fold-in run
 on the merged tree (quiet window, loadavg 0.28-0.48; prototype
@@ -220,7 +250,7 @@ pays 10.9x / 84.4x against its own interleaved shape and
 ~32x / ~114x against glibc's filed burst512, because it removes
 no walk (Z-092 doc S2). Minor faults identical to the per-op
 leg (2693 / 11528 at burst512): the P-1 pricing is unmoved.
-No OWED item remains for Z-093.
+No pending item remains for Z-093.
 
 ### 3.4 Z-094 - Real workload traces (banked 203a469)
 
@@ -267,8 +297,8 @@ slice's own record: Z-094 was not banked at build time, so the
 slice captured its OWN three real traces with the same workload
 shapes (python 261,664 replayed ops; git 70,957 of 73,801
 records; ollama first 300,000 of 2,064,384) and recorded
-re-validation against Z-094's canonical traces as OWED -
-carried, not discharged, in section 5 of this verdict.
+re-validation against Z-094's canonical traces as a carried
+item - carried, not discharged, in section 5 of this verdict.
 Quiet window throughout (loadavg 0.22-0.83). Results:
 - v1, TLS bin 32 / batch 16: trace WIN on ollama (-13.87%) and
   python (-5.37%), TIE on git (-1.34%); oracle WIN on
@@ -358,24 +388,64 @@ under glibc. The tax grows with exactly the work a short-lived
 process does; it is not a load-time-only curiosity. No defect
 was found in repo code by this slice.
 
-### 3.8 Z-098 - The fair-fight leg - OWED (not banked)
+### 3.8 Z-098 - The fair-fight leg (banked 1cfc4b8, FOLDED IN)
 
-OWED, in the Z-090 pattern. Z-098 (team-02) measures glibc
-under its own tunables (tcache size/count, mmap threshold) at
-their best for each workload, so the final tables face TUNED
-glibc, not only default glibc; its gate includes the
-tuned-glibc column existing in the Z-107 closing table's raw
-data. At this verdict's build time the slice is IN FLIGHT and
-NOT banked: seat main is 3894db0 (Z-001..Z-097), team-02 has
-merged the seat and holds no Z-098 artifact, and no Z-098
-number exists anywhere this lead may cite. This verdict
-therefore claims NOTHING about tuned glibc: every FINAL
-comparison above is against default glibc, and the fair-fight
-standing - whether tuning narrows, erases, or leaves any gap
-in sections 4.1-4.4 - is OWED in full. The fold-in protocol is
-section 6. Inventing a tuned-glibc figure here, or quietly
-letting default-glibc comparisons pose as the fair fight,
-would break the traceability gate this slice is graded on.
+Fold-in note: in this verdict's first commit (c9e690f) this
+section stood pending - team-02's slice was in flight and
+unbanked, no Z-098 artifact existed, and the verdict claimed
+nothing about tuned glibc. The slice then built on team-02
+(commit b95d2b6) and BANKED at the seat as 1cfc4b8 (4 files:
+tests/perf/probe_z098.c, tests/perf/run_z098.sh,
+tests/perf/summarize_z098.py,
+tests/perf/recorded_run_z13_z098.txt). This lead merged seat
+main 1cfc4b8 (merge b795757) and re-read the banked recorded
+run first-hand; the section is now FINAL. With this fold-in,
+Wave 11 is 9 of 9 slices FINAL.
+Z-098 measures glibc under its own tunables at their best for
+each workload - 15 configurations (default, an identical-leg
+duplicate control, the tcache_count axis 0/1/16/64, the
+tcache_max axis 512/4096/65536, the mmap_threshold axis
+4096/32768/1048576, and two combo configurations) plus the
+MimirAlloc leg, all on the byte-identical Wave-1 oracle
+workload code, with tunable engagement proven by probe before
+any grading. Run of record: attempt 6, 2026-11-13 08:07 EST,
+QUIET WINDOW (loadavg 0.29-0.35, 1-minute; the soak that
+contended attempts 1-5 had completed - those five attempts
+were refused by the identical-leg control and stand ungraded,
+never graded numbers). Identical-leg control PASS both
+invocations (worst 1.40% on large_batch in invocation 1,
+4.53% in invocation 2, both inside the Z-004 5% bound);
+cross-invocation worst drift 1.64%. Headline (invocation 1
+medians, ns/op):
+- small_churn: mimir 29.27 vs default glibc 3.34 (8.76x LOSS)
+  and vs best tuned 3.32 [gmm32k, mmap_threshold=32768]
+  (8.82x LOSS). Tuning TIE (-0.60%).
+- mixed_batch: mimir 29.35 vs default 3.72 (7.89x LOSS) and
+  vs best tuned 3.71 [gtmax64k, tcache_max=65536] (7.91x
+  LOSS). Tuning TIE (-0.27%).
+- large_batch: mimir 98.07 vs default 685.65 (0.14x WIN,
+  -85.70%) but vs best tuned 8.92 [gcombo_cache,
+  tcache_count=64 + tcache_max=65536] (10.99x LOSS). REASON
+  NAMED: default glibc pays the mmap path for every large
+  block; raising tcache_max to 65536 with tcache_count=64
+  lets tuned glibc cache and reuse those blocks at 8.92
+  ns/op - a -98.70% TUNING WIN that erases the default-leg
+  advantage MimirAlloc holds, while MimirAlloc's large path
+  still pays its per-op mapping/registry cost (98.07 ns/op).
+- mixed_lifecycle: mimir 517.89 vs default 7.15 (72.43x
+  LOSS) and vs best tuned 3.01 [gcombo_cache] (172.06x
+  LOSS). REASON NAMED: the per-allocation small-path cost
+  documented since Z-003/Z-024 (the registry/span walks)
+  dominates the lifecycle shape, and tuning widens the gap
+  (glibc gains -57.90% from the combo cache while
+  MimirAlloc pays the same fixed path cost).
+Roadmap gate MET: the full tunables matrix is recorded for
+both invocations in Z-098's recorded run, and the tuned-glibc
+column for the Z-107 closing table exists in its Z-107 RAW
+DATA blocks. The fair fight changes the standing on exactly
+one workload: against default glibc MimirAlloc records WIN
+on large_batch only; against the best tuned glibc per
+workload it records LOSS on all four.
 
 ## 4. Standings per workload, with reasons (the Z-099 gate)
 
@@ -423,22 +493,27 @@ would break the traceability gate this slice is graded on.
 | multi (eight ladder allocations) | LOSS | +112,804 ns/proc, +71.08%, 1.71x |
 | churn (1000 small cycles) | LOSS | +202,966 ns/proc, +130.25%, 2.30x; +203 ms / 1,000 procs, +2.03 s / 10,000 |
 
-### 4.5 Fair-fight standings (Z-098)
+### 4.5 Fair-fight standings (Z-098, FINAL)
 
-OWED - no standing exists. See sections 3.8 and 6.
+| Workload | mimir vs default glibc | mimir vs best tuned glibc | Tuning grade | Reason |
+|---|---|---|---|---|
+| small_churn | 29.27 vs 3.34 = 8.76x LOSS | 29.27 vs 3.32 [gmm32k] = 8.82x LOSS | TIE (-0.60%) | No tuned config beats default beyond noise; the small-path gap stands |
+| mixed_batch | 29.35 vs 3.72 = 7.89x LOSS | 29.35 vs 3.71 [gtmax64k] = 7.91x LOSS | TIE (-0.27%) | Same |
+| large_batch | 98.07 vs 685.65 = 0.14x WIN | 98.07 vs 8.92 [gcombo_cache] = 10.99x LOSS | TUNING WIN (-98.70%) | tcache_max=65536 + tcache_count=64 lets tuned glibc cache the large blocks; MimirAlloc still pays its per-op mapping/registry cost |
+| mixed_lifecycle | 517.89 vs 7.15 = 72.43x LOSS | 517.89 vs 3.01 [gcombo_cache] = 172.06x LOSS | TUNING WIN (-57.90%) | The per-allocation small-path cost (Z-003/Z-024 walks) dominates; tuning widens the gap |
 
 ## 5. Carried items - named, with owners, not hidden
 
-CARRIED OWED 1 - Z-095's canonical re-validation (owner: a
+CARRIED ITEM 1 - Z-095's canonical re-validation (owner: a
 follow-up measurement slice; NOT discharged by this verdict).
 Z-095 tuned against its own three captured traces because
 Z-094 was unbanked at its build time, and its record files the
-re-validation as OWED: re-run run_z095.sh measure with Z-094's
+re-validation as carried: re-run run_z095.sh measure with Z-094's
 canonical traces and confirm the no-adoption verdict and v1's
 near-miss under the canonical streams. Z-094 has since banked
 (203a469), so the input now exists - but no banked slice has
 performed that re-run, and this verdict slice derives no new
-measurement by design. The OWED is therefore CARRIED
+measurement by design. The item is therefore CARRIED
 explicitly, not discharged: until the re-run happens, Z-095's
 no-adoption verdict rests on its own three traces (named with
 their provenance in its recorded run), and any future claim
@@ -462,38 +537,50 @@ that could keep both. No number for it exists; this verdict
 files the proposal, it does not grade it.
 
 CLOSED in this wave, for the record: P-1 (Z-091, reaffirmed
-Z-093); the Z-093 prototype-leg OWED (discharged by its
-fold-in, S7); the Z-092-to-Z-093 grading OWED (discharged by
-Z-093). The only OWED items leaving Wave 11 are Z-098
-(section 3.8) and Carried OWED 1 above.
+Z-093); the Z-093 prototype-leg item (discharged by its
+fold-in, S7); the Z-092-to-Z-093 grading item (discharged by
+Z-093); and the Z-098 fair-fight item (discharged by this
+fold-in, section 3.8). The only carried item leaving Wave 11
+is Carried Item 1 above.
 
-## 6. Fold-in protocol for Z-098 (when it banks)
+## 6. Fold-in record for Z-098 (discharged by this amendment)
 
-In the Z-090 pattern (its Z-087/Z-088 fold-ins are the
-precedent): when Z-098 banks at the seat, a fold-in commit on
-this branch ("Z-099: Wave 11 verdict (fold-in)") will -
-(1) merge the seat main that carries Z-098 into this branch;
-(2) re-read the banked Z-098 doc and recorded run first-hand;
-(3) rewrite section 3.8 as FINAL with the tunables matrix and
-the tuned-glibc standings, add the fair-fight rows to
-section 4 (a new 4.5 replacing the OWED note), and restate
-any section 1 / section 9 line the tuned numbers change -
+The fold-in protocol filed here in the first commit followed
+the Z-090 pattern (its Z-087/Z-088 fold-ins are the
+precedent): on Z-098's banking, a fold-in commit on this
+branch ("Z-099: Wave 11 verdict (fold-in)") would (1) merge
+the seat main that carries Z-098 into this branch; (2)
+re-read the banked Z-098 recorded run first-hand; (3) rewrite
+section 3.8 as FINAL with the tunables matrix and the
+tuned-glibc standings, add the fair-fight rows to section 4
+(a new 4.5 replacing the pending note), and restate any
+section 1 / section 9 line the tuned numbers change -
 including, if tuned glibc narrows a gap, saying so at the
-same prominence as the original gap;
-(4) run the standing gate on the fold-in tree (expected GREEN
-4988/0/77) and record it in the fold-in recorded-run
-amendment.
-Until that commit exists, this verdict stands as FINAL for
-Z-091..Z-097 and OWED for Z-098, and no citation of it may
-drop the OWED qualifier for the fair-fight leg.
+same prominence as the original gap; (4) run the standing
+gate on the fold-in tree and record it in the fold-in
+recorded-run amendment.
+DISCHARGED by this amendment, step for step: (1) seat main
+1cfc4b8 merged as b795757, clean, no conflicts; (2) the
+banked recorded run (tests/perf/recorded_run_z13_z098.txt)
+re-read first-hand on the merged tree - every number in
+sections 1, 3.8 and 4.5 is taken from it; (3) section 3.8
+rewritten FINAL, section 4.5 filed with the fair-fight rows,
+and sections 1 and 9 restated - the large_batch reversal is
+stated in section 1 at the same prominence as the wave's
+other headlines; (4) the standing gate run on the fold-in
+tree and recorded in the fold-in amendment of
+tests/perf/recorded_run_z13_z099.txt. With this commit the
+verdict stands as FINAL for all of Z-091..Z-099.
 
 ## 7. What this verdict does NOT prove
 
-- Anything about TUNED glibc (Z-098 OWED, sections 3.8/6).
+- Anything about tuned glibc beyond Z-098's four oracle
+  workloads and its 15 recorded configurations (section 3.8):
+  no other workload faced tuned glibc in this wave.
 - That trace tuning could never win: Z-095 proves only that
   its three candidates, under its pre-registered bar, on its
   own traces, did not earn adoption; the canonical
-  re-validation is still owed (section 5) and the per-class
+  re-validation is still carried (section 5) and the per-class
   bin proposal is unmeasured.
 - That batching could never win: the Z-091 brief (span-grouped,
   one registry pass per span) is unimplemented. What is proven
@@ -532,7 +619,7 @@ FINAL sources, re-read first-hand on the merged tree:
   capture loadavg 0.91-1.29, no timings claimed).
 - Z-095 seat 11d41cc: tests/perf/recorded_run_z13_z095.txt
   (no adoption; v1 near-miss small_churn +6.13%; v2/v3
-  rejected; OWED canonical re-validation; quiet window).
+  rejected; carried canonical re-validation; quiet window).
 - Z-096 seat cfbca07: tests/perf/recorded_run_z13_z096.txt
   (run A2 of record + A3 confirmation: -O3 ADOPTED;
   -march=native and -flto not adopted) and the Makefile
@@ -541,14 +628,20 @@ FINAL sources, re-read first-hand on the merged tree:
   (tax table LOSS on all four shapes; 19,600 children, all
   exit 0; quiet window loadavg 0.38; two-invocation agreement
   within 0.9%).
-OWED source:
-- Z-098: no banked artifact exists at build time (seat main
-  3894db0, verified by git log on the seat and by team-02's
-  state). Nothing is cited from it.
+Folded-in source (this amendment):
+- Z-098 seat 1cfc4b8 (banked; team-02 commit b95d2b6, gate
+  GREEN): tests/perf/recorded_run_z13_z098.txt (tunables
+  matrix for both invocations; identical-leg control PASS
+  1.40% / 4.53% inside the 5% bound; cross-invocation worst
+  drift 1.64%; quiet window, loadavg 0.29-0.35; Z-107 RAW
+  DATA blocks carry the tuned-glibc column).
 This slice's own fresh executions: the baseline gate on the
 merged tree and the standing gate on the final tree, both
 GREEN 4988/0/77 (recorded run,
-tests/perf/recorded_run_z13_z099.txt).
+tests/perf/recorded_run_z13_z099.txt); the fold-in adds the
+baseline gate on the fold-in merged tree and the standing
+gate on the fold-in tree, both GREEN 4988/0/77 (fold-in
+amendment of the same recorded run).
 No new measurement is derived by this slice: every number is
 a synthesis of the sources above, in the Z-090 verdict pattern.
 
@@ -571,7 +664,7 @@ a synthesis of the sources above, in the Z-090 verdict pattern.
   NONE, with v1 as a recorded near-miss and v2/v3 rejected on
   named regressions (Z-095); the replay speed gap to glibc
   stands as a LOSS of record. Z-095's canonical re-validation
-  is CARRIED as an OWED (section 5), cited with Z-093 as its
+  is CARRIED as an item (section 5), cited with Z-093 as its
   record directs.
 - Build flags: -O3 ADOPTED as the shipped set (from -O2
   -flto); -march=native and -flto not adopted, each on named
@@ -580,10 +673,12 @@ a synthesis of the sources above, in the Z-090 verdict pattern.
   LOSS on every shape, +16.98% (never allocates) to +130.25%
   (working process), reasons decomposed into the load/init
   term and the per-allocation walk term (Z-097). FINAL.
-- The fair fight: OWED (Z-098 in flight, not banked). Wave 11
-  therefore stands 8 of 9 slices FINAL at this writing,
-  counting this verdict; the fold-in of section 6 completes
-  it when Z-098 banks.
+- The fair fight: FINAL (Z-098, folded in). Against default
+  glibc MimirAlloc records WIN on large_batch only; against
+  the best tuned glibc per workload it records LOSS on all
+  four oracle workloads, and the large_batch WIN is reversed
+  by tuning (10.99x LOSS). Wave 11 therefore stands 9 of 9
+  slices FINAL, counting this verdict.
 
 Bugs found/fixed by this slice: none in the allocator, the
 suite, or any source slice. The defects Wave 11 itself found
@@ -592,5 +687,5 @@ defects, Z-095's two harness defects, Z-093 fold-in's probe
 object-build fix, Z-092's stale comment and export-count
 fixes) and are restated where their sections carry them.
 This synthesis discovered no new defect; the gaps it carries
-(Z-098, the Z-095 canonical re-validation, the per-class bin
-proposal) are named with their owners in sections 3.8 and 5.
+(the Z-095 canonical re-validation, the per-class bin
+proposal) are named with their owners in section 5.
