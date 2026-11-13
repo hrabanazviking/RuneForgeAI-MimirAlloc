@@ -1,0 +1,157 @@
+=== Z-088 failure drills under preload ===
+date_utc: 2026-11-13T02:46:21Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+head: c57582893484959a30d376cb5b3301e21e0c86fb
+branch: yrsa/mimiralloc-team-04
+loadavg: 2.81 2.53 1.98 2/1386 40306
+page_size: 4096
+preload_target: build/libmimiralloc_interpose.so (Z-082 interposing variant)
+victim: build/drill_z088 (tests/abi/drill_z088.c; links no MimirAlloc artifact; -ldl only)
+safety: every victim is spawned by this runner from this worktree; kill drills signal only runner-spawned PIDs
+=== S1 build from clean ===
+  [ok] make lib-interpose + build/drill_z088 (log hidden_files/z088_build.log)
+-rwxr-xr-x 1 volmarr volmarr 20864 Nov 12 21:46 build/drill_z088
+-rwxr-xr-x 1 volmarr volmarr 51280 Nov 12 21:46 build/libmimiralloc_interpose.so
+interpose exports: 20 (expect 20 = 10 namespaced + 10 standard, Z-082)
+  [ok] interposing .so export set is exactly the Z-082 twenty
+=== S2 mechanism proof: plain leg is a glibc world ===
+  [ok] plain control exit 0 (rc=0)
+  [ok] plain control verdict is GLIBC (no preload, no MIMIR facts claimed)
+  [ok] plain control finds no mimir_stats_snapshot (contrast leg is honest)
+=== S3 control drill under preload (diag on, no fault) ===
+  [ok] control exit 0 (rc=0)
+  [ok] control: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] control: public stats snapshot resolved in the preloaded process
+  [ok] control: zero diag lines (no failure, no report)
+  [ok] control: detection/failure counters all zero (df=0 poison=0 meta=0 fail=0)
+  [ok] control: stats struct self-validates (struct_size=1056 sizeof=1056)
+  [ok] control: victim completed its script
+=== S4 corruption drill: double free, small block (diag on) ===
+  [ok] doublefree exit 0 (rc=0) -- the refusal is not a crash
+  [ok] doublefree: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] doublefree: public stats snapshot resolved in the preloaded process
+  [ok] doublefree: exactly one diag line
+  [ok] doublefree: diag line is op=free cause=double-free (LOUD)
+  [ok] doublefree: double_free_detections=1
+  [ok] doublefree: second free was refused and returned (block not freed twice)
+  [ok] doublefree: allocator healthy after the refusal
+=== S5 double free with the diag gate closed (D-011 posture) ===
+  [ok] doublefree (diag off) exit 0 (rc=0)
+  [ok] doublefree_off: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] doublefree_off: public stats snapshot resolved in the preloaded process
+  [ok] doublefree (diag off): zero diag lines -- emission is the D-011 opt-in
+  [ok] doublefree (diag off): detection still tallied (df=1) -- detection is always-on, loudness is gated
+=== S6 corruption drill: double free, calloc block (diag on) ===
+  [ok] doublefree-calloc exit 0 (rc=0)
+  [ok] dfcalloc: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] dfcalloc: public stats snapshot resolved in the preloaded process
+  [ok] doublefree-calloc: diag line is op=free cause=double-free (LOUD)
+  [ok] doublefree-calloc: double_free_detections=1
+=== S7 corruption drill: use-after-free write into the poison range (diag on) ===
+  [ok] poison exit 0 (rc=0)
+  [ok] poison: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] poison: public stats snapshot resolved in the preloaded process
+  [ok] poison: the class was re-served from the very block that was poisoned
+  [ok] poison: diag line is op=malloc cause=poison at handout (LOUD)
+  [ok] poison: poison_detections=1
+=== S8 corruption drill: overflow from a live block into a freed neighbour (diag on) ===
+  [ok] overflow exit 0 (rc=0)
+  [ok] overflow: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] overflow: public stats snapshot resolved in the preloaded process
+  [ok] overflow: an adjacent live pair was located at run time (layout facts in the drill log)
+  [ok] overflow: the class was re-served from the overflowed neighbour
+  [ok] overflow: diag line is op=malloc cause=poison at handout (LOUD)
+  [ok] overflow: poison_detections=1
+=== S9 bad-free drill: interior pointer (diag on) ===
+  [ok] badfree-int exit 0 (rc=0)
+  [ok] badfree_int: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] badfree_int: public stats snapshot resolved in the preloaded process
+  [ok] badfree-int: zero diag lines (SILENT -- classified below, filed F-Z088-1)
+  [ok] badfree-int: live_small 1 -> 1 -> 0 across alloc/interior-free/proper-free (live_small=1/1/0): the interior free freed nothing and broke nothing
+  [ok] badfree-int: the proper free afterwards is a clean first free (df=0, no false double-free)
+  [ok] badfree-int: 256-block pattern churn clean after the drill (no corruption)
+  CLASSIFICATION badfree-int: SILENT-SAFE -- silently ignored, state proven consistent in this run; loudness gap filed as F-Z088-1, owner Z-090
+=== S10 bad-free drill: foreign pointer (diag on) ===
+  [ok] badfree-foreign exit 0 (rc=0)
+  [ok] badfree_foreign: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] badfree_foreign: public stats snapshot resolved in the preloaded process
+  [ok] badfree-foreign: zero diag lines (SILENT -- classified below, filed F-Z088-1)
+  [ok] badfree-foreign: 256-block pattern churn clean after the drill (no corruption)
+  CLASSIFICATION badfree-foreign: SILENT-SAFE -- silently ignored, state proven consistent in this run; loudness gap filed as F-Z088-1, owner Z-090
+=== S11 bad-free drill: double free, large mapping-path block (diag on) ===
+  [ok] badfree-large exit 0 (rc=0)
+  [ok] badfree_large: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] badfree_large: public stats snapshot resolved in the preloaded process
+  [ok] badfree-large: zero diag lines (SILENT -- classified below, filed F-Z088-2)
+  [ok] badfree-large: live_map alloc=2 free1=1 free2=1 -- first free retired the mapping, second free changed no state
+  [ok] badfree-large: no double-free tally on the large course (df=0; detection is small-path only by Z-070's design)
+  [ok] badfree-large: 256-block pattern churn clean after the drill (no corruption)
+  CLASSIFICATION badfree-large: SILENT-BY-DESIGN -- the Z-070 scope exclusion (large mapping-path blocks carry no membership/poison guard) behaving as banked; restated for the verdict as F-Z088-2, owner Z-090
+=== S12 failure drill: unsatisfiable requests (diag on) ===
+  [ok] huge exit 0 (rc=0) -- failure NULLs, not crashes
+  [ok] huge: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] huge: public stats snapshot resolved in the preloaded process
+  [ok] huge: exactly three diag lines, one per refused request
+  [ok] huge: malloc(2^62) refused LOUD (op=malloc cause=backing)
+  [ok] huge: calloc(2^32,2^32) refused LOUD (op=calloc cause=arithmetic, req=SIZE_MAX)
+  [ok] huge: reallocarray(2^33,2^33) refused LOUD (op=realloc cause=arithmetic, req=SIZE_MAX)
+  [ok] huge: malloc returned NULL
+  [ok] huge: calloc returned NULL (no wrapped allocation)
+  [ok] huge: reallocarray returned NULL (no wrapped allocation)
+  [ok] huge: alloc_failures=3 (one per refusal; posture nulls are a separate counter)
+  [ok] huge: allocator healthy after the refusals
+=== S13 kill drill: SIGKILL mid-churn ===
+victim pid=40582 (spawned by this runner; no other process is signalled)
+  [ok] kill-sigkill: victim started under preload (CHURN-READY)
+  [ok] kill-sigkill: interposition proven in the victim
+  [ok] kill-sigkill: victim observed heartbeating mid-churn before the signal
+  [ok] kill-sigkill: wait status 137 = 128+SIGKILL (rc=137)
+  [ok] kill-sigkill: victim PID is gone after the reap
+=== S14 kill drill: SIGTERM mid-churn ===
+victim pid=40592 (spawned by this runner; no other process is signalled)
+  [ok] kill-sigterm: victim started under preload (CHURN-READY)
+  [ok] kill-sigterm: interposition proven in the victim
+  [ok] kill-sigterm: victim observed heartbeating mid-churn before the signal
+  [ok] kill-sigterm: wait status 143 = 128+SIGTERM (rc=143)
+  [ok] kill-sigterm: victim PID is gone after the reap
+=== S15 post-kill control: a fresh preloaded process is uncontaminated ===
+  [ok] post-kill control exit 0 (rc=0)
+  [ok] postkill: interposition proven (PRELOAD-VERDICT: MIMIR)
+  [ok] postkill: public stats snapshot resolved in the preloaded process
+  [ok] post-kill control: zero diag lines
+  [ok] post-kill control: fresh process counters clean (df=0 poison=0) -- a killed peer leaves nothing behind
+=== S16 classification summary and defect filings ===
+LOUD through the diag channel (MIMIRALLOC_DIAG=1), victim surviving, counters moving:
+  doublefree        op=free cause=double-free    df 0->1      (S4)
+  doublefree-calloc op=free cause=double-free    df 0->1      (S6)
+  poison (UAF write) op=malloc cause=poison      poison 0->1  (S7)
+  overflow (live->freed neighbour) op=malloc cause=poison    poison 0->1 (S8)
+  huge malloc       op=malloc cause=backing      fail 0->1    (S12)
+  huge calloc       op=calloc cause=arithmetic   fail 1->2    (S12)
+  huge reallocarray op=realloc cause=arithmetic  fail 2->3    (S12)
+DETECTION without loudness (by the D-011 ruling, not a drill failure):
+  doublefree with MIMIRALLOC_DIAG unset: df 0->1, zero diag lines (S5)
+SILENT paths (no diag line, no counter) -- each filed here with an owner slice:
+  F-Z088-1 badfree-int + badfree-foreign: a free of a pointer the allocator
+    cannot find (interior or foreign) returns silently. Non-corruption is
+    PROVEN in this run (live counts unchanged; the original block frees
+    properly afterwards; 256-block pattern churn clean). The public header
+    already declares these calls undefined behaviour with no defined
+    error, so the gap is loudness only: the roadmap's 'fail loudly'
+    sentence does not hold for them. OWNER: Z-090 (Wave 10 verdict) --
+    restate for preload users; any code change is a later hardening
+    slice's to propose, not this slice's to smuggle in.
+  F-Z088-2 badfree-large: a second free of a large mapping-path block is
+    silently ignored. This is Z-070's banked scope exclusion (membership
+    + poison guard the small classes only) behaving as designed; the
+    mapping is already retired, so the ignore is state-safe (live_map
+    proof in S11). OWNER: Z-090 -- restate beside F-Z088-1.
+KILL drills: SIGKILL wait 137, SIGTERM wait 143, victims reaped, PIDs
+  gone, post-kill control clean (S13-S15). The allocator holds no
+  cross-process state, so a killed preloaded process contaminates
+  nothing -- proven, not assumed.
+drills: total=15 ok=15 failed=0
+loadavg at end: 2.81 2.53 1.98 2/1386 40622
+Z-088 RESULT: PASS

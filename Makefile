@@ -2406,3 +2406,28 @@ test-z087: $(IPOLIB)
 	bash tests/abi/run_z087.sh
 
 .PHONY: test-z087
+# ------------------------------------------------------------------
+# Z-088 (Wave 10): failure drills under preload
+# (tests/abi/run_z088.sh) -- corruption and kill drills
+# inside processes preloaded with the Z-082 interposing
+# variant; the victim (tests/abi/drill_z088.c) is an
+# ordinary glibc consumer linked against no MimirAlloc
+# artifact (-ldl only, for the dlsym-resolved public
+# statistics snapshot), compiled -fno-builtin so no
+# builtin malloc-family assumption can rewrite the
+# drill calls. The runner is the battery and its stdout
+# is the recorded run
+# (tests/abi/recorded_run_z13_z088.txt). Standalone via
+# `make test-z088`; NOT part of `make test` (standing
+# gate counts untouched).
+# ------------------------------------------------------------------
+$(BUILD)/drill_z088.o: tests/abi/drill_z088.c | $(BUILD)
+	$(CC) $(CFLAGS) -fno-builtin -c tests/abi/drill_z088.c -o $@
+
+$(BUILD)/drill_z088: $(BUILD)/drill_z088.o
+	$(CC) $(CFLAGS) $(BUILD)/drill_z088.o -o $@ -ldl
+
+test-z088: $(IPOLIB) $(BUILD)/drill_z088
+	bash tests/abi/run_z088.sh
+
+.PHONY: test-z088
