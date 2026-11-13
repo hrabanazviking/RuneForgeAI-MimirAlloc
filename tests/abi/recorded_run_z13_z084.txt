@@ -1,0 +1,126 @@
+=== Z-084 LD_PRELOAD smoke battery ===
+date_utc: 2026-11-13T01:21:52Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+head: 86fe2105cf6f84cc4afce5b728acc7b3fa72f33b
+branch: yrsa/mimiralloc-team-05
+loadavg: 1.89 1.86 1.09 1/1279 1913834
+page_size: 4096
+preload_target: build/libmimiralloc_interpose.so (Z-082 interposing variant)
+programs: GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu); git version 2.55.0; Python 3.14.8; sort (uutils coreutils) 0.12.0; sha256sum (uutils coreutils) 0.12.0
+=== S1 build from clean ===
+  [ok] make lib-interpose + probe + repo test binaries (log hidden_files/z084_build.log)
+-rwxr-xr-x 1 volmarr volmarr 51280 Nov 12 20:21 build/libmimiralloc_interpose.so
+interpose exports: 20 (expect 20 = 10 namespaced + 10 standard, Z-082)
+=== S2 preload mechanism proof (Z-082 probe pair) ===
+plain run: PRELOAD-VERDICT: GLIBC
+  [ok] plain probe verdict is GLIBC
+preloaded run: PRELOAD-VERDICT: MIMIR
+  [ok] preloaded probe verdict is MIMIR (interposition binds)
+  [ok] negative control: bogus preload path produces a loader error (harness notices non-loading)
+=== S3 coreutils ===
+-- coreutils (log hidden_files/z084_coreutils.log) --
+  [ok] coreutils: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] coreutils: plain control leg exit 0 (rc=0)
+  [ok] coreutils: preloaded leg exit 0 (rc=0)
+  [ok] coreutils: preloaded stdout byte-identical to plain leg
+  [ok] coreutils: program-specific check
+=== S4 git ===
+-- git (log hidden_files/z084_git.log) --
+  [ok] git: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] git: plain control leg exit 0 (rc=0)
+  [ok] git: preloaded leg exit 0 (rc=0)
+  [ok] git: preloaded stdout byte-identical to plain leg
+  [ok] git: program-specific check
+=== S5 python3 ===
+-- python3 (log hidden_files/z084_python3.log) --
+  [ok] python3: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] python3: plain control leg exit 0 (rc=0)
+  [ok] python3: preloaded leg exit 0 (rc=0)
+  [ok] python3: preloaded stdout byte-identical to plain leg
+  [ok] python3: program-specific check
+=== S6 bash ===
+-- bash (log hidden_files/z084_bash.log) --
+  [ok] bash: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] bash: plain control leg exit 0 (rc=0)
+  [ok] bash: preloaded leg exit 0 (rc=0)
+  [ok] bash: preloaded stdout byte-identical to plain leg
+  [ok] bash: program-specific check
+=== S7 repo's own test binaries ===
+linkage test_smoke: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+linkage test_core: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+linkage test_b007: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+linkage test_c005: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+linkage test_c006: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+linkage test_c007: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+linkage test_c008: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+linkage test_d004: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /
+note: repo binaries are LIBOBJS-direct-linked for their mimir_* calls; preload coverage here = their libc malloc-family calls interposed + two-allocator coexistence, proven loaded per binary by LD_DEBUG=files below.
+-- repo_test_smoke (log hidden_files/z084_repo_test_smoke.log) --
+  [ok] repo_test_smoke: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_smoke: plain control leg exit 0 (rc=0)
+  [ok] repo_test_smoke: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_smoke: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_smoke: program-specific check
+-- repo_test_core (log hidden_files/z084_repo_test_core.log) --
+  [ok] repo_test_core: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_core: plain control leg exit 0 (rc=0)
+  [ok] repo_test_core: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_core: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_core: program-specific check
+-- repo_test_b007 (log hidden_files/z084_repo_test_b007.log) --
+  [ok] repo_test_b007: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_b007: plain control leg exit 0 (rc=0)
+  [ok] repo_test_b007: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_b007: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_b007: program-specific check
+-- repo_test_c005 (log hidden_files/z084_repo_test_c005.log) --
+  [ok] repo_test_c005: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_c005: plain control leg exit 0 (rc=0)
+  [ok] repo_test_c005: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_c005: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_c005: program-specific check
+-- repo_test_c006 (log hidden_files/z084_repo_test_c006.log) --
+  [ok] repo_test_c006: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_c006: plain control leg exit 0 (rc=0)
+  [ok] repo_test_c006: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_c006: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_c006: program-specific check
+-- repo_test_c007 (log hidden_files/z084_repo_test_c007.log) --
+  [ok] repo_test_c007: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_c007: plain control leg exit 0 (rc=0)
+  [ok] repo_test_c007: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_c007: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_c007: program-specific check
+-- repo_test_c008 (log hidden_files/z084_repo_test_c008.log) --
+  [ok] repo_test_c008: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_c008: plain control leg exit 0 (rc=0)
+  [ok] repo_test_c008: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_c008: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_c008: program-specific check
+-- repo_test_d004 (log hidden_files/z084_repo_test_d004.log) --
+  [ok] repo_test_d004: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_d004: plain control leg exit 0 (rc=0)
+  [ok] repo_test_d004: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_d004: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_d004: program-specific check
+=== S8 LD_PRELOAD probe binary as battery subject ===
+-- repo_test_z082_pre (log hidden_files/z084_repo_test_z082_pre.log) --
+  [ok] repo_test_z082_pre: interposing .so proven loaded (LD_DEBUG=files)
+  [ok] repo_test_z082_pre: plain control leg exit 0 (rc=0)
+  [ok] repo_test_z082_pre: preloaded leg exit 0 (rc=0)
+  [ok] repo_test_z082_pre: preloaded stdout byte-identical to plain leg
+  [ok] repo_test_z082_pre: program-specific check
+=== S9 known-divergence battery (D-013 zero-size contract: pinned, triaged, not hidden) ===
+  [ok] divergence control: plain anchored grep works
+  [ok] divergence pinned: preloaded anchored grep exits 2 with 'Memory exhausted' (rc=2)
+  [ok] divergence boundary: preloaded UNanchored grep works
+reproducer plain: anchored=0 unanchored=0
+  [ok] reproducer control: plain regcomp anchored=0 unanchored=0
+reproducer preloaded: anchored=12 unanchored=0
+  [ok] reproducer pinned: preloaded regcomp anchored=12 (REG_ESPACE) unanchored=0
+=== S10 triage ===
+battery failures: NONE -- no triage owed.
+=== Z-084 BATTERY RESULT: PASS ===
+loadavg_at_end: 1.75 1.84 1.09 1/1279 1914699
