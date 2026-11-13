@@ -1,0 +1,58 @@
+MimirAlloc Z13 recorded run - Z-090 Wave 10 verdict (PARTIAL-FINAL: Z-087/Z-088 OWED)
+slice: Z-090 - Wave 10 verdict (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md: where preload is safe today, where it is not, and the evidence for each - stated plainly enough for a user to decide; gate: verdict doc traceable to battery reports)
+date: 2026-11-12 (build session, America/Indiana/Indianapolis; baseline and final standing gates the same session)
+base: merge 3a367bc of seat main cb5bf36 (banked Z-001..Z-086, ls-remote verified cb5bf3666a03d7d79a0429dc561b398d94377b6a) into yrsa/mimiralloc-team-05 - clean merge, no conflicts; the merge added exactly the banked Z-085 + Z-086 artifacts (7 files, +632) on top of this branch banked Z-084 commit fcb31fc. Baseline standing gate on the merged tree before any Z-090 edit: GREEN 4988/0/77 (hidden_files/z090_baseline_gate.log).
+host: purpleraider (ASUS ROG Flow Z13, AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, x86-64, 4 KiB pages, 128 GB UMA), Ubuntu 26.10, kernel 7.3.0-10-generic, glibc 2.44 (host truth annexed at the end of this file, captured 2026-11-13T02:06:19Z).
+status: PARTIAL-FINAL. FINAL sections rest on Z-082..Z-086 banked recorded runs and Z-089 committed 615c935 (team-06, gate GREEN, unbanked, queues behind Z-087/Z-088). OWED: Z-087 (draft recorded run on disk in team-03 worktree, uncommitted, no doc, no commit - quoted as DRAFT only) and Z-088 (no artifacts on disk in team-04 worktree beyond the baseline gate GREEN 4988/0/77). Fold-in amendment follows their banking, in the Z-063 pattern. No number in a FINAL section rests on an unbanked or draft source except Z-089, whose committed status is stated wherever it is used.
+artifacts: docs/Z13_WAVE10_VERDICT.md + this recorded run. No runner, no production source, no Makefile change: the verdict derives no new measurement - every number is a synthesis of the sources below, re-read first-hand from disk; the only fresh executions are the baseline and final standing gates.
+method: synthesis. The lead read, on-device and first-hand: the roadmap Wave 10 sections Z-082..Z-090; docs/Z13_WAVE08_VERDICT.md + tests/perf/recorded_run_z13_z072.txt (house form and the FINAL/OWED discipline); the seat WAVE_PLAN.md banking entries for Z-082..Z-086; the banked recorded runs and docs for Z-082, Z-083, Z-084, Z-085, Z-086 on the merged tree; docs/DECISION_LEDGER.md D-013/D-015/D-016 and docs/Z13_Z078_ZERO_SIZE_ERRNO.md for the D-013 restatement; team-06 commit 615c935 doc + recorded run for Z-089; team-03 worktree state + draft recorded run for Z-087; team-04 worktree state for Z-088 (verified twice: at evidence gathering and again immediately before writing - unchanged).
+load state: SHARED HOST, quiet window for this slice fresh executions (loadavg 0.16/0.61/1.20 at merge, 0.18/0.37/0.94 at host-truth capture). Load is immaterial to the gates (exact correctness counters). Every cited quantity carries its source run load stamp, restated in the verdict where it matters (Z-085 quiet ~0.5-0.67; Z-087 draft contended ~2.0-4.4, flagged NOT a baseline).
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z090_final_gate.log: GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN, exit 0 - identical to the merged-tree baseline and to the Z-001 baseline, as expected: this slice adds no tests and changes no production source (verdict slice: docs + tests/perf recorded run only).
+
+=== EVIDENCE INDEX (what the verdict takes from each source) ===
+Z-082 23a05d0 (banked) recorded_run_z13_z082.txt + Z13_Z082_INTERPOSING_VARIANT.md + D-015 - interposing variant PASS: exactly 20 exports (10 namespaced + 10 standard: malloc calloc realloc free cfree aligned_alloc posix_memalign reallocarray malloc_usable_size malloc_trim); default library proven to carry NONE of the standard names (exactly 10 at its base); glibc audit with no unnamed symbol; probe pair plain GLIBC / preload MIMIR; interpose sha256 9a6836d5318fb3a269fcbaeb7b6b03834bd88cb375f38a1d88677fd5188e2491.
+Z-083 ad63bb9 (banked) recorded_run_z13_z083.txt + Z13_Z083_GAP_CLOSURE.md + D-016 - gap closure PASS: test_z083 301/0, dyn+cpp PASS; mimir_memalign/mimir_valloc/mimir_pvalloc added, default library 10 -> 13 exports; gap list remainder filed as ASSESSED-with-reason or proven UNREACHABLE (libc internals); strdup class assessed, not shimmed.
+Z-084 39a7fc8 (banked) recorded_run_z13_z084.txt + Z13_Z084_PRELOAD_BATTERY.md - smoke battery PASS 74 ok / 0 FAIL, 13/13 subjects under the three-part pass rule; finding T-084-1 CONTRACT-DIVERGENCE-D013-ZERO-SIZE (anchored regcomp / grep leading-^ fails under preload, REG_ESPACE reproducer pinned in runner S9); disposition NOT a defect, no fix owed, D-013 user restatement assigned to Z-090 and discharged in verdict section 4.
+Z-085 9a568b2 (banked) recorded_run_z13_z085.txt - correctness PASS exact on both workloads (Python checksum identical all reps/modes; Ollama response + context byte-identical incl. confirmatory leg); Python LOSS: TOTAL median 0.2772 vs 1.3876 = 5.01x, churn 5.59x, peak +11.5 pct; Ollama: load LOSS 0.542 vs 12.920/12.093 (~22-24x, reproduced), prompt_eval TIE, eval near-TIE; runner model-store defect found + fixed in scope; quiet window.
+Z-086 cb5bf36 (banked) recorded_run_z13_z086.txt + Z13_Z086_DESKTOP_BATTERY.md - desktop battery PASS 15 ok / 0 FAIL under full containment; kcalc/kate/dolphin/gwenview/okular/plasmawindowed-digitalclock PASS both modes; plasmashell ENV-ONLY (identical glibc segfault, NOT TESTED as evidence); kwrite MISSING-APP; live plasmashell/kwin PIDs identical before/after; rollback = unset LD_PRELOAD re-proven.
+Z-089 615c935 (committed team-06, gate GREEN 4988/0/77, UNBANKED) recorded_run_z13_z089.txt + Z13_Z089_ROLLBACK_NEVER_PRELOAD.md - rollback drill PASS 24 ok / 0 FAIL: poison-preload harness rc 3 x2 deterministic; env diff exactly 1 line (LD_PRELOAD removed); rollback rc 0 byte-identical to glibc control; live PID1/sddm/plasmashell/kwin unchanged; nine-entry never-preload list (verdict section 5); env-dump runner bug found + fixed in scope.
+Z-087 OWED (draft only) team-03 tests/abi/recorded_run_z13_z087.txt, date_utc 2026-11-13T01:52:38Z, head 8382d38, UNCOMMITTED, no doc - draft states 4 legs exit 0, token streams identical (1 distinct), Aesir tree unchanged, FAIL=0 RUNNER_EXIT 0, timings at loadavg ~2.0-4.4 (contended, not baselines). NOT evidence of record; verdict section 7.1.
+Z-088 OWED (not built) team-04: merge c575828 + baseline gate GREEN only; no runner, no recorded run, no doc. Verdict section 7.2 claims nothing.
+D-013 DECISION_LEDGER.md D-013 + Z13_Z078_ZERO_SIZE_ERRNO.md - zero-size = defined non-failure refusal (NULL / ENOMEM-with-ptr-unchanged for posix form), counted in alloc_posture_nulls never alloc_failures; realloc(p,0) returns NULL, block live and caller-owned (recorded deviation from glibc); errno never promised, left as on entry on checked refusals. Restated for users in verdict section 4.
+
+=== VERDICT - THE WAVE 10 STANDINGS OF RECORD ===
+Safe today (correctness, FINAL): one-shot CLI subjects of the Z-084 battery; real Python churn and short Ollama generation with exact output equality (Z-085); contained KDE apps (Z-086); rollback one-variable proven (Z-089).
+Not safe / known break (FINAL): anchored glibc regcomp callers under preload (T-084-1, D-013); the nine never-preload classes (Z-089).
+Bad for speed (FINAL): Python 5.01x LOSS, Ollama load ~22-24x LOSS, generation TIE (Z-085). No WIN anywhere in Wave 10.
+Unknown (OWED): Aesir engine under preload (Z-087 draft only); failure drills under preload (Z-088 not built). Wave 10 stands 7 of 9 slices FINAL at this writing counting this verdict; fold-in completes it when Z-087/Z-088 bank.
+
+Bugs found/fixed: none in the allocator or the suite by this synthesis. Wave 10 in-slice fixes stand as filed (Z-085 runner, Z-089 runner); T-084-1 is a contract divergence, not a defect. Carried gaps are named with owners in verdict sections 7-8.
+Team structure: team-05 lead + the six Mythic Engineering roles run SEQUENTIALLY by the lead (no parallel sub-agents spawned this run; recorded plainly per the muster rule): evidence audit, safety review, performance review, contract/D-013 review, ops/rollback review, gate/commit-scope review. All device work in this worktree only; no push from here; banking is the keeper at the seat, Yrsa identity only, in roadmap order after Z-087/Z-088/Z-089.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured at this build, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T02:06:19Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 68%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.18 0.37 0.94
