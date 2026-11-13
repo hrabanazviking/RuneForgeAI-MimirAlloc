@@ -1,0 +1,48 @@
+MimirAlloc Z13 recorded run - Z-085 Python and Ollama-class workload
+slice: Z-085 - Python and Ollama-class workload (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md: a real Python process (import storm + allocation churn) and a short Ollama run under preload: correctness plus perf delta; gate: workload report; deltas vs unpreloaded recorded)
+date: 2026-11-12 (finishing session, America/New_York; run of record 20:09-20:10 EST, confirmatory preload Ollama leg 20:10 EST, standing gate same session)
+base: merge e1e50fe of seat main ad63bb9 (banked Z-001..Z-083, ls-remote verified ad63bb92625bd515746467b62fa8fa0013502f32) into yrsa/mimiralloc-team-01 - clean merge, no conflicts, on top of this branch merge b3bccdf of seat 23a05d0 (Z-082, the interposing variant whose build/libmimiralloc_interpose.so is the preload under test). Post-merge tree differs from seat only by this slice artifacts plus team-local CAMPAIGN_STATE.md (never banked).
+host: purpleraider (ASUS ROG Flow Z13, AMD RYZEN AI MAX+ 395 w/ Radeon 8060S, x86-64, 4 KiB pages, 128 GB UMA), Ubuntu 26.10, kernel 7.3.0-10-generic, glibc 2.44, Python 3.14.8, ollama 0.40.16, model qwen2.5:0.5b (397 MB, Q4_K_M, digest a8b0c5157701).
+status: FINAL. Runner correctness PASS, exit 0 (hidden_files/z085_run2.log, z085_run2.exit). Standing gate GREEN on the final tree (below).
+artifacts: tests/perf/workload_z085.py (the Python workload), tests/perf/run_z085.sh (the runner, fixed in this finishing session - see ROOT CAUSE), this recorded run. No production source changed; no Makefile change.
+
+=== ROOT CAUSE OF THE FIRST RUN FAIL, AND THE FIX ===
+The prior lead run (hidden_files/z085_run.log, 19:49 EST, exit 1) completed all six Python legs correctly but both Ollama legs returned the JSON error: model qwen2.5:0.5b not found, although ollama list on the host shows the model. Root cause, verified first-hand this session: the host ollama service is a systemd system service running as user ollama with a drop-in override Environment OLLAMA_MODELS=/mnt/vault/models/ollama (systemctl show ollama -p Environment). ollama list talks to that service on port 11434 and therefore sees the vault store. The runner started its private servers with only OLLAMA_HOST=127.0.0.1:11499 set, so they defaulted to the login user store ~/.ollama/models, which is empty (its manifests tree was created empty by those very server starts at 19:48-19:49). The model was never missing; the private servers were looking in a different store.
+Fix (runner only, in scope): run_z085.sh now discovers the service OLLAMA_MODELS via systemctl show (fallback: /mnt/vault/models/ollama if present, else the per-user default), exports it, prints it, and passes OLLAMA_MODELS explicitly to both private-server legs; after readiness it fetches /api/tags into hidden_files/z085_reps/ollama_<mode>_tags.json and FAILs the leg if the model is not visible there. The vault store is world-readable and was only read: no model was pulled, deleted, or copied, and the user :11434 service was never stopped or reconfigured (one read-only generate against :11434 during diagnosis confirmed the host service healthy).
+
+=== PYTHON LEG (tests/perf/workload_z085.py; 3 reps per mode) ===
+Workload: import storm over 46 stdlib modules, then allocation churn (300,000 seeded mixed dict/bytes/str/list objects in a 4096-object rolling window, plus 24 x ~4 MiB page-touched bytearrays, at most 6 live). Correctness oracle: SHA-256 checksum accumulated over the churn, compared across all reps and modes.
+correctness: PASS - all 6 reps exit 0; distinct checksums across 6 reps = 1 (c94f05b807367d651752da017f1a7786cce671117e6a64cdb0c280aa6348e7fb in every rep, plain and preload). No crash, no corruption signature under preload.
+plain   TOTAL s:      0.2820 / 0.2772 / 0.2737   median 0.2772
+preload TOTAL s:      1.3797 / 1.3876 / 1.5182   median 1.3876
+plain   imports s:    0.0440 / 0.0411 / 0.0370   median 0.0411
+preload imports s:    0.0614 / 0.0646 / 0.0654   median 0.0646
+plain   churn s:      0.2380 / 0.2361 / 0.2367   median 0.2367
+preload churn s:      1.3183 / 1.3230 / 1.4528   median 1.3230
+plain   PEAK KiB:     68816 / 68340 / 68156      median 68340
+preload PEAK KiB:     76192 / 76016 / 76588      median 76192
+deltas (median, preload vs plain): TOTAL 5.01x slower; imports 1.57x slower; churn 5.59x slower; peak RSS +7852 KiB (+11.5 percent). The first (failed-Ollama) run measured the same Python picture independently (plain TOTAL ~0.29 s, preload ~1.45-1.47 s, peaks ~68-69k vs ~75-76k KiB), so the Python deltas are reproduced across two full runs, not a single window.
+grade: Python perf LOSS (honest, reason named): the interposing allocator is markedly slower than glibc on small-object churn and carries ~11.5 percent more peak RSS on this workload; correctness is exact.
+
+=== OLLAMA LEG (qwen2.5:0.5b, private server on :11499, seeded, temperature 0, num_predict 16) ===
+correctness: PASS both modes - /api/tags lists qwen2.5:0.5b on the private servers; both generations return done:true with response text exactly: The capital of France is Paris. - and byte-identical context arrays in plain, preload, and the confirmatory preload leg. Both private servers stopped after their leg; port 11499 verified free after each leg; the :11434 user service untouched throughout.
+plain   generate wall 0.620 s; total_duration 0.611 s; load_duration 0.542 s; prompt_eval 0.0296 s (34 tokens); eval 0.0367 s (8 tokens); server RSS 44484 KiB, children RSS 515248 KiB
+preload generate wall 13.001 s; total_duration 12.993 s; load_duration 12.920 s; prompt_eval 0.0244 s (34 tokens); eval 0.0409 s (8 tokens); server RSS 44920 KiB, children RSS 533740 KiB
+confirmatory preload leg (fresh private preloaded server, minutes later): total_duration 12.172 s; load_duration 12.093 s; eval 0.0411 s; response and context identical again.
+deltas: generation eval is near-TIE (0.0367 s plain vs 0.0409 / 0.0411 s preload, +11-12 percent on 8 tokens, inside run-to-run spread for a leg this short) and prompt_eval is a TIE within noise; the whole Ollama delta sits in model LOAD: load_duration 0.542 s plain vs 12.920 s and 12.093 s preload in two independent legs - a reproducible ~22-24x load cost, not a cache artifact (the plain leg ran first and warmed the page cache the preload legs then read through). Children RSS +18492 KiB (+3.6 percent) under preload.
+grade: Ollama perf LOSS on load, TIE on generation (honest, reason named): the interposer costs ~12 s on every cold model load in the Ollama/llama.cpp path while leaving steady generation essentially unchanged.
+
+=== VERDICT ===
+Gate as written: workload report filed (this file); deltas vs unpreloaded recorded (above). Correctness PASS on both workloads under the Z-082 interposing preload, with exact checksum / response / context equality. Perf grades, this machine only: Python LOSS (TOTAL 5.01x, churn 5.59x, peak +11.5 percent); Ollama load LOSS (~22-24x load_duration, reproduced twice), Ollama generation TIE. No WIN is claimed anywhere in this slice.
+
+=== LOAD HONESTY ===
+SHARED HOST, quiet window: loadavg 0.56 / 0.66 / 0.53 at run start, 0.65 / 0.67 / 0.54 at run end, 0.50 / 0.63 / 0.53 at the confirmatory leg; the top-CPU table at start shows no cross-campaign benchmark (the Aesir mojo process that contended the first run at 19:49 had finished). Deltas of 5x and 22x are far outside any plausible contention noise at this load; the eval near-TIE is stated as a tie precisely because its leg is short.
+
+=== DEFECTS ===
+No allocator defect found: correctness was exact on every leg. One runner defect found and fixed in scope (the Ollama model-store discovery above; the first run FAIL was a runner environment bug, not an allocator or host failure). The two perf losses are measurements of record for the interposing build, not defects triaged here: they belong to the allocator perf lines already tracked by the roadmap perf waves, and no code change is made on the strength of a single-workload slice. Nothing is left unfixed inside this slice scope.
+
+=== GATE ===
+scripts/z13/run_gate.sh on the final tree (hidden_files/z085_gate.log; gate log gate_20261113T011058Z.log): GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN, exit 0 - identical to the Z-001 baseline, as expected: this slice adds no suite tests and changes no production source.
+
+Team structure: fresh finishing lead (keeper-dispatched after the prior lead timed out mid-build) + Mythic Engineering roles: one parallel sub-agent (Ollama root-cause review; ranked the systemd custom-store hypothesis first, confirmed on-device) and the remaining roles run sequentially by the lead (runner repair, workload verification, run-of-record execution, delta grading, gate verification, ledger/commit review) - parallel writers on one worktree are forbidden, recorded plainly per the muster rule. All device work in this worktree only; no push from here; banking is the keeper at the seat, Yrsa identity only.
+hashes at run of record: workload_z085.py sha256 b387d576dc3d86a3600de04acb813f21b1ade867235012bc46618f9efb11f1f5; run_z085.sh (fixed) sha256 79fc6d3d1122579e37eaf2def8e85be4d1d6e7baf0dae37d21164b631c0b3900; build/libmimiralloc_interpose.so sha256 9a6836d5318fb3a269fcbaeb7b6b03834bd88cb375f38a1d88677fd5188e2491 (freshly rebuilt by the runner from the merged Z-083 tree; identical hash to the first run build, i.e. the Z-083 merge changed no interposer object code).
