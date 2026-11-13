@@ -1,0 +1,211 @@
+MimirAlloc Z13 recorded run - Z-107 The closing head-to-head
+slice: Z-107 - The closing head-to-head (Wave 12; the complete Wave-1 oracle - latency, counters, RSS, energy - re-run on the final allocator, against the Z-009 baseline and BOTH glibc columns, default and Z-098 tuned. Gate: the closing table filed as recorded runs + summary.)
+date: run of record 2026-11-13T09:57:33-05:00 to 09:58:59-05:00 (hidden_files/z107_run.log); this file assembled by the finishing lead from that run of record - the measurement was NOT re-run.
+base: 8cd1ad6304d444d0a39a5eef0f05568d186faf99 (team branch yrsa/mimiralloc-team-03, merge of seat main 719b00d, banked Z-001..Z-105)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (full host truth annexed below from hidden_files/z107_host_truth.txt)
+artifacts: tests/perf/run_z107.sh (sha256 4576cfd4de1a0d38423cff44afffbbba977e33ff12e44776c0118cc359883e3d), tests/perf/summarize_z107.py (e4cef90e366c92573dfc727c067b7968d2a629c3d5028429b9bd8f09e317f9ec), tests/perf/run_rss_z107.py (cd539187e92116e5f827e87f5bf2428d0a4a1d7011b55d8c75568fe13908c259), this recorded run. Harness: tests/perf/bench_k002.c (Wave-1 oracle, sha256 30dd0d9a8da12b03aa511fd35a4a098cf593b79c0e9ad352026ecb11eacc7d37). Binaries: bench_z107_glibc 30ab120e50c22a552a4945638d2e5b9198816a9bfbdda1c3a2420404b1ca3986, bench_z107_mimir 11ef0f6a87bd8b16585f8582562e04b790d748e82656b42818afa3c74f2b03a3 (hidden_files/z107_sha.txt). No src/, API, ABI or Makefile change; README.md untouched.
+team: finishing lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly). The predecessor lead completed the measurement run of record and was stopped before filing; this lead verified every number below from the on-disk logs and summaries.
+load honesty: CO-TENANT WINDOW, honestly recorded. An Aesir mojo run_all (aesir-team-18, aesir_engine/tests/run_all.mojo, PID 4123968) was live for the whole run. loadavg 1.15/1.43/1.16 at run start, 1.22/1.44/1.17 after latency, 1.34/1.45/1.18 after counters, 1.43/1.46/1.19 after RSS, 2.34/1.67/1.27 at end (hidden_files/z107_run.log). The identical-leg control passed inside the Z-004 5% bound (worst 1.37%, large_batch) and cross-invocation drift passed the 8% bound on every headline column, so the run stands as the run of record under that stated load; it was not re-run to chase a quieter window. This-machine numbers only.
+correctness gate (baseline, pre-filing tree 8cd1ad6): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips (team hidden_files/z107_gate_baseline.log, sha256 589d3c991a876d716689a91bffbce8da07123a565c5d8d86b7cc2b7201ca1134). Final gate on the committed tree is recorded in team CAMPAIGN_STATE.md.
+raw evidence: team hidden_files/z107_run.log (sha256 bf4c4294f1cc213820b1c7f2a606ecebae90f25589a883ae21d3e0025d438219), z107_sum_latency.txt (a5be91e646f83f94172361644b8d33a0768114bca178dbfea4a6e3a193d0bda9), z107_sum_counters.txt (cc1aeb8c21ed988f6b2bbd386bbf7edb94b8b625a0d1a3a6afbc2ec429351c3a), z107_sum_rss.txt (5d0bc872e89d21407b766b5a05e35cc62a81c58f2ebac1e79923f53a208cbb8b), z107_sum_energy.txt (5a2f662fb9e3f3e7affeea5825f5cf297940c832bb911f366365de813f0afee6).
+
+=== VERDICT - THE CLOSING TABLE (grades exactly as the four summaries grade them) ===
+LATENCY (median ns/op, invocation 1; Z-004 5% band): small_churn mimir 29.43 vs glibc default 3.35 and tuned 3.35 - LOSS 8.79x vs default, LOSS 8.79x vs tuned. mixed_batch mimir 29.12 vs 3.72 / 3.71 - LOSS 7.83x / 7.85x. large_batch mimir 98.45 vs 710.47 / 9.08 - WIN 0.14x vs default, LOSS 10.84x vs tuned. mixed_lifecycle mimir 531.01 vs 7.12 / 3.16 - LOSS 74.58x / 168.04x. Against its own Z-009 baseline mimir improved on every workload (-68.5% small_churn, -92.7% mixed_batch, -96.8% large_batch, -40.9% mixed_lifecycle) and still loses three of four to default glibc. LATENCY RESULT: PASS.
+COUNTERS (median per-op cycles / instructions): small_churn cycles LOSS 6.58x vs default / 6.84x vs tuned, instructions LOSS 6.40x / 6.40x. mixed_batch cycles LOSS 5.34x / 5.74x, instructions LOSS 5.62x / 5.62x. large_batch cycles WIN 0.15x vs default / LOSS 4.39x vs tuned, instructions WIN 0.15x / LOSS 4.30x. mixed_lifecycle cycles LOSS 51.48x / 103.94x, instructions LOSS 44.83x / 95.86x. COUNTERS RESULT: PASS.
+RSS (median Pss, 5% band, lower is better): PEAK - small_churn LOSS +333.0% vs both columns; mixed_batch LOSS +542.5% / +531.6%; large_batch TIE +3.5% / +3.2%; mixed_lifecycle LOSS +269.3% / +272.7%. AFTER_FREE_ALL - small_churn LOSS +1008.3% vs both; mixed_batch LOSS +542.5% / +534.3%; large_batch LOSS +2519.9% vs default / TIE +3.2% vs tuned; mixed_lifecycle LOSS +268.4% / +271.8%. Pss_Anon grades mirror Pss in the verbatim summary below. The Z-009 baseline had AFTER_FREE_ALL WIN on 3 of 4 workloads; the closing table records that standing as LOST on the final allocator - retained bytes after free-all are the honest regression of this campaign close. RSS RESULT: PASS (measurement valid; grades are losses).
+ENERGY (median net nJ/op; WIN below 0.95x, TIE 0.95-1.05x, LOSS above 1.05x; idle baseline median 31.635 W): small_churn mimir 319.73 vs glibc 112.41 - LOSS 2.84x; vs tuned 98.20 - LOSS 3.26x. large_batch mimir 500.94 vs glibc 2513.57 - WIN 0.20x. mixed_batch, large_batch vs tuned, and mixed_lifecycle: the reference net figure is BELOW IDLE-SUBTRACTION RESOLUTION, so no ratio is claimed (gross medians in the verbatim summary: mixed_batch mimir 1128.91 vs glibc 173.18 / tuned 156.25; large_batch vs tuned mimir 4270.83 vs 541.67; mixed_lifecycle mimir 21503.91 vs glibc 360.24 / tuned 186.63 - direction adverse on gross, ungraded on net). ENERGY RESULT: PASS.
+RUNNER CORRECTNESS: PASS - Z-107 runner correctness: PASS (z107_run.log final lines); all four legs PASS.
+
+=== SUMMARISER OUTPUT - LATENCY (hidden_files/z107_sum_latency.txt, verbatim) ===
+=== Z-107 LATENCY MATRIX (invocation 1) - median ns/op, delta % vs default glibc ===
+config               small_churn       mixed_batch       large_batch   mixed_lifecycle
+gdefault           3.35 ( +0.00%)     3.72 ( +0.00%)   710.47 ( +0.00%)     7.12 ( +0.00%)
+gdefault_dup       3.34 ( -0.30%)     3.73 ( +0.27%)   720.18 ( +1.37%)     7.16 ( +0.56%)
+gmm32k             3.35 ( +0.00%)     3.72 ( +0.00%)  1415.93 (+99.29%)    23.24 (+226.40%)
+gtmax64k           3.33 ( -0.60%)     3.71 ( -0.27%)     8.95 (-98.74%)     6.02 (-15.45%)
+gcombo_cache       3.34 ( -0.30%)     3.71 ( -0.27%)     9.08 (-98.72%)     3.16 (-55.62%)
+mimir             29.43 (+778.51%)    29.12 (+682.80%)    98.45 (-86.14%)   531.01 (+7358.01%)
+
+=== IDENTICAL-LEG CONTROL (Z-004 bound: 5%) ===
+small_churn      default=      3.35 dup=      3.34 agreement=0.30%
+mixed_batch      default=      3.72 dup=      3.73 agreement=0.27%
+large_batch      default=    710.47 dup=    720.18 agreement=1.37%
+mixed_lifecycle  default=      7.12 dup=      7.16 agreement=0.56%
+worst agreement: 1.37% (bound 5.00%) - PASS
+
+=== CROSS-INVOCATION AGREEMENT (drift bound: 8%, headline columns) ===
+small_churn      gdefault       inv1=      3.35 inv2=      3.33 drift= 0.60% OK
+small_churn      gmm32k         inv1=      3.35 inv2=      3.34 drift= 0.30% OK
+small_churn      mimir          inv1=     29.43 inv2=     29.85 drift= 1.43% OK
+mixed_batch      gdefault       inv1=      3.72 inv2=      3.72 drift= 0.00% OK
+mixed_batch      gtmax64k       inv1=      3.71 inv2=      3.72 drift= 0.27% OK
+mixed_batch      mimir          inv1=     29.12 inv2=     28.86 drift= 0.89% OK
+large_batch      gdefault       inv1=    710.47 inv2=    738.36 drift= 3.93% OK
+large_batch      gcombo_cache   inv1=      9.08 inv2=      8.92 drift= 1.76% OK
+large_batch      mimir          inv1=     98.45 inv2=     97.98 drift= 0.48% OK
+mixed_lifecycle  gdefault       inv1=      7.12 inv2=      7.19 drift= 0.98% OK
+mixed_lifecycle  gcombo_cache   inv1=      3.16 inv2=      3.15 drift= 0.32% OK
+mixed_lifecycle  mimir          inv1=    531.01 inv2=    536.93 drift= 1.11% OK
+
+=== CLOSING TABLE - LATENCY (median ns/op, invocation 1) ===
+Z-009 baseline: docs/Z13_WAVE01_BASELINE.md section 2 (Z-003, contended window - context, not re-graded).
+small_churn:
+  Z-009 baseline   glibc       9.02 | mimir      93.43
+  Z-107 default    glibc       3.35
+  Z-107 tuned      glibc       3.35 [gmm32k: glibc.malloc.mmap_threshold=32768] tuning factor 1.000x TIE for glibc
+  Z-107 final      mimir      29.43 (vs its Z-009 baseline -68.5%)
+  VERDICT vs default: 8.79x LOSS | vs tuned: 8.79x LOSS
+mixed_batch:
+  Z-009 baseline   glibc       9.90 | mimir     398.42
+  Z-107 default    glibc       3.72
+  Z-107 tuned      glibc       3.71 [gtmax64k: glibc.malloc.tcache_max=65536] tuning factor 0.997x TIE for glibc
+  Z-107 final      mimir      29.12 (vs its Z-009 baseline -92.7%)
+  VERDICT vs default: 7.83x LOSS | vs tuned: 7.85x LOSS
+large_batch:
+  Z-009 baseline   glibc    1295.68 | mimir    3064.69
+  Z-107 default    glibc     710.47
+  Z-107 tuned      glibc       9.08 [gcombo_cache: glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536] tuning factor 0.013x WIN for glibc
+  Z-107 final      mimir      98.45 (vs its Z-009 baseline -96.8%)
+  VERDICT vs default: 0.14x WIN | vs tuned: 10.84x LOSS
+mixed_lifecycle:
+  Z-009 baseline   glibc      13.38 | mimir     898.76
+  Z-107 default    glibc       7.12
+  Z-107 tuned      glibc       3.16 [gcombo_cache: glibc.malloc.tcache_count=64:glibc.malloc.tcache_max=65536] tuning factor 0.444x WIN for glibc
+  Z-107 final      mimir     531.01 (vs its Z-009 baseline -40.9%)
+  VERDICT vs default: 74.58x LOSS | vs tuned: 168.04x LOSS
+
+LATENCY RESULT: PASS (checksums, control, drift all green)
+
+=== SUMMARISER OUTPUT - COUNTERS (hidden_files/z107_sum_counters.txt, verbatim) ===
+blocks parsed: 60 (expect 60)
+leg         workload              cyc/op      ins/op   cmiss/op   bmiss/op      ns/op
+glibc       small_churn           21.882      81.342    0.05776    0.02186       3.34
+glibc       mixed_batch           28.185     101.937    0.09346    0.04330       3.71
+glibc       large_batch         3405.350    8163.160    3.83546    5.73886     753.27
+glibc       mixed_lifecycle       36.118     194.792    0.04065    0.03945       6.75
+glibc_tuned small_churn           21.051      81.334    0.05770    0.02157       3.33
+glibc_tuned mixed_batch           26.196     101.974    0.09061    0.04089       3.39
+glibc_tuned large_batch          119.398     293.914    0.66190    0.35491       9.04
+glibc_tuned mixed_lifecycle       17.890      91.108    0.03820    0.01925       2.98
+mimiralloc  small_churn          144.027     520.273    0.05986    0.42674      29.54
+mimiralloc  mixed_batch          150.443     573.317    0.10029    0.47969      29.26
+mimiralloc  large_batch          524.363    1262.473    0.65048    0.27567      98.39
+mimiralloc  mixed_lifecycle     1859.406    8733.303    0.24930    3.50046     394.59
+
+=== COUNTER VERDICTS (median per-op, 5% band) ===
+Z-009 baseline (Z-005): small_churn cyc gl 17.83 / mi 175.65, ins gl 82.99 / mi 861.97; mixed_batch cyc gl 18.31 / mi 1173.78, ins gl 100.61 / mi 3125.60; large_batch cyc gl 3512.49 / mi 14005.63, ins gl 8820.61 / mi 32076.01; mixed_lifecycle cyc gl 35.28 / mi 4374.61, ins gl 208.22 / mi 9550.16
+small_churn      cycles        mimir     144.027 | vs default 6.58x LOSS | vs tuned 6.84x LOSS
+small_churn      instructions  mimir     520.273 | vs default 6.40x LOSS | vs tuned 6.40x LOSS
+mixed_batch      cycles        mimir     150.443 | vs default 5.34x LOSS | vs tuned 5.74x LOSS
+mixed_batch      instructions  mimir     573.317 | vs default 5.62x LOSS | vs tuned 5.62x LOSS
+large_batch      cycles        mimir     524.363 | vs default 0.15x WIN | vs tuned 4.39x LOSS
+large_batch      instructions  mimir    1262.473 | vs default 0.15x WIN | vs tuned 4.30x LOSS
+mixed_lifecycle  cycles        mimir    1859.406 | vs default 51.48x LOSS | vs tuned 103.94x LOSS
+mixed_lifecycle  instructions  mimir    8733.303 | vs default 44.83x LOSS | vs tuned 95.86x LOSS
+
+COUNTERS RESULT: PASS (all blocks checksum-true, counters 100% running)
+
+=== SUMMARISER OUTPUT - RSS (hidden_files/z107_sum_rss.txt, verbatim) ===
+=== RSS MEDIAN TABLE (kB, medians of 5 processes; PEAK and AFTER_FREE_ALL) ===
+glibc       small_churn      PEAK            live=   851968 Pss=   1229 Pss_Anon=   1192 Rss=   3312
+glibc       small_churn      AFTER_FREE_ALL  live=          Pss=    409 Pss_Anon=    372 Rss=   2492
+glibc_tuned small_churn      PEAK            live=   851968 Pss=   1229 Pss_Anon=   1192 Rss=   3312
+glibc_tuned small_churn      AFTER_FREE_ALL  live=          Pss=    409 Pss_Anon=    372 Rss=   2492
+mimiralloc  small_churn      PEAK            live=   851968 Pss=   5321 Pss_Anon=   5240 Rss=   7404
+mimiralloc  small_churn      AFTER_FREE_ALL  live=          Pss=   4533 Pss_Anon=   4452 Rss=   6616
+glibc       mixed_batch      PEAK            live=    79872 Pss=    233 Pss_Anon=    196 Rss=   2316
+glibc       mixed_batch      AFTER_FREE_ALL  live=          Pss=    233 Pss_Anon=    196 Rss=   2316
+glibc_tuned mixed_batch      PEAK            live=    79872 Pss=    237 Pss_Anon=    200 Rss=   2320
+glibc_tuned mixed_batch      AFTER_FREE_ALL  live=          Pss=    236 Pss_Anon=    200 Rss=   2320
+mimiralloc  mixed_batch      PEAK            live=    79872 Pss=   1497 Pss_Anon=   1416 Rss=   3580
+mimiralloc  mixed_batch      AFTER_FREE_ALL  live=          Pss=   1497 Pss_Anon=   1416 Rss=   3580
+glibc       large_batch      PEAK            live=  7024640 Pss=   7009 Pss_Anon=   6972 Rss=   9092
+glibc       large_batch      AFTER_FREE_ALL  live=          Pss=    277 Pss_Anon=    240 Rss=   2360
+glibc_tuned large_batch      PEAK            live=  7024640 Pss=   7029 Pss_Anon=   6992 Rss=   9112
+glibc_tuned large_batch      AFTER_FREE_ALL  live=          Pss=   7029 Pss_Anon=   6992 Rss=   9112
+mimiralloc  large_batch      PEAK            live=  7024640 Pss=   7257 Pss_Anon=   7176 Rss=   9340
+mimiralloc  large_batch      AFTER_FREE_ALL  live=          Pss=   7257 Pss_Anon=   7176 Rss=   9340
+glibc       mixed_lifecycle  PEAK            live=   703936 Pss=    869 Pss_Anon=    832 Rss=   2952
+glibc       mixed_lifecycle  AFTER_FREE_ALL  live=          Pss=    869 Pss_Anon=    832 Rss=   2952
+glibc_tuned mixed_lifecycle  PEAK            live=   703936 Pss=    861 Pss_Anon=    824 Rss=   2944
+glibc_tuned mixed_lifecycle  AFTER_FREE_ALL  live=          Pss=    861 Pss_Anon=    824 Rss=   2944
+mimiralloc  mixed_lifecycle  PEAK            live=   703936 Pss=   3209 Pss_Anon=   3128 Rss=   5292
+mimiralloc  mixed_lifecycle  AFTER_FREE_ALL  live=          Pss=   3201 Pss_Anon=   3120 Rss=   5284
+
+=== RSS VERDICTS (median Pss and Pss_Anon, 5% band, lower is better) ===
+small_churn PEAK Pss: live=851968 B | default 1229 kB, tuned 1229 kB, mimir 5321 kB -> vs default LOSS (+333.0%) | vs tuned LOSS (+333.0%)
+small_churn PEAK Pss_Anon: live=851968 B | default 1192 kB, tuned 1192 kB, mimir 5240 kB -> vs default LOSS (+339.6%) | vs tuned LOSS (+339.6%)
+small_churn AFTER_FREE_ALL Pss: live=851968 B | default 409 kB, tuned 409 kB, mimir 4533 kB -> vs default LOSS (+1008.3%) | vs tuned LOSS (+1008.3%)
+small_churn AFTER_FREE_ALL Pss_Anon: live=851968 B | default 372 kB, tuned 372 kB, mimir 4452 kB -> vs default LOSS (+1096.8%) | vs tuned LOSS (+1096.8%)
+mixed_batch PEAK Pss: live=79872 B | default 233 kB, tuned 237 kB, mimir 1497 kB -> vs default LOSS (+542.5%) | vs tuned LOSS (+531.6%)
+mixed_batch PEAK Pss_Anon: live=79872 B | default 196 kB, tuned 200 kB, mimir 1416 kB -> vs default LOSS (+622.4%) | vs tuned LOSS (+608.0%)
+mixed_batch AFTER_FREE_ALL Pss: live=79872 B | default 233 kB, tuned 236 kB, mimir 1497 kB -> vs default LOSS (+542.5%) | vs tuned LOSS (+534.3%)
+mixed_batch AFTER_FREE_ALL Pss_Anon: live=79872 B | default 196 kB, tuned 200 kB, mimir 1416 kB -> vs default LOSS (+622.4%) | vs tuned LOSS (+608.0%)
+large_batch PEAK Pss: live=7024640 B | default 7009 kB, tuned 7029 kB, mimir 7257 kB -> vs default TIE (+3.5%) | vs tuned TIE (+3.2%)
+large_batch PEAK Pss_Anon: live=7024640 B | default 6972 kB, tuned 6992 kB, mimir 7176 kB -> vs default TIE (+2.9%) | vs tuned TIE (+2.6%)
+large_batch AFTER_FREE_ALL Pss: live=7024640 B | default 277 kB, tuned 7029 kB, mimir 7257 kB -> vs default LOSS (+2519.9%) | vs tuned TIE (+3.2%)
+large_batch AFTER_FREE_ALL Pss_Anon: live=7024640 B | default 240 kB, tuned 6992 kB, mimir 7176 kB -> vs default LOSS (+2890.0%) | vs tuned TIE (+2.6%)
+mixed_lifecycle PEAK Pss: live=703936 B | default 869 kB, tuned 861 kB, mimir 3209 kB -> vs default LOSS (+269.3%) | vs tuned LOSS (+272.7%)
+mixed_lifecycle PEAK Pss_Anon: live=703936 B | default 832 kB, tuned 824 kB, mimir 3128 kB -> vs default LOSS (+276.0%) | vs tuned LOSS (+279.6%)
+mixed_lifecycle AFTER_FREE_ALL Pss: live=703936 B | default 869 kB, tuned 861 kB, mimir 3201 kB -> vs default LOSS (+268.4%) | vs tuned LOSS (+271.8%)
+mixed_lifecycle AFTER_FREE_ALL Pss_Anon: live=703936 B | default 832 kB, tuned 824 kB, mimir 3120 kB -> vs default LOSS (+275.0%) | vs tuned LOSS (+278.6%)
+
+Z-009 baseline (Z-006, docs/Z13_WAVE01_BASELINE.md s.5): PEAK TIE small_churn / large_batch, LOSS mixed_batch (+23.3% Pss) / mixed_lifecycle (+40.2%); AFTER_FREE_ALL WIN on 3 of 4, mixed_batch LOSS at both points.
+RSS RESULT: PASS (checksums true, no drift-reject)
+
+=== SUMMARISER OUTPUT - ENERGY (hidden_files/z107_sum_energy.txt, verbatim) ===
+IDLE baseline: median 31.635 W (min 25.796, max 46.769, n=5)
+leg         workload          med_net_nJ/op        min        max  med_gross_nJ/op
+glibc       large_batch             2513.57    1678.05   10424.49         26041.67
+glibc       mixed_batch              -20.92     -56.10     -10.27           173.18
+glibc       mixed_lifecycle          -14.09     -17.67     327.03           360.24
+glibc       small_churn              112.41       6.76     389.37           266.00
+glibc_tuned large_batch             -382.95    -549.64    -260.63           541.67
+glibc_tuned mixed_batch              -17.78     -47.40      -9.95           156.25
+glibc_tuned mixed_lifecycle          -15.06     -46.73     118.63           186.63
+glibc_tuned small_churn               98.20       8.24     336.32           252.00
+mimiralloc  large_batch              500.94    -192.76    1226.07          4270.83
+mimiralloc  mixed_batch              108.15      91.71     131.81          1128.91
+mimiralloc  mixed_lifecycle         8658.06    1638.10   23146.91         21503.91
+mimiralloc  small_churn              319.73     102.59    3053.39          1287.50
+
+=== ENERGY VERDICTS (median net J/op; WIN < 0.95x, TIE 0.95-1.05x, LOSS > 1.05x) ===
+small_churn: mimir net 319.73 nJ/op vs glibc 112.41 nJ/op | factor 2.84x | LOSS
+small_churn: mimir net 319.73 nJ/op vs glibc_tuned 98.20 nJ/op | factor 3.26x | LOSS
+mixed_batch: mimir net 108.15 nJ/op vs glibc -20.92 nJ/op - BELOW IDLE-SUBTRACTION RESOLUTION for the reference, no ratio claimed (gross medians: mimir 1128.91 vs glibc 173.18 nJ/op)
+mixed_batch: mimir net 108.15 nJ/op vs glibc_tuned -17.78 nJ/op - BELOW IDLE-SUBTRACTION RESOLUTION for the reference, no ratio claimed (gross medians: mimir 1128.91 vs glibc_tuned 156.25 nJ/op)
+large_batch: mimir net 500.94 nJ/op vs glibc 2513.57 nJ/op | factor 0.20x | WIN
+large_batch: mimir net 500.94 nJ/op vs glibc_tuned -382.95 nJ/op - BELOW IDLE-SUBTRACTION RESOLUTION for the reference, no ratio claimed (gross medians: mimir 4270.83 vs glibc_tuned 541.67 nJ/op)
+mixed_lifecycle: mimir net 8658.06 nJ/op vs glibc -14.09 nJ/op - BELOW IDLE-SUBTRACTION RESOLUTION for the reference, no ratio claimed (gross medians: mimir 21503.91 vs glibc 360.24 nJ/op)
+mixed_lifecycle: mimir net 8658.06 nJ/op vs glibc_tuned -15.06 nJ/op - BELOW IDLE-SUBTRACTION RESOLUTION for the reference, no ratio claimed (gross medians: mimir 21503.91 vs glibc_tuned 186.63 nJ/op)
+
+Z-009 baseline (Z-007): LOSS in direction on all four; proven net factor large_batch 4.42x; small_churn factor indicative only; mixed_batch / mixed_lifecycle net factors below resolution in that contended window.
+ENERGY RESULT: PASS (checksums true, idle baseline valid)
+
+=== HOST TRUTH (hidden_files/z107_host_truth.txt, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T14:57:33Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 3497928
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 67%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.15 1.43 1.16
