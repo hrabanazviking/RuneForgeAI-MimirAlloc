@@ -2448,3 +2448,21 @@ test-z089: $(IPOLIB)
 	bash tests/abi/run_z089.sh
 
 .PHONY: test-z089
+# ------------------------------------------------------------------
+# Z-092: batch API prototype contract
+# (tests/contract/run_z092.sh) -- bulk same-class
+# alloc/free over the Wave-4 TLS cache, shaped by
+# Z-091's F-4 verdict; contract header
+# tests/contract/mimir_batch_z092.h, slice doc
+# docs/Z13_Z092_BATCH_API_PROTOTYPE.md. The runner
+# builds the suite against the library OBJECTS
+# (test-only static link), runs it, and proves the
+# prototype is not a public symbol (nm -D: exactly
+# the 10 public exports, zero mimir_batch_* names).
+# Standalone via `make test-z092`; NOT part of
+# `make test` (standing gate counts untouched).
+# ------------------------------------------------------------------
+test-z092:
+	bash tests/contract/run_z092.sh
+
+.PHONY: test-z092

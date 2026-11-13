@@ -1,0 +1,16 @@
+# Z-092 contract run: 2026-11-13T03:27:33Z
+# host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+# head: 7121d0731db95f0c5cb57760e6507a66f373fdc4
+# loadavg: 0.96 1.03 1.15 1/1250 2332883
+make: 'build/mimir_alloc.o' is up to date.
+make: 'build/mimir_core.o' is up to date.
+make: 'build/mimir_platform.o' is up to date.
+Z-092 batch API prototype contract suite
+surface: present
+CHECKS: 62 run, 0 failed
+RESULT: PASS
+# contract exit code: 0
+make: Nothing to be done for 'lib'.
+# nm -D defined T exports: 13 (expected 13)
+# nm -D mimir_batch exports: 0 (expected 0)
+NM-PROOF: PASS (prototype is not a public symbol)

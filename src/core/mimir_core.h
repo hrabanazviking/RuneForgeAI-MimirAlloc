@@ -839,4 +839,19 @@ void mimir_tls_cache_drain_thread(void);
 uint64_t mimir_tls_cache_exit_drains(void);
 uint64_t mimir_tls_cache_exit_drain_blocks(void);
 
+/* Z-092 batch prototype surface (roadmap Wave 11; slice doc
+ * docs/Z13_Z092_BATCH_API_PROTOTYPE.md; contract header
+ * tests/contract/mimir_batch_z092.h): bulk same-class
+ * alloc/free over the Wave-4 TLS cache. Internal only,
+ * INC-E001-07 shape (b) exactly like the surfaces above:
+ * NOT part of the public surface in include/mimir_alloc.h,
+ * bound local in the shared library (nm -D unchanged).
+ * The snapshot struct is forward-declared here; its full
+ * definition is the contract header's, so a signature
+ * drift is a compile error in the defining TU. */
+struct mimir_batch_snapshot;
+int mimir_batch_snapshot(struct mimir_batch_snapshot *out);
+size_t mimir_batch_alloc(size_t size, void **out, size_t count);
+size_t mimir_batch_free(void **ptrs, size_t count);
+
 #endif /* MIMIR_CORE_H */

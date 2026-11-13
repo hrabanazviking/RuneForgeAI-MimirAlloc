@@ -8414,3 +8414,139 @@ size_t mimir_core_usable_size(const void *ptr)
     (void)core_global_unlock();
     return result;
 }
+
+/* ==================================================================
+ * Z-092 -- Batch API prototype (Wave 11).
+ *
+ * Bulk same-class alloc/free over the Wave-4 TLS cache,
+ * shaped by Z-091's banked post-mortem verdict
+ * (docs/Z13_Z091_BATCHING_POSTMORTEM.md; slice doc
+ * docs/Z13_Z092_BATCH_API_PROTOTYPE.md S1/S2):
+ * - Z-091's DOMINANT factor is F-4: per-op cost grows
+ *   with live-set size because the central core walks
+ *   its registries per op. This prototype does NOT
+ *   remove that walk: it loops the banked per-op core
+ *   entries (which route cache-served small sizes
+ *   through the TLS cache, bins refilling/draining in
+ *   the Z-028 batch of 8) and adds NO new allocator
+ *   state. Its one admission decision is contractual:
+ *   the whole burst is validated before the first
+ *   block moves and succeeds whole or not at all.
+ *   Z-093 grades it against exactly that expectation.
+ * - Free walks the array in REVERSE (LIFO) order,
+ *   matching the bins' LIFO discipline. (K-007's L-4
+ *   FIFO penalty did not reproduce on this machine,
+ *   Z-091 S2; the order is contract, not a priced
+ *   factor here.)
+ * - All-or-nothing alloc: on any element failure every
+ *   block obtained by this call is freed (reverse
+ *   order) and out[] is left byte-identical to entry,
+ *   so a caller never owns a partial batch. Free is
+ *   total: NULL entries are skipped and counted in
+ *   the return only when actually freed.
+ * - Bounds: count is capped at MIMIR_BATCH_MAX_COUNT
+ *   (4096, contract header); a larger count is refused
+ *   whole, before any allocation or free happens.
+ * - Zero size is the D-013 contract refusal (exactly
+ *   the mimir_core_alloc(0) answer, per element): the
+ *   batch returns 0 and allocates nothing. errno is
+ *   not promised (U-10 / D-013). A duplicate pointer
+ *   inside one free batch is a double free: undefined
+ *   behaviour, exactly as two mimir_free calls would
+ *   be.
+ * Counters are process-global monotone atomics, written
+ * with the same relaxed-atomic discipline as the TLS
+ * exit counters; they are observability for the
+ * contract suite, not a public statistics promise.
+ * ================================================================== */
+#define MIMIR_BATCH_MAX_COUNT ((size_t)4096)
+static uint64_t batch_alloc_calls;
+static uint64_t batch_free_calls;
+static uint64_t batch_blocks_allocated;
+static uint64_t batch_blocks_freed;
+static uint64_t batch_failures;
+
+struct mimir_batch_snapshot {
+    uint64_t alloc_calls;
+    uint64_t free_calls;
+    uint64_t blocks_allocated;
+    uint64_t blocks_freed;
+    uint64_t failures;
+    uint64_t max_count;
+};
+
+int mimir_batch_snapshot(struct mimir_batch_snapshot *out)
+{
+    if (out == NULL) {
+        return -1;
+    }
+    out->alloc_calls = __atomic_load_n(&batch_alloc_calls,
+                                       __ATOMIC_RELAXED);
+    out->free_calls = __atomic_load_n(&batch_free_calls,
+                                      __ATOMIC_RELAXED);
+    out->blocks_allocated = __atomic_load_n(
+        &batch_blocks_allocated, __ATOMIC_RELAXED);
+    out->blocks_freed = __atomic_load_n(&batch_blocks_freed,
+                                        __ATOMIC_RELAXED);
+    out->failures = __atomic_load_n(&batch_failures,
+                                    __ATOMIC_RELAXED);
+    out->max_count = (uint64_t)MIMIR_BATCH_MAX_COUNT;
+    return 0;
+}
+
+size_t mimir_batch_alloc(size_t size, void **out, size_t count)
+{
+    size_t i;
+
+    __atomic_add_fetch(&batch_alloc_calls, 1, __ATOMIC_RELAXED);
+    if (count == 0) {
+        return 0; /* defined no-op; not a failure */
+    }
+    if (out == NULL || count > MIMIR_BATCH_MAX_COUNT ||
+        size == 0) {
+        __atomic_add_fetch(&batch_failures, 1, __ATOMIC_RELAXED);
+        return 0;
+    }
+    for (i = 0; i < count; i++) {
+        void *p = mimir_core_alloc(size);
+        if (p == NULL) {
+            size_t j;
+            /* All-or-nothing rollback, reverse order. */
+            for (j = i; j-- > 0; ) {
+                mimir_core_free(out[j]);
+            }
+            __atomic_add_fetch(&batch_failures, 1,
+                               __ATOMIC_RELAXED);
+            return 0;
+        }
+        out[i] = p;
+    }
+    __atomic_add_fetch(&batch_blocks_allocated, (uint64_t)count,
+                       __ATOMIC_RELAXED);
+    return count;
+}
+
+size_t mimir_batch_free(void **ptrs, size_t count)
+{
+    size_t i;
+    size_t freed = 0;
+
+    __atomic_add_fetch(&batch_free_calls, 1, __ATOMIC_RELAXED);
+    if (count == 0) {
+        return 0; /* defined no-op; not a failure */
+    }
+    if (ptrs == NULL || count > MIMIR_BATCH_MAX_COUNT) {
+        __atomic_add_fetch(&batch_failures, 1, __ATOMIC_RELAXED);
+        return 0;
+    }
+    /* Reverse (LIFO) order, K-007 L-4. NULLs skipped. */
+    for (i = count; i-- > 0; ) {
+        if (ptrs[i] != NULL) {
+            mimir_core_free(ptrs[i]);
+            freed++;
+        }
+    }
+    __atomic_add_fetch(&batch_blocks_freed, (uint64_t)freed,
+                       __ATOMIC_RELAXED);
+    return freed;
+}
