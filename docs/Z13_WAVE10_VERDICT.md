@@ -14,19 +14,23 @@ branch's banked Z-084 commit fcb31fc. Baseline standing gate on the
 merged tree before any Z-090 edit: GREEN 4988 checks / 0 failed /
 77 by-design skips (hidden_files/z090_baseline_gate.log).
 
-STATUS: PARTIAL-FINAL, with two OWED sections, stated up front.
+STATUS: PARTIAL-FINAL, with one OWED section, stated up front.
 FINAL below: Z-082, Z-083, Z-084, Z-085, Z-086 (all banked at the
-seat) and Z-089 (committed 615c935 on yrsa/mimiralloc-team-06, gate
-GREEN, queueing behind Z-087/Z-088 for banking in roadmap order).
-OWED below: Z-087 (section 7.1 - a complete draft recorded run is
-on disk in team-03's worktree, but the slice is uncommitted, has no
-verdict doc and no final gate filed, so its numbers are quoted as
-DRAFT, never as evidence of record) and Z-088 (section 7.2 - no
-slice artifacts on disk at verdict time beyond the baseline gate).
-This follows the established OWED pattern (precedents Z-063, Z-072's
-predecessor builds): an OWED section names the slice, states what
-is missing, and invents no verdict. When Z-087 and Z-088 bank, this
-verdict is completed by fold-in amendment, exactly as Z-063 was.
+seat), Z-087 (folded in - committed 816a6e4 on team-03, gate GREEN,
+queueing for banking) and Z-089 (committed 615c935 on
+yrsa/mimiralloc-team-06, gate GREEN, queueing behind Z-087/Z-088
+for banking in roadmap order).
+OWED below: Z-088 only (section 7.2 - no slice artifacts on disk
+at verdict time beyond the baseline gate). Z-087 was OWED-DRAFT in
+this verdict's first commit (86cde4c) and is FOLDED IN as FINAL by
+the fold-in amendment below: it committed as 816a6e4 on
+team-03 (doc + recorded run + final gate GREEN) minutes after the
+first commit, in parallel, and was verified first-hand before
+folding - the section 7.1 fold-in note records the sequence.
+This follows the established OWED pattern (precedents Z-063,
+Z-072's predecessor builds): an OWED section names the slice,
+states what is missing, and invents no verdict; a fold-in
+amendment completes it when the slice lands, exactly as Z-063 was.
 The headline the FINAL evidence supports: the opt-in interposing
 variant is CORRECT everywhere it was tried on real programs - and
 it is SLOW on allocation-heavy work, and it has exactly one known
@@ -79,9 +83,11 @@ the banking tooling itself, the live desktop session, package and
 repair tooling, sshd, long-lived shared services, backup/restore
 tooling - each with its reason, from Z-089.
 
-NOT YET KNOWN (OWED, section 7): the Aesir CPU engine under
-preload (Z-087, draft evidence only) and failure drills under
-preload (Z-088, no evidence yet). No claim is made either way.
+PROVEN SINCE FIRST WRITING (folded in, section 3.6): the Aesir
+CPU engine under preload is correctness-TIE (identical token
+streams) with a small contended-window LOSS observation (Z-087).
+NOT YET KNOWN (OWED, section 7.2): failure drills under preload
+(Z-088, no evidence yet). No claim is made either way.
 
 ## 2. Scope and honesty - read first
 
@@ -90,7 +96,7 @@ preload (Z-088, no evidence yet). No claim is made either way.
   (Z-082), closed the symbol gaps real programs hit (Z-083), then
   tried the variant on real programs in widening rings - smoke
   battery (Z-084), Python/Ollama workloads (Z-085), desktop
-  applications (Z-086), the Aesir engine (Z-087, OWED), failure
+  applications (Z-086), the Aesir engine (Z-087, folded in), failure
   drills (Z-088, OWED) - and wrote the rollback / never-preload
   packet (Z-089) before this verdict.
 - The roadmap's Z-090 text asks for: where preload is safe today,
@@ -98,7 +104,7 @@ preload (Z-088, no evidence yet). No claim is made either way.
   enough for a user to decide; gate: verdict doc traceable to
   battery reports. Section 1 is the plain statement; sections 3,
   5 and 6 are the evidence; section 9 is the traceability index.
-  The gate is met for every FINAL section. The two OWED sections
+  The gate is met for every FINAL section. The one OWED section
   are the honest remainder, not a hidden gap.
 - Every FINAL number below traces to a banked recorded run (or,
   for Z-089, its committed recorded run), re-read first-hand from
@@ -184,6 +190,30 @@ glibc control - it needs a live compositor, so it is NOT TESTED
 as allocator evidence), and kwrite is MISSING-APP (no binary on
 this host; kate carries the class). Rollback re-proven in the
 battery: kcalc with LD_PRELOAD unset is ALIVE on glibc.
+
+### 3.6 Z-087 - Aesir boundary trial (committed 816a6e4, FOLDED IN)
+The Aesir CPU engine (source build of record from the Aesir seat
+head b99b702, fixture Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf,
+sha256-pinned) ran 4 alternating legs (plain / preload x2) on a
+32-token deterministic prompt, read-only toward the Aesir forge
+(git status proven UNCHANGED across the legs). Recorded run:
+FAIL=0, every leg [ok]; final standing gate GREEN 4988/0/77.
+Correctness: TIE - token streams identical across all 4 legs
+(1 distinct stream, sha256 filed), genuine generation text.
+Performance: LOSS as an observation on a CONTENDED host
+(loadavg 1.98-4.43, cross-campaign load throughout) - wall
++5.1%, decode +6.3%, minor page faults +14.1%, RSS +0.1%,
+prefill and load inside noise. The slice itself rules these
+NOT baselines; a quiet-machine re-run is the road to a baseline
+grade, and none is claimed here. Attempt-1 finding: running the
+engine via mojo run under preload interposes the Mojo COMPILER,
+whose compile did not finish inside a 600 s bound (plain leg
+20.14 s) - filed as an observation about compiler-in-process
+preload, not a defect of either project. Three Aesir-side
+blockers named, not fixed (the gate's own terms): B-087-1 stale
+prebuilt binary segfaults in prefill on a PLAIN run; B-087-2
+engine-tree binary is a canned-text stub; B-087-3 engine-tree
+model.gguf is a 24-byte empty header.
 
 ## 4. DECISION D-013 restated for users (this slice's assignment)
 
@@ -278,9 +308,10 @@ leg; never export LD_PRELOAD in a profile, never write
 
 ## 6. Performance standings of record (this machine only)
 
-Wave 10's only graded performance slice is Z-085; its numbers
-are the wave's performance verdict. No WIN is claimed anywhere
-in Wave 10.
+Wave 10's only quiet-window graded performance slice is Z-085;
+its numbers are the wave's performance verdict. Z-087's
+contended observation is recorded separately (section 3.6).
+No WIN is claimed anywhere in Wave 10.
 
 | Workload (Z-085) | Grade | Numbers of record |
 |---|---|---|
@@ -304,36 +335,29 @@ the roadmap's perf lines; no code was changed on the strength
 of this single-workload slice, and none is claimed here.
 Correctness grades are separate and are PASS everywhere FINAL:
 Z-084 battery PASS, Z-085 correctness PASS (exact equality),
-Z-086 battery PASS, Z-089 drill PASS.
+Z-086 battery PASS, Z-089 drill PASS. Z-087 (folded in) adds a
+contended-window observation, NOT a baseline grade: wall +5.1%,
+decode +6.3%, minor faults +14.1% under preload at loadavg
+1.98-4.43, correctness TIE - recorded in section 3.6, kept out
+of the table above because the table holds quiet-window grades.
 
-## 7. OWED sections - named, not hidden
+## 7. OWED sections and fold-ins - named, not hidden
 
-### 7.1 Z-087 - Aesir boundary trial - OWED (draft run on disk)
-State on disk at verdict time (team-03 worktree, first-hand):
-merge 8382d38 of seat cb5bf36; Makefile test-z087 block modified
-but UNCOMMITTED; tests/abi/run_z087.sh and
-tests/abi/recorded_run_z13_z087.txt untracked; NO verdict doc
-(docs/Z13_Z087*) exists; no slice commit; no final gate filed
-by the team. The slice is therefore NOT FINAL and this verdict
-claims nothing from it as evidence of record.
-For the fold-in lead's convenience only, the DRAFT recorded run
-(date_utc 2026-11-13T01:52:38Z, head 8382d38) states: the Aesir
-CPU engine binary (built read-only from the Aesir seat's road,
-fixture Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf, sha256-pinned in
-the run) ran 4 alternating legs (plain / preload x2) on a
-32-token deterministic prompt; all legs exit 0; token streams
-identical across all 4 legs (1 distinct stream, sha256 filed);
-Aesir tree git status UNCHANGED; the run ends FAIL=0,
-RUNNER_EXIT 0. It also files two named Aesir-side observations
-(the root prebuilt binary segfaults in prefill on a PLAIN run;
-the engine-tree binary returns canned text) and one attempt-1
-finding (mojo run under preload exceeded a 600 s bound still
-compiling). Timings in the draft were measured at loadavg
-~2.0-4.4 - a contended window - and are NOT baselines.
-OWED to the fold-in: the slice's own verdict doc, its commit,
-its final gate, and only then this section rewritten as FINAL
-with the banked recorded run as its source. Until then the
-Aesir-under-preload question stands UNANSWERED by this verdict.
+### 7.1 Z-087 - Aesir boundary trial - FOLDED IN (was OWED)
+Fold-in note: in this verdict's first commit (86cde4c) this
+section stood OWED-DRAFT - team-03's recorded run was on disk
+but the slice was uncommitted, with no doc and no final gate,
+and its draft facts were quoted as DRAFT only. Minutes later
+the slice committed as 816a6e4 (4 files: Makefile,
+docs/Z13_Z087_AESIR_BOUNDARY_TRIAL.md,
+tests/abi/recorded_run_z13_z087.txt, tests/abi/run_z087.sh),
+with its final standing gate GREEN 4988/0/77 read back from
+hidden_files/z087_gate_final.log. This lead re-read the
+committed doc and recorded run first-hand; the section is now
+FINAL as section 3.6 above (correctness TIE; contended-window
+LOSS observation, not a baseline; three Aesir-side blockers
+named not fixed). The slice is committed, not yet banked; it
+queues first in the remaining banking order.
 
 ### 7.2 Z-088 - Failure drills under preload - OWED (not built)
 State on disk at verdict time (team-04 worktree, first-hand):
@@ -363,8 +387,8 @@ run is a battery or a short workload; no soak exists in Wave 10.
 in section 1 names tested classes, not all programs. The
 T-084-1 class (anchored regcomp) is the standing warning that
 untested callers can meet contract divergences.
-- Performance beyond Z-085's two workloads, and any timing at
-all from the contended Z-087 draft window.
+- Performance beyond Z-085's two workloads, and any BASELINE
+timing from the contended Z-087 window (observation only).
 - Failure behaviour under preload (Z-088, OWED, section 7.2).
 
 ## 9. Evidence index (traceability - the Z-090 gate)
@@ -391,9 +415,12 @@ FINAL sources, re-read first-hand on the merged tree:
   one-variable rollback proven; live PIDs unchanged).
 D-013 sources: docs/DECISION_LEDGER.md D-013;
   docs/Z13_Z078_ZERO_SIZE_ERRNO.md (measured glibc contrast).
-OWED sources (NOT evidence of record): Z-087 draft recorded run
-  in /home/volmarr/mimiralloc-team-03/tests/abi/ (uncommitted);
-  Z-088: no artifacts exist (team-04 baseline gate only).
+- Z-087 team-03 commit 816a6e4 (committed, gate GREEN,
+  unbanked at fold-in time): docs/Z13_Z087_AESIR_BOUNDARY_TRIAL.md;
+  tests/abi/recorded_run_z13_z087.txt (FAIL=0, token streams
+  identical, Aesir tree unchanged; timings contended).
+OWED source (NOT evidence of record): Z-088: no artifacts exist
+  (team-04 baseline gate only).
 This slice's own fresh executions: the baseline gate on the
 merged tree and the standing gate on the final tree, both
 GREEN 4988/0/77 (recorded run, tests/perf/recorded_run_z13_z090.txt).
@@ -420,12 +447,14 @@ synthesis of the sources above, in the Z-072 verdict pattern.
 - Rollback is PROVEN one-variable from a broken state, and the
   nine-entry never-preload list is ops law for this host
   (Z-089). FINAL (committed; banking queues in order).
-- OWED: the Aesir boundary trial's verdict (Z-087 - draft run
-  only) and the failure drills (Z-088 - not built). This
-  verdict will be completed by fold-in amendment when they
-  bank, in the Z-063 pattern. Wave 10 is therefore 7 of 9
-  slices FINAL at this writing (Z-082..Z-086, Z-089, and this
-  verdict), with Z-087 and Z-088 the named remainder.
+- The Aesir boundary trial is FOLDED IN as FINAL (Z-087,
+  section 3.6): correctness TIE on the token path, contended
+  LOSS observation, blockers named not fixed.
+- OWED: the failure drills only (Z-088 - not built). A second
+  fold-in amendment completes this verdict when Z-088 banks,
+  in the Z-063 pattern. Wave 10 is therefore 8 of 9 slices
+  FINAL at this writing (Z-082..Z-087, Z-089, and this
+  verdict), with Z-088 the named remainder.
 
 Bugs found/fixed by this slice: none in the allocator, the
 suite, or any source slice. The two defects Wave 10 itself
