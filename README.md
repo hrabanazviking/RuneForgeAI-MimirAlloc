@@ -22,6 +22,16 @@
 
 A substantial, evidence-grounded plan to take MimirAlloc from experimental **0.1.0** through correctness closure, production security, native Linux/Android qualification, performance optimization, release engineering, real Mojo/A.E.S.I.R. integration, and optional AI-aware, accelerator and distributed-memory research. Includes hundreds of uniquely identified work items, dependency gates, acceptance checklists and agent-ready execution orders. **This roadmap describes planned work; it does not claim those phases are implemented or that the current release is production-ready.**
 
+## ⚒️ Post-Z13 execution roadmap | 13 November 2026
+
+**[MimirAlloc Post-Z13 Production Execution Roadmap: 164 gated work packages](docs/POST_Z13_PRODUCTION_EXECUTION_ROADMAP_2026-11-13.md)**
+
+An extensive, evidence-linked follow-through plan for the work still needed after the Z13 campaign: finishing Z-098–Z-117, removing live-set metadata walk bottlenecks, correcting/qualifying concurrency and error paths, fair glibc benchmarks, safe interposition, Linux and Android portability, real Mojo/A.E.S.I.R. allocator adoption, release security and reproducibility, and optional future AI/accelerator/distributed-memory research. It includes **16 technical workstreams, 164 individually numbered `PBR-` tasks, acceptance conditions, release gates, priority/dependency tables, test matrices, rollback rules, and a Mythic Engineering execution protocol**.
+
+**This is an actionable proposal, not proof that the work is already done.** It complements the existing [Z13 roadmap](docs/MIMIRALLOC_Z13_ROADMAP.md) and the [Production & Beyond master roadmap](docs/PRODUCTION_AND_BEYOND_MASTER_ROADMAP_2026-11-07.md); no older roadmap or historical status statement was removed.
+
+---
+
 ---
 
 ## 🧭 Current engineering status | 13 November 2026
