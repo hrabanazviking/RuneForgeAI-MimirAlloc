@@ -1,0 +1,94 @@
+MimirAlloc Z13 recorded run - Z-091 Why batching lost: the K-007 post-mortem
+slice: Z-091 - Why batching lost: the K-007 post-mortem (Wave 11 opener; post-mortem doc naming the dominant loss factor)
+date: 2026-11-12T22:08:04-05:00
+base: c490955 (team branch yrsa/mimiralloc-team-01 after merging seat main 9276fb8, banked Z-001..Z-089; merged tree verified byte-identical to seat except team CAMPAIGN_STATE.md and seat-only bookkeeping files)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: docs/Z13_Z091_BATCHING_POSTMORTEM.md (the post-mortem doc, the slice gate deliverable), this recorded run. Harness tests/perf/bench_k007.c + run_bench_k007.sh + summarize_k007.py run UNMODIFIED (make bench-k007); no src/, API, ABI or Makefile change by this slice.
+team: lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly).
+method: K-007 shapes unmodified (inter1 / burst8/32/128/512 LIFO / burst512fifo at 64 B and 1024 B; 120000 pairs per 64 B leg, 30000 per 1024 B leg; 7 reps per leg, alternating glibc/mimir processes; whole-pass CLOCK_MONOTONIC; checksums identical per size on both legs in both invocations: 64 B ck=3900000, 1024 B ck=974616). TWO full invocations (raw: team hidden_files/z091_k007_raw1.txt, z091_k007_raw2.txt). Headline = invocation 1 medians; invocation 2 agreement per cell in the verdict. Factor pricing in the doc is computed from banked recorded runs Z-010/Z-014/Z-015/Z-019/Z-024, read from disk this slice.
+load honesty: SHARED HOST, NOT QUIET. loadavg 1.22/1.26/1.67 at baseline gate, 1.25-1.55 across both bench invocations, 1.15/1.25/1.62 after; an Aesir forge GPU soak process (mojo bench_gpu_soak) held one core at ~68% CPU throughout. Bench is single-threaded and median-of-7-processes with two-invocation agreement as the guard; numbers are this-machine under that stated load, NOT quiet baselines.
+correctness gate (baseline, merged tree pre-slice): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z091_baseline_gate.log). Final gate on the committed tree is recorded in team CAMPAIGN_STATE.md.
+
+=== VERDICT ===
+Batching LOSS re-proven on this machine on the current (Z-089) core: mimir burst512 vs inter1 = 12.38x at 64 B (396 vs 32 ns/pair) and 92.65x at 1024 B (3706 vs 40); burst8 is 1.00x at both sizes (loss switches on between batch 8 and 32); glibc pays only 2.8x / 3.0x on the same shapes. DOMINANT LOSS FACTOR (doc S4): per-op cost grows with LIVE-SET SIZE because every alloc/free pays linear registry/span walks over the live set (Z-024 reverse-order controls: walk = 82-92% of free cost at deep live sets) - batching maximises live-set size, interleaving minimises it. Priced minor terms: lock amortisation ceiling ~50 ns/pair (Z-019: uncontended wait ~13 ns, hold 20/29 ns) = <=14% of the 64 B burst512 penalty, <=1.4% at 1024 B; page faults (Z-014 at 345-505 ns/page on S2 fault counts) = <=3.1% / <=5.3%, ~11% at 1024 B even with the full span release/recreate syscall round trip (Z-015) - proposal P-1 (span retention across burst frees) is therefore CLOSED as mis-aimed for this machine (its general form is already banked: retention bound + Z-048 mapping pool + trim/pressure law; Z-014 recycling ratio 0.979-0.999). K-007 L-4 FIFO penalty does NOT reproduce here (fifo512 within +3.5% / +2.3% of LIFO). Z-092 brief: attack the walk (one lock, group by span, one registry pass per span); contract tests first.
+bugs: none in repo code. Evidence corrections recorded in doc S6 (FIFO non-reproduction; L-3 fault interpretation demoted by this-machine pricing).
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T03:05:57Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5071245
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 72%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.15 1.25 1.62
+
+=== SUMMARISER OUTPUT invocation 1 (summarize_k007.py on hidden_files/z091_k007_raw1.txt, verbatim) ===
+glibc,burst128,size=1024: n=7 ns/op median=25.00 min=23 max=28 all=[23, 24, 24, 25, 26, 27, 28] ck=['974616'] minflt_median=35 maxrss_delta_kb_median=0
+glibc,burst128,size=64: n=7 ns/op median=13.00 min=10 max=15 all=[10, 13, 13, 13, 13, 15, 15] ck=['3900000'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst32,size=1024: n=7 ns/op median=15.00 min=15 max=21 all=[15, 15, 15, 15, 15, 18, 21] ck=['974616'] minflt_median=11 maxrss_delta_kb_median=0
+glibc,burst32,size=64: n=7 ns/op median=10.00 min=8 max=12 all=[8, 10, 10, 10, 10, 10, 12] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,burst512,size=1024: n=7 ns/op median=27.00 min=21 max=38 all=[21, 22, 26, 27, 29, 30, 38] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=528
+glibc,burst512,size=64: n=7 ns/op median=14.00 min=10 max=14 all=[10, 13, 13, 14, 14, 14, 14] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst512fifo,size=1024: n=7 ns/op median=28.00 min=26 max=34 all=[26, 26, 27, 28, 30, 30, 34] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=528
+glibc,burst512fifo,size=64: n=7 ns/op median=13.00 min=12 max=15 all=[12, 13, 13, 13, 13, 13, 15] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst8,size=1024: n=7 ns/op median=8.00 min=8 max=8 all=[8, 8, 8, 8, 8, 8, 8] ck=['974616'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst8,size=64: n=7 ns/op median=4.00 min=4 max=5 all=[4, 4, 4, 4, 5, 5, 5] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=1024: n=7 ns/op median=9.00 min=5 max=9 all=[5, 7, 8, 9, 9, 9, 9] ck=['974616'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=64: n=7 ns/op median=5.00 min=4 max=6 all=[4, 5, 5, 5, 5, 5, 6] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+mimir,burst128,size=1024: n=7 ns/op median=3211.00 min=3092 max=3415 all=[3092, 3164, 3195, 3211, 3240, 3244, 3415] ck=['974616'] minflt_median=9301 maxrss_delta_kb_median=608
+mimir,burst128,size=64: n=7 ns/op median=314.00 min=307 max=372 all=[307, 310, 310, 314, 318, 322, 372] ck=['3900000'] minflt_median=400 maxrss_delta_kb_median=608
+mimir,burst32,size=1024: n=7 ns/op median=1474.00 min=1444 max=1494 all=[1444, 1451, 1465, 1474, 1479, 1484, 1494] ck=['974616'] minflt_median=3186 maxrss_delta_kb_median=92
+mimir,burst32,size=64: n=7 ns/op median=155.00 min=148 max=181 all=[148, 149, 153, 155, 155, 155, 181] ck=['3900000'] minflt_median=88 maxrss_delta_kb_median=0
+mimir,burst512,size=1024: n=7 ns/op median=3706.00 min=3639 max=3979 all=[3639, 3681, 3682, 3706, 3768, 3776, 3979] ck=['974616'] minflt_median=11529 maxrss_delta_kb_median=2656
+mimir,burst512,size=64: n=7 ns/op median=396.00 min=380 max=477 all=[380, 385, 391, 396, 430, 443, 477] ck=['3900000'] minflt_median=2695 maxrss_delta_kb_median=2144
+mimir,burst512fifo,size=1024: n=7 ns/op median=3790.00 min=3714 max=4023 all=[3714, 3720, 3722, 3790, 3851, 3854, 4023] ck=['974616'] minflt_median=11530 maxrss_delta_kb_median=2656
+mimir,burst512fifo,size=64: n=7 ns/op median=410.00 min=390 max=436 all=[390, 395, 395, 410, 415, 430, 436] ck=['3900000'] minflt_median=2694 maxrss_delta_kb_median=2144
+mimir,burst8,size=1024: n=7 ns/op median=40.00 min=33 max=49 all=[33, 39, 39, 40, 40, 40, 49] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,burst8,size=64: n=7 ns/op median=32.00 min=26 max=35 all=[26, 32, 32, 32, 33, 33, 35] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+mimir,inter1,size=1024: n=7 ns/op median=40.00 min=39 max=51 all=[39, 39, 39, 40, 41, 41, 51] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,inter1,size=64: n=7 ns/op median=32.00 min=26 max=34 all=[26, 27, 32, 32, 32, 32, 34] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
+
+=== SUMMARISER OUTPUT invocation 2 (verbatim) ===
+glibc,burst128,size=1024: n=7 ns/op median=29.00 min=23 max=34 all=[23, 23, 24, 29, 30, 32, 34] ck=['974616'] minflt_median=35 maxrss_delta_kb_median=0
+glibc,burst128,size=64: n=7 ns/op median=13.00 min=10 max=16 all=[10, 10, 13, 13, 13, 15, 16] ck=['3900000'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst32,size=1024: n=7 ns/op median=16.00 min=15 max=21 all=[15, 15, 15, 16, 17, 21, 21] ck=['974616'] minflt_median=11 maxrss_delta_kb_median=0
+glibc,burst32,size=64: n=7 ns/op median=10.00 min=8 max=12 all=[8, 10, 10, 10, 11, 11, 12] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,burst512,size=1024: n=7 ns/op median=29.00 min=21 max=31 all=[21, 21, 26, 29, 29, 30, 31] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=312
+glibc,burst512,size=64: n=7 ns/op median=13.00 min=11 max=16 all=[11, 12, 13, 13, 14, 14, 16] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst512fifo,size=1024: n=7 ns/op median=30.00 min=22 max=38 all=[22, 27, 28, 30, 33, 37, 38] ck=['974616'] minflt_median=134 maxrss_delta_kb_median=312
+glibc,burst512fifo,size=64: n=7 ns/op median=13.00 min=11 max=15 all=[11, 13, 13, 13, 14, 14, 15] ck=['3900000'] minflt_median=14 maxrss_delta_kb_median=0
+glibc,burst8,size=1024: n=7 ns/op median=8.00 min=7 max=12 all=[7, 8, 8, 8, 11, 11, 12] ck=['974616'] minflt_median=5 maxrss_delta_kb_median=0
+glibc,burst8,size=64: n=7 ns/op median=4.00 min=3 max=6 all=[3, 4, 4, 4, 5, 6, 6] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=1024: n=7 ns/op median=9.00 min=7 max=9 all=[7, 7, 9, 9, 9, 9, 9] ck=['974616'] minflt_median=3 maxrss_delta_kb_median=0
+glibc,inter1,size=64: n=7 ns/op median=6.00 min=4 max=6 all=[4, 4, 5, 6, 6, 6, 6] ck=['3900000'] minflt_median=3 maxrss_delta_kb_median=0
+mimir,burst128,size=1024: n=7 ns/op median=3118.00 min=3095 max=3506 all=[3095, 3102, 3108, 3118, 3126, 3194, 3506] ck=['974616'] minflt_median=9302 maxrss_delta_kb_median=584
+mimir,burst128,size=64: n=7 ns/op median=319.00 min=302 max=373 all=[302, 305, 307, 319, 326, 332, 373] ck=['3900000'] minflt_median=400 maxrss_delta_kb_median=584
+mimir,burst32,size=1024: n=7 ns/op median=1503.00 min=1441 max=1654 all=[1441, 1442, 1494, 1503, 1576, 1612, 1654] ck=['974616'] minflt_median=3185 maxrss_delta_kb_median=72
+mimir,burst32,size=64: n=7 ns/op median=147.00 min=142 max=176 all=[142, 143, 146, 147, 164, 175, 176] ck=['3900000'] minflt_median=88 maxrss_delta_kb_median=0
+mimir,burst512,size=1024: n=7 ns/op median=3803.00 min=3678 max=3975 all=[3678, 3734, 3799, 3803, 3938, 3971, 3975] ck=['974616'] minflt_median=11527 maxrss_delta_kb_median=2632
+mimir,burst512,size=64: n=7 ns/op median=427.00 min=383 max=469 all=[383, 387, 394, 427, 434, 447, 469] ck=['3900000'] minflt_median=2693 maxrss_delta_kb_median=2056
+mimir,burst512fifo,size=1024: n=7 ns/op median=3724.00 min=3676 max=3972 all=[3676, 3698, 3714, 3724, 3831, 3904, 3972] ck=['974616'] minflt_median=11530 maxrss_delta_kb_median=2632
+mimir,burst512fifo,size=64: n=7 ns/op median=398.00 min=392 max=471 all=[392, 394, 394, 398, 406, 409, 471] ck=['3900000'] minflt_median=2694 maxrss_delta_kb_median=2120
+mimir,burst8,size=1024: n=7 ns/op median=40.00 min=39 max=51 all=[39, 40, 40, 40, 44, 50, 51] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,burst8,size=64: n=7 ns/op median=31.00 min=25 max=36 all=[25, 30, 31, 31, 31, 33, 36] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=8
+mimir,inter1,size=1024: n=7 ns/op median=39.00 min=38 max=47 all=[38, 39, 39, 39, 40, 41, 47] ck=['974616'] minflt_median=42 maxrss_delta_kb_median=0
+mimir,inter1,size=64: n=7 ns/op median=32.00 min=28 max=35 all=[28, 32, 32, 32, 32, 33, 35] ck=['3900000'] minflt_median=40 maxrss_delta_kb_median=0
