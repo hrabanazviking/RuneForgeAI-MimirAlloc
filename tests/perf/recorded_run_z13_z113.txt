@@ -1,0 +1,153 @@
+Z-113 recorded run - GPU-shared UMA pool behaviour
+date: 2026-11-13T12:17:59-05:00
+team: team-05 branch yrsa/mimiralloc-team-05 base merge e6aa53e (seat 58af001, banked Z-001..Z-111)
+method: tests/perf/run_z113.sh tests/perf/raw_z113.txt 5 (5 procs per leg per workload per phase, legs interleaved, taskset -c 2, bench_k002 workloads via probe_z113.c unmodified harness)
+co-tenant: ollama qwen2.5:7b-instruct-q4_K_M generation loop on the integrated Radeon; engagement proven by gpu_busy_percent samples in the raw file (94-98 percent sustained); MemAvailable fell about 6.3 GB under load (UMA sharing in fact); model unloaded after the phase
+load note: SHARED HOST, not a verified quiet window - load_at_start 3.53 (decaying from pre-run ollama activity and sibling campaign work); GPU-phase load 4-6 includes the co-tenant loop and llama-server CPU work itself. Medians are the headline; mixed_lifecycle spread is wide in both legs and both phases.
+
+=== SUMMARISER OUTPUT ===
+checksum uniformity: OK all workloads
+baseline glibc large_batch: median 622.93 ns/op  min 598.93  max 760.19  n=5
+baseline glibc mixed_batch: median 3.72 ns/op  min 3.71  max 3.72  n=5
+baseline glibc mixed_lifecycle: median 6.81 ns/op  min 6.74  max 12.79  n=5
+baseline glibc small_churn: median 3.34 ns/op  min 3.34  max 3.43  n=5
+baseline mimiralloc large_batch: median 103.79 ns/op  min 102.50  max 106.63  n=5
+baseline mimiralloc mixed_batch: median 28.11 ns/op  min 28.06  max 28.83  n=5
+baseline mimiralloc mixed_lifecycle: median 399.21 ns/op  min 392.82  max 467.19  n=5
+baseline mimiralloc small_churn: median 29.42 ns/op  min 29.40  max 29.71  n=5
+gpuload glibc large_batch: median 933.60 ns/op  min 740.47  max 1344.15  n=5
+gpuload glibc mixed_batch: median 4.03 ns/op  min 3.79  max 5.37  n=5
+gpuload glibc mixed_lifecycle: median 21.50 ns/op  min 14.70  max 26.58  n=5
+gpuload glibc small_churn: median 3.58 ns/op  min 3.43  max 3.88  n=5
+gpuload mimiralloc large_batch: median 124.00 ns/op  min 111.41  max 197.00  n=5
+gpuload mimiralloc mixed_batch: median 31.55 ns/op  min 30.39  max 36.04  n=5
+gpuload mimiralloc mixed_lifecycle: median 1266.33 ns/op  min 863.14  max 1863.42  n=5
+gpuload mimiralloc small_churn: median 32.90 ns/op  min 31.94  max 33.09  n=5
+
+large_batch baseline: mimir/glibc 0.167 -> WIN (standing under this phase)
+large_batch gpuload: mimir/glibc 0.133 -> WIN (standing under this phase)
+large_batch glibc: interference factor 1.499 -> LOSS
+large_batch mimiralloc: interference factor 1.195 -> LOSS
+
+mixed_batch baseline: mimir/glibc 7.556 -> LOSS (standing under this phase)
+mixed_batch gpuload: mimir/glibc 7.829 -> LOSS (standing under this phase)
+mixed_batch glibc: interference factor 1.083 -> LOSS
+mixed_batch mimiralloc: interference factor 1.122 -> LOSS
+
+mixed_lifecycle baseline: mimir/glibc 58.621 -> LOSS (standing under this phase)
+mixed_lifecycle gpuload: mimir/glibc 58.899 -> LOSS (standing under this phase)
+mixed_lifecycle glibc: interference factor 3.157 -> LOSS
+mixed_lifecycle mimiralloc: interference factor 3.172 -> LOSS
+
+small_churn baseline: mimir/glibc 8.808 -> LOSS (standing under this phase)
+small_churn gpuload: mimir/glibc 9.190 -> LOSS (standing under this phase)
+small_churn glibc: interference factor 1.072 -> LOSS
+small_churn mimiralloc: interference factor 1.118 -> LOSS
+
+=== RAW RUNNER OUTPUT (verbatim) ===
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+load_at_start: 3.53 1.96 1.78 2/1591 2899367
+gpu_busy_before_baseline: 0
+memavail_kb_before_baseline: 121530384
+PHASE baseline
+glibc,small_churn,2000000,6855174,291750435.5,3.43,255133120
+mimiralloc,small_churn,2000000,59421081,33658088.4,29.71,255133120
+glibc,small_churn,2000000,6688143,299036668.3,3.34,255133120
+mimiralloc,small_churn,2000000,59422272,33657413.8,29.71,255133120
+glibc,small_churn,2000000,6681230,299346078.5,3.34,255133120
+mimiralloc,small_churn,2000000,58842168,33989230.3,29.42,255133120
+glibc,small_churn,2000000,6678003,299490731.0,3.34,255133120
+mimiralloc,small_churn,2000000,58794348,34016875.2,29.40,255133120
+glibc,small_churn,2000000,6676091,299576503.7,3.34,255133120
+mimiralloc,small_churn,2000000,58829606,33996488.1,29.41,255133120
+glibc,mixed_batch,1280000,4759047,268961411.8,3.72,173637760
+mimiralloc,mixed_batch,1280000,36023319,35532539.4,28.14,173637760
+glibc,mixed_batch,1280000,4750780,269429441.1,3.71,173637760
+mimiralloc,mixed_batch,1280000,36896293,34691832.0,28.83,173637760
+glibc,mixed_batch,1280000,4759648,268927450.1,3.72,173637760
+mimiralloc,mixed_batch,1280000,35961887,35593237.9,28.10,173637760
+glibc,mixed_batch,1280000,4763215,268726060.0,3.72,173637760
+mimiralloc,mixed_batch,1280000,35913045,35641645.0,28.06,173637760
+glibc,mixed_batch,1280000,4756892,269083258.6,3.72,173637760
+mimiralloc,mixed_batch,1280000,35981442,35573893.9,28.11,173637760
+glibc,large_batch,192000,117592767,1632753.5,612.46,22120160
+mimiralloc,large_batch,192000,19679848,9756172.9,102.50,22120160
+glibc,large_batch,192000,119601601,1605329.7,622.93,22120160
+mimiralloc,large_batch,192000,20001501,9599279.6,104.17,22120160
+glibc,large_batch,192000,145955537,1315469.1,760.19,22120160
+mimiralloc,large_batch,192000,19927813,9634775.3,103.79,22120160
+glibc,large_batch,192000,114995299,1669633.5,598.93,22120160
+mimiralloc,large_batch,192000,19690978,9750658.4,102.56,22120160
+glibc,large_batch,192000,143158759,1341168.4,745.62,22120160
+mimiralloc,large_batch,192000,20473373,9378034.6,106.63,22120160
+glibc,mixed_lifecycle,3072000,20927753,146790723.3,6.81,403599360
+mimiralloc,mixed_lifecycle,3072000,1229752056,2498064.5,400.31,403599360
+glibc,mixed_lifecycle,3072000,20923845,146818139.8,6.81,403599360
+mimiralloc,mixed_lifecycle,3072000,1216229816,2525838.4,395.91,403599360
+glibc,mixed_lifecycle,3072000,20717480,148280582.4,6.74,403599360
+mimiralloc,mixed_lifecycle,3072000,1226365486,2504962.9,399.21,403599360
+glibc,mixed_lifecycle,3072000,39279218,78209296.3,12.79,403599360
+mimiralloc,mixed_lifecycle,3072000,1435199967,2140468.3,467.19,403599360
+glibc,mixed_lifecycle,3072000,21647477,141910302.1,7.05,403599360
+mimiralloc,mixed_lifecycle,3072000,1206744005,2545693.2,392.82,403599360
+gpu_busy_after_baseline: 0
+load_after_baseline: 4.21 2.20 1.86 2/1553 2899503
+gpu_engaged: 1 busy_at_engage: 63
+memavail_kb_under_load: 115294368
+PHASE gpuload
+glibc,small_churn,2000000,7765636,257544906.8,3.88,255133120
+mimiralloc,small_churn,2000000,66173665,30223503.6,33.09,255133120
+glibc,small_churn,2000000,6862420,291442377.5,3.43,255133120
+mimiralloc,small_churn,2000000,66068738,30271503.0,33.03,255133120
+glibc,small_churn,2000000,7151930,279644795.2,3.58,255133120
+mimiralloc,small_churn,2000000,64535693,30990602.4,32.27,255133120
+glibc,small_churn,2000000,7741040,258363217.3,3.87,255133120
+mimiralloc,small_churn,2000000,63884194,31306648.4,31.94,255133120
+glibc,small_churn,2000000,7129176,280537330.0,3.56,255133120
+mimiralloc,small_churn,2000000,65805907,30392408.4,32.90,255133120
+glibc,mixed_batch,1280000,5152663,248415236.9,4.03,173637760
+mimiralloc,mixed_batch,1280000,40563469,31555486.5,31.69,173637760
+glibc,mixed_batch,1280000,5046844,253623848.9,3.94,173637760
+mimiralloc,mixed_batch,1280000,40343718,31727368.3,31.52,173637760
+glibc,mixed_batch,1280000,4857080,263532822.2,3.79,173637760
+mimiralloc,mixed_batch,1280000,40387989,31692590.6,31.55,173637760
+glibc,mixed_batch,1280000,5384306,237727944.9,4.21,173637760
+mimiralloc,mixed_batch,1280000,38897114,32907325.7,30.39,173637760
+glibc,mixed_batch,1280000,6872556,186248027.7,5.37,173637760
+mimiralloc,mixed_batch,1280000,46126488,27749782.3,36.04,173637760
+glibc,large_batch,192000,183155175,1048291.4,953.93,22120160
+mimiralloc,large_batch,192000,26575949,7224577.4,138.42,22120160
+glibc,large_batch,192000,178525732,1075475.2,929.82,22120160
+mimiralloc,large_batch,192000,23807906,8064548.0,124.00,22120160
+glibc,large_batch,192000,179251219,1071122.4,933.60,22120160
+mimiralloc,large_batch,192000,21390256,8976049.7,111.41,22120160
+glibc,large_batch,192000,142170970,1350486.7,740.47,22120160
+mimiralloc,large_batch,192000,22810120,8417316.5,118.80,22120160
+glibc,large_batch,192000,258077144,743963.6,1344.15,22120160
+mimiralloc,large_batch,192000,37824880,5076024.0,197.00,22120160
+glibc,mixed_lifecycle,3072000,45162907,68020422.2,14.70,403599360
+mimiralloc,mixed_lifecycle,3072000,2651571070,1158558.4,863.14,403599360
+glibc,mixed_lifecycle,3072000,81657480,37620558.5,26.58,403599360
+mimiralloc,mixed_lifecycle,3072000,5724439324,536646.4,1863.42,403599360
+glibc,mixed_lifecycle,3072000,65642411,46799012.3,21.37,403599360
+mimiralloc,mixed_lifecycle,3072000,3875402858,792691.8,1261.52,403599360
+glibc,mixed_lifecycle,3072000,66058386,46504315.1,21.50,403599360
+mimiralloc,mixed_lifecycle,3072000,3890164403,789683.8,1266.33,403599360
+glibc,mixed_lifecycle,3072000,66359802,46293085.7,21.60,403599360
+mimiralloc,mixed_lifecycle,3072000,4243622112,723909.9,1381.39,403599360
+sample gpu_busy=0 memavail_kb=121331668 load=4.21 2.20 1.86 3/1558 2899513
+sample gpu_busy=62 memavail_kb=115294336 load=4.21 2.20 1.86 19/1611 2899603
+sample gpu_busy=94 memavail_kb=115300320 load=4.03 2.20 1.86 18/1610 2899656
+sample gpu_busy=98 memavail_kb=115172916 load=4.03 2.20 1.86 18/1610 2899666
+sample gpu_busy=96 memavail_kb=115159152 load=4.03 2.20 1.86 31/1642 2899713
+sample gpu_busy=96 memavail_kb=115190852 load=5.87 2.61 2.00 20/1616 2899723
+sample gpu_busy=97 memavail_kb=115194728 load=5.87 2.61 2.00 18/1610 2899738
+sample gpu_busy=97 memavail_kb=115204804 load=5.56 2.60 2.00 19/1610 2899750
+sample gpu_busy=97 memavail_kb=115205824 load=5.56 2.60 2.00 3/1610 2899763
+sample gpu_busy=97 memavail_kb=115222464 load=5.56 2.60 2.00 3/1611 2899783
+sample gpu_busy=97 memavail_kb=115234416 load=5.36 2.60 2.01 3/1611 2899807
+sample gpu_busy=96 memavail_kb=115175820 load=5.36 2.60 2.01 21/1613 2899818
+sample gpu_busy=97 memavail_kb=115193208 load=5.09 2.59 2.00 19/1610 2899825
+gpu_busy_after_unload: 93
+load_at_end: 5.46 2.78 2.08 3/1553 2899925
+probe_stderr_bytes: 0

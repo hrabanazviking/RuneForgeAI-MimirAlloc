@@ -2631,3 +2631,21 @@ test-fuzz-z109: $(BUILD)/fuzz_z109 $(BUILD)/fuzz_z109_inject
 	./tests/fuzz/run_fuzz_z109.sh ./$(BUILD)/fuzz_z109 ./$(BUILD)/fuzz_z109_inject
 
 .PHONY: test-fuzz-z109
+# ------------------------------------------------------------------
+# Z-113: Wave 13 reserve (pool choice: GPU-shared UMA pool
+# behaviour) -- banked bench_k002 workloads under two phases
+# (tests/perf/probe_z113.c wraps bench_k002.c UNMODIFIED,
+# the probe_z005 pattern; runner tests/perf/run_z113.sh;
+# summariser tests/perf/summarize_z113.py; slice doc
+# docs/Z13_Z113_GPU_SHARED_UMA.md; recorded run
+# tests/perf/recorded_run_z13_z113.txt). Two binaries from
+# one source: glibc leg (-DLEG_GLIBC) and mimiralloc leg.
+# Standalone via `make test-z113`; NOT part of `make test`
+# (standing gate counts untouched). The runner builds the
+# probes itself if absent, following run_perf_z005.sh.
+# ------------------------------------------------------------------
+test-z113:
+	./tests/perf/run_z113.sh tests/perf/raw_z113.txt 5
+	python3 tests/perf/summarize_z113.py tests/perf/raw_z113.txt
+
+.PHONY: test-z113
