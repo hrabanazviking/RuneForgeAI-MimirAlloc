@@ -1,0 +1,131 @@
+MimirAlloc Z13 recorded run - Z-100 The long soak (Wave 12 opener)
+slice: Z-100 - The long soak (Wave 12)
+date: soak window 2026-11-13 00:02:35-08:02:35 EST (2026-11-13T05:02:35Z to 13:02:35Z); poll and collect by the finishing lead the same morning, about 08:05-08:07 EST; gate 08:08 EST (13:08:44Z)
+base: worktree HEAD c5b674451fece1e3f37dbe7dab6b84504f32fee4 (merge of seat main 3894db0844f71434b48834fdcfabc7b6bc6d2a09, banked Z-001..Z-097, 97/117) on branch yrsa/mimiralloc-team-05, clean tree. Soak target: the near-final allocator in this merged tree, built by run_z056.sh at soak start. No production code is changed by this slice.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below).
+load state: SHARED HOST. loadavg at soak start 1.52 / 1.93 / 1.97 (z056_start.txt); at collect 0.16 / 1.46 / 1.60; at gate start 0.14 / 0.97 / 1.40. During the soak the host also carried team-02 (Z-098) and team-01 (Z-099) leads measuring concurrently, plus the Aesir forge, the Lifthrasir forge and the Tensile lab per the shared-machine law. The two soak probes ran concurrently, pinned to separate cores (mimir taskset -c 2, glibc taskset -c 3); RSS/PSS are per-process smaps_rollup reads, latency batches are shared-machine samples and are NOT quiet-machine baselines. Recorded honestly as a shared-machine soak.
+artifacts: this slice banks ONLY this recorded run. The harness is unchanged from Z-056: tests/perf/probe_z056.c (sha256 887cb2309b41ad6af5e89c170fc572d4f4cfa1e6c1290418a083ea9787de8e53), tests/perf/run_z056.sh (d1e831f4b77c11a715381ec00bab78d4a3e6501bd1f37ce8a693b5a48eb10bf0), tests/perf/summarize_z056.py (0bf0f302d1668d2e9dc44f7879f8cb555b703ab166c3e8d68541b5c7d4ba83fb). Probe binaries built by the runner at soak start in build/z56/: probe_mimir 3816120c4b4f3c1fa6fef14cd6aa1500878d8c7f985cdcb1beaf06bfb897533a, probe_glibc 20f0cb0a2c694c9bbcab825c45a5853542ac6f28bb5ee52a0c9dd8210cc7a0cf (glibc hash byte-identical to the Z-056 recorded build; the mimir hash differs from Z-057 because the allocator has evolved through the banked Z-058..Z-097 work). Baseline gate before the soak on this tree: checks=4988 failed=0 skips=77 GREEN (hidden_files/z100_baseline_gate.log, team-local).
+correctness gate: scripts/z13/run_gate.sh on the final tree, log hidden_files/z100_gate.log (team-local, not banked): GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN, make exit 0 - identical to the Z-001 baseline and to the pre-soak baseline gate.
+sequencing: collect and this paperwork were done before the gate (light work first). Before the gate the finishing lead checked for a Z-098 run with pgrep -af '[z]098' twice (about 08:07 and 08:08 EST): exit 1, no process, so no wait was needed and the gate did not disturb team-02's fair-fight measurement. One gate invocation error is recorded honestly: the first attempt ran the bash script under sh, which failed with Bad substitution and a log path outside the tree; nothing was written, the tree stayed clean (git status clean), and the correct ./scripts/z13/run_gate.sh run then gave GREEN above.
+
+=== METHOD ===
+The eight-hour soak Z-056 deferred to this slice, run with the banked Z-056 harness exactly as designed: sh tests/perf/run_z056.sh start hidden_files/z100_soak 28800 3600, detached (setsid + nohup), launched 2026-11-13 00:02:35 EST (2026-11-13T05:02:35Z). Both legs ran the full 28800 s concurrently, pinned mimir -c 2 / glibc -c 3, sampling every 3600 s plus t=0 and the deadline: 9 scheduled samples per leg (t = 0, 3600, ..., 28800). Workload, sampling and integrity checks are as specified in the Z-056 recorded run: 320-slot mixed lifecycle, fixed-seed distribution 55% small (16..1024 B) / 25% medium (4 KiB..64 KiB) / 20% large (128 KiB..2 MiB), dense-touch, per-sample stored-byte verification of every live block (first/middle/last), calloc zero-fill and realloc contents-preservation verified, smaps_rollup Rss/Pss plus maps VMA and allocation-window hole reads per sample, timed latency batches (256 x 64 B + 32 x 64 KiB alloc/free); after the deadline each probe frees everything and emits DRAINED and DONE. Time-boxed, not op-boxed: the legs share duration and workload distribution, not the operation sequence, so per-leg drift curves are comparable as resident-shape series, never as equal-work measurements. Poll: run_z056.sh poll hidden_files/z100_soak showed both legs done, exit 0, 9 samples each. Collect: run_z056.sh collect hidden_files/z100_soak verified both exit codes (0 and 0) and ran the summariser; collect exit 0, log hidden_files/z100_collect.log (team-local). Raw files: hidden_files/z100_soak/z056_mimir.raw and z056_glibc.raw (team-local), appended verbatim below; both .err files are empty (0 bytes).
+
+=== SUMMARY (tests/perf/summarize_z056.py on the eight-hour raw data, verbatim, via run_z056.sh collect) ===
+loadavg_at_collect=0.16 1.46 1.60 1/1370 3119234
+=== leg mimir (hidden_files/z100_soak/z056_mimir.raw) ===
+schedule: seconds=28800 interval_s=3600 expected_samples=9 got_samples=9
+completeness: COMPLETE - every scheduled sample present exactly once, DRAINED + DONE present
+ops_total=1446770176 peak_rss_kib=151744
+rss_kib: first=2128 median=141540 peak=151744 final=141540 (t0 baseline 2128)
+live_bytes: median=72508726 peak=84887505
+net_factor: median=1.895 worst=2.304 final=2.304
+holes: median_count=105 median_bytes=62371840 worst_largest=29843456
+latency ns/op: small median=269 worst=22136; large median=3351 worst=12601
+drained: rss_kib=38528 retained_net_kib=36400 vma_delta=73
+series (every sample):
+  t_s      ops  live      live_B    rss_KiB   net_f  holes  hole_B   lat_s  lat_l
+     0        0     0          0      2128  0.000     0         0   1005   1578
+  3600 245768704   320   81825377    150192  1.853   111  54562816    298   3398
+  7200 493474048   320   72804232    141968  1.967   109  67317760    234   3305
+  10800 734568960   320   67515652    139380  2.082   110  60973056    263   3046
+  14400 984360704   320   75052390    144140  1.938    99  49385472    270   3546
+  18000 1224425216   320   84887505    151744  1.805   103  46440448    269   3478
+  21600 1419893504   320   72213221      8084  0.084   102  84692992  22136  12601
+  25200 1419893504   320   72213221      9152  0.100   103  84627456   3039   2240
+  28800 1446770176   320   61962344    141540  2.304   108  63770624    221   2819
+=== leg glibc (hidden_files/z100_soak/z056_glibc.raw) ===
+schedule: seconds=28800 interval_s=3600 expected_samples=9 got_samples=9
+completeness: COMPLETE - every scheduled sample present exactly once, DRAINED + DONE present
+ops_total=9638563584 peak_rss_kib=194056
+rss_kib: first=2092 median=184900 peak=194056 final=194056 (t0 baseline 2092)
+live_bytes: median=81710808 peak=105443967
+net_factor: median=2.125 worst=3.167 final=2.642
+holes: median_count=0 median_bytes=0 worst_largest=0
+latency ns/op: small median=49 worst=1029; large median=120 worst=49985
+drained: rss_kib=186284 retained_net_kib=184192 vma_delta=0
+series (every sample):
+  t_s      ops  live      live_B    rss_KiB   net_f  holes  hole_B   lat_s  lat_l
+     0        0     0          0      2092  0.000     0         0     11    601
+  3600 1603441920   320   62894679    183816  2.959     0         0     50    153
+  7200 3220554240   320   90013148    184900  2.080     0         0     42    111
+  10800 4824715264   320  105443967    185052  1.777     0         0     42    116
+  14400 6450915072   320   60508978    189248  3.167     0         0     41    116
+  18000 8079844608   320   86443575    185280  2.170     0         0     48    124
+  21600 9467205888   320   81710808     14204  0.152     0         0   1029  49985
+  25200 9467205888   320   81710808     14464  0.155     0         0     98     41
+  28800 9638563584   320   74388445    194056  2.642     0         0     50    142
+
+SOAK COMPLETENESS: ALL LEGS COMPLETE
+
+=== READING - THE EIGHT-HOUR SOAK (roadmap gate) ===
+Gate: "complete soak report; any drift or leak quantified" - MET. Both legs COMPLETE: 9 of 9 scheduled samples each (t = 0, 3600, ..., 28800), DRAINED + DONE present, both probes exited 0, summariser verdict ALL LEGS COMPLETE, collect exit 0. net_factor below is the harness metric (Rss minus t0 baseline, over live bytes).
+F1 - Completeness and totals. mimir ops_total=1446770176, peak_rss_kib=151744 (at t=18000). glibc ops_total=9638563584, peak_rss_kib=194056 (at the final sample). Both .err files empty. No probe aborted; no integrity mismatch was reported by the harness (every sample verifies all live stored bytes, calloc zero-fill and realloc preservation).
+F2 - No monotone drift over eight hours (the soak question), per leg, first-vs-median-vs-final. mimir Rss: first (t0) 2128 KiB, median 141540 KiB, final 141540 KiB; first live sample (t=3600) 150192 KiB -> final 141540 KiB, a change of -8652 KiB (-5.8%). mimir net_factor: first live 1.853, median 1.895, final 2.304. glibc Rss: first (t0) 2092 KiB, median 184900 KiB, final 194056 KiB; first live sample 183816 KiB -> final 194056 KiB, +10240 KiB (+5.6%). glibc net_factor: first live 2.959, median 2.125, final 2.642. Neither sequence is monotone: mimir normal-sample Rss runs 150192, 141968, 139380, 144140, 151744, 141540 and glibc runs 183816, 184900, 185052, 189248, 185280, 194056. On the six normal live samples per leg (excluding t0 and the two anomalous samples of F4), mimir Rss median 143054 KiB (first-three-normal median 141968, last-three-normal median 144140, +1.5%) and net_factor median 1.952; glibc Rss median 185166 KiB (first-three 184900, last-three 189248, +2.4%) and net_factor median 2.406. mimir's final net_factor (2.304, its worst sample) is driven by the lowest final live_bytes (61962344 B), not by Rss growth - final Rss is below both the first live sample and the peak. Verdict: NO drift proven for either allocator over eight hours; both resident curves are flat within sample noise.
+F3 - Resident shape. mimir net_factor median 1.895 (worst 2.304) vs glibc median 2.125 (worst 3.167); peak Rss mimir 151744 KiB vs glibc 194056 KiB, on live peaks 84887505 B (mimir) vs 105443967 B (glibc). Grade in roadmap words for the soak workload: WIN on resident shape (this workload, this machine, this shared-host window), holding from the pilot and the Z-057 one-hour soak at 8x that duration.
+F4 - Mid-soak both-leg anomaly, recorded honestly and quantified (t=21600 and t=25200). At both samples BOTH legs show the same signature at the same time: operations frozen between them (ops delta 21600->25200 = 0 in both legs: mimir 1419893504 at both, glibc 9467205888 at both), Rss collapsed (mimir 8084 and 9152 KiB, net_factor 0.084 and 0.100; glibc 14204 and 14464 KiB, net_factor 0.152 and 0.155), while live_bytes were unchanged and identical across the two samples (mimir 72213221 B, glibc 81710808 B) and hole counts unchanged (mimir 102 and 103). The t=21600 latency batch spiked in both legs (mimir small 22136 / large 12601 ns/op; glibc small 1029 / large 49985 ns/op), and the preceding hour (t=18000->21600) already ran slower than earlier hours in both legs. At t=28800 both legs recovered to normal Rss and net_factor and ops resumed (mimir +26876672 and glibc +171357696 in the final interval). A signature hitting both legs identically at the same wall interval, with live bytes and hole structure unchanged, is a host-level event (its cause is not identified in the harness data), NOT an allocator drift or leak in either leg. These two samples are included verbatim in the series and the collect medians; the normal-sample medians in F2 quantify the soak without them.
+F5 - Fragmentation (mimir allocation-VMA window). mimir holes: median_count=105, median_bytes=62371840, worst_largest=29843456 B (collect, over live samples); worst total hole bytes 84692992 B at the anomalous t=21600 sample (84627456 B at t=25200; worst normal-sample total 67317760 B at t=7200). glibc's window shows 0 holes at every sample - its fragmentation cost appears as the higher net_factor of F3, exactly as in the pilot and Z-057. Address holes and resident holes remain different quantities.
+F6 - Drain retention (the leak figure). After freeing all 320 blocks in-process: mimir DRAINED Rss 38528 KiB, retained_net_kib 36400 KiB over the t0 baseline of 2128 KiB (raw DRAINED Pss field 36516 KiB), vma_delta +73. glibc DRAINED Rss 186284 KiB, retained_net_kib 184192 KiB over the t0 baseline of 2092 KiB (raw DRAINED Pss field 184272 KiB), vma_delta 0. Against the pilot drained references (120 s soak, recorded in the Z-100 starting section): mimir retained_net 35456 KiB -> 36400 KiB after eight hours (+944 KiB, +2.7%); glibc 190800 KiB -> 184192 KiB (-6608 KiB). Against the Z-057 one-hour soak: mimir 36696 KiB -> 36400 KiB (-296 KiB); glibc 184392 KiB -> 184192 KiB (-200 KiB). Retention is therefore stable across 120 s, one hour and eight hours - it does NOT grow with soak duration: NO leak-over-time is proven for either leg. mimir's retention is the known mapping-cache posture (vma_delta +73, unchanged from pilot and Z-057); glibc's is in-process arena/top retention. Process exit returns everything for both legs (both exited 0).
+F7 - Throughput and latency (shared-machine samples, NOT baselines). glibc executed 9638563584 ops vs mimir 1446770176 in the same eight hours (6.66x), so the legs are not equal-work measurements (see METHOD). Latency (collect, over live samples): small median 269 ns/op mimir (worst 22136, the anomalous t=21600 sample) vs 49 glibc (worst 1029, same sample); large median 3351 ns/op mimir (worst 12601, same sample) vs 120 glibc (worst 49985, same sample). Grade: LOSS on batch latency, same shape as the pilot and Z-057; excluding the host-anomaly sample, worst normal-sample latencies are mimir small 298 / large 3546 and glibc small 50 / large 153.
+Team structure: finishing lead (keeper restart after the soak had been launched by the previous lead), which ran the six Mythic Engineering roles (harness audit, soak method, load and co-tenant watch, gate verification, ledger, risk review) sequentially itself; no sub-agents were spawned for the finishing phase, recorded plainly per the campaign rule. Bugs discovered: none in the allocator or the harness. One lead invocation error (gate script run under sh) is recorded in the sequencing note in the header; it wrote nothing and the corrected run is the gate of record.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002, captured at assembly time, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T13:11:42Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 63%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.13 0.59 1.17
+
+=== RAW (hidden_files/z100_soak/, verbatim) ===
+--- z056_start.txt ---
+seconds=28800 interval_s=3600
+started_utc=2026-11-13T05:02:35Z
+loadavg_at_start=1.52 1.93 1.97 1/1381 3171805
+host=Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+--- z056_mimir.raw ---
+SOAK,mimir,28800,3600
+SAMPLE,mimir,0,0,0,0,2128,180,26,0,0,0,0,0,0,0,0,1005,1578,0
+SAMPLE,mimir,3600,245768704,320,81825377,150192,148181,153,127,116,136360,111,54562816,6516736,43528192,112332746,298,3398,118017
+SAMPLE,mimir,7200,493474048,320,72804232,141968,139957,160,134,110,121472,109,67317760,13791232,49684480,118862189,234,3305,118083
+SAMPLE,mimir,10800,734568960,320,67515652,139380,137367,153,127,111,124332,110,60973056,11923456,49004544,120740493,263,3046,118431
+SAMPLE,mimir,14400,984360704,320,75052390,144140,142129,142,116,101,128880,99,49385472,7655424,39170048,106272882,270,3546,123846
+SAMPLE,mimir,18000,1224425216,320,84887505,151744,149726,151,125,104,134864,103,46440448,4206592,32673792,99616621,269,3478,113340
+SAMPLE,mimir,21600,1419893504,320,72213221,8084,6070,159,133,104,118592,102,84692992,29843456,66056192,133885114,22136,12601,121818
+SAMPLE,mimir,25200,1419893504,320,72213221,9152,7138,160,134,105,118656,103,84627456,29843456,65990656,133885114,3039,2240,121818
+SAMPLE,mimir,28800,1446770176,320,61962344,141540,139528,157,131,110,124448,108,63770624,16179200,49827840,129205134,221,2819,123639
+DRAINED,mimir,38528,36516,99,73
+DONE,mimir,1446770176,9,151744
+--- z056_glibc.raw ---
+SOAK,glibc,28800,3600
+SAMPLE,glibc,0,0,0,0,2092,144,26,0,0,0,0,0,0,0,0,11,601,0
+SAMPLE,glibc,3600,1603441920,320,62894679,183816,181805,26,0,1,181704,0,0,0,0,123029507,50,153,124302
+SAMPLE,glibc,7200,3220554240,320,90013148,184900,182889,26,0,1,182788,0,0,0,0,97022261,42,111,130347
+SAMPLE,glibc,10800,4824715264,320,105443967,185052,183039,26,0,1,183048,0,0,0,0,81147175,42,116,119580
+SAMPLE,glibc,14400,6450915072,320,60508978,189248,187237,26,0,1,187116,0,0,0,0,129358505,41,116,121086
+SAMPLE,glibc,18000,8079844608,320,86443575,185280,183262,26,0,1,183148,0,0,0,0,99014178,48,124,123873
+SAMPLE,glibc,21600,9467205888,320,81710808,14204,12190,26,0,1,191120,0,0,0,0,107987147,1029,49985,130101
+SAMPLE,glibc,25200,9467205888,320,81710808,14464,12450,26,0,1,191120,0,0,0,0,107987147,98,41,130101
+SAMPLE,glibc,28800,9638563584,320,74388445,194056,192044,26,0,1,192072,0,0,0,0,122153179,50,142,119226
+DRAINED,glibc,186284,184272,26,0
+DONE,glibc,9638563584,9,194056
