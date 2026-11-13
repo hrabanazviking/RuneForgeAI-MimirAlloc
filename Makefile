@@ -1565,6 +1565,24 @@ test-z070: $(BUILD)/test_z070_dfree
 
 .PHONY: test-z070
 
+# Z-103: corruption chaos evidence
+# (tests/core/test_z103_chaos.c), built against the
+# internal stats / diag / integrity / drain / trim
+# surfaces (shape (b) headers under tests/core/).
+# Standalone target `make test-z103`; NOT part of
+# `make test`.
+
+$(BUILD)/test_z103_chaos.o: tests/core/test_z103_chaos.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_diag_j007.h tests/core/mimir_integrity_j006.h tests/core/mimir_drain_h001.h tests/core/mimir_trim_i003.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z103_chaos.c -o $@
+
+$(BUILD)/test_z103_chaos: $(LIBOBJS) $(BUILD)/test_z103_chaos.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z103_chaos.o -o $@ -lpthread
+
+test-z103: $(BUILD)/test_z103_chaos
+	./$(BUILD)/test_z103_chaos
+
+.PHONY: test-z103
+
 # J-007: Phase 10 allocation-free diagnostics evidence
 # test - the test under tests/core/ (test_j007.c) verifies
 # the diagnostics channel of docs/PHASE_10_DIAGNOSTICS.md

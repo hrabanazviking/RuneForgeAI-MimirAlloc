@@ -1,0 +1,149 @@
+MimirAlloc Z13 recorded run - Z-103: Corruption chaos
+Fri 2026-11-13 EST (runs 08:42-08:44 EST / 13:42-13:44 UTC)
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64,
+  page 4096, 128 GB UMA)
+Base: seat main b8bca27 (banked Z-001..Z-100), merged into
+  yrsa/mimiralloc-team-04 as 8782723 (one Makefile conflict,
+  pure seat-side additions Z-087/Z-089/Z-092/Z-094, resolved
+  by taking the seat side; the README.md change in the merge
+  is the seat's own banked commit c8a2c16, untouched here).
+  This slice BUILDS AHEAD: it banks only after Z-101/Z-102
+  in roadmap order, whenever they commit. No dependency on
+  Z-101/Z-102 outcomes: the Wave-8 detection surface it
+  measures (Z-066/Z-067/Z-068) is fully banked, so nothing
+  is OWED.
+Load state: shared host, loadavg ~1.8-2.9 during the runs
+  (campaign co-tenants measuring on the same host; the
+  keeper reported load ~0.5 at muster, rising as Wave-12
+  teams flowed). Every graded quantity below is an exact
+  outcome count over forked trials, never a wall time, so
+  contention does not grade anything; it is recorded
+  because the campaign law asks for it.
+
+S1. Roadmap gate
+Gate (docs/MIMIRALLOC_Z13_ROADMAP.md Z-103): randomised
+metadata flips under load: Wave-8 detection measured at
+scale, false-positive rate on clean runs measured too.
+Gate: detection and false-positive rates recorded.
+Result: MET. tests/core/test_z103_chaos.c (new, standalone
+`make test-z103`, NOT in make test -- the Z-064
+precedent) ran 260 trials per run, two full runs, 520
+trials total, every trial a forked child under load from
+3 churn threads (sizes 16/64/256/1024). Flips are chosen
+by splitmix64 seeded per trial (master base 0x1030000 +
+family*100003 + index; deterministic -- run 2 reproduces
+run 1 almost exactly, S3). Detection per trial =
+integrity walk > 0, OR any Wave-8 tally moved
+(metadata_detections / metadata_collateral_refusals /
+live_release_detections / live_release_collateral_
+refusals), OR the target free refused; span targets are
+freed cross-thread so the central path judges them.
+Outcome classes: DETECTED / SILENT / CRASH (signal) /
+HANG (10 s deadline, killed) / ERR.
+
+S2. Rates (two runs combined, 520 trials)
+  fam 0 clean, no flip (n=120):
+    FP (DETECTED-criteria on a clean tree) = 0/120.
+    FALSE-POSITIVE RATE = 0.0%. No walk violation, no
+    tally movement, no refusal on any clean run under
+    the same churn load.
+  fam 1 descriptor single-bit flip (n=120), fields
+    {magic, base, mapping_length, usable_offset,
+    requested, usable_size, state/flags, next}:
+    DETECTED 116 (96.7%), SILENT 4 (3.3%), CRASH 0,
+    HANG 0. The 4 silences are single-bit flips the
+    recorded Wave-8 surface does not cover (consistent
+    with the Z-066 S6 boundary record); no crash class
+    exists on the descriptor path.
+  fam 2 descriptor consistent length pair (n=60)
+    (the Z-066 class, len+usable grown/shrunk by one
+    page together): DETECTED 60/60 = 100%.
+  fam 3 span single-bit flip (n=120), fields {magic,
+    mapping_length, class_size, usable_size,
+    class_index, next, free_head, live_count,
+    carve_count}: DETECTED 89, SILENT 0, CRASH 29,
+    HANG 2. Of trials that completed, detection is
+    89/89 = 100%; the 31 crash/hang outcomes (25.8%)
+    are the wild-pointer consequence of bit flips in
+    the next/free_head pointer fields -- the same two
+    crash-expected classes the J-006 suite has always
+    recorded (no in-process check can validate a
+    pointer without dereferencing it). Zero silent
+    span flips at scale.
+  fam 4 span consistent pair (n=60): DETECTED 60/60 =
+    100%. Half are the Z-066 length pair (validator-
+    refused); half are the Z-068 class pair, which the
+    free path accepts by design but the integrity walk
+    flags via its class_active cross-check -- DETECTED
+    here is by the walk, exactly as Z-068 recorded
+    (BY-DESIGN SILENT operational / WALK-DETECTED).
+  fam 5 descriptor reserve-scratch flip (n=40) (the
+    Z-068 INC-J006-03 by-design class): DETECTED 0,
+    SILENT 40/40 = 100% silent, confirming the
+    by-design record at scale: the scratch feeds no
+    allocator decision, so there is nothing to detect
+    with; its sole effect remains the diagnostics-
+    grade cross_thread_frees counter.
+  Corrupt-trial totals (n=400): DETECTED 325, SILENT
+  44 (40 of them the by-design scratch family),
+  CRASH 29, HANG 2, ERR 0. Excluding the by-design
+  family: 360 trials, 90.3% DETECTED, 1.1% SILENT
+  (all descriptor single-bit), 8.6% CRASH/HANG (all
+  span pointer fields).
+
+S3. Per-run lines (read from the run logs)
+  Run 1 (hidden_files/z103_run1.log, via make test-z103;
+  74 diag lines on stderr, op=free/drain/trim
+  cause=metadata):
+    fam=0 n=60 detected=0  silent=60 crash=0 hang=0 err=0
+    fam=1 n=60 detected=58 silent=2  crash=0 hang=0 err=0
+    fam=2 n=30 detected=30 silent=0  crash=0 hang=0 err=0
+    fam=3 n=60 detected=44 silent=0  crash=15 hang=1 err=0
+    fam=4 n=30 detected=30 silent=0  crash=0 hang=0 err=0
+    fam=5 n=20 detected=0  silent=20 crash=0 hang=0 err=0
+  Run 2 (hidden_files/z103_run2.log; binary re-run
+  directly; 66 diag lines): identical except fam=3
+  detected=45 crash=14 -- one trial on the crash/
+  detect boundary moved with churn timing; the seeds
+  and flips are deterministic, the churn interleaving
+  is not, and the variance is recorded, not averaged
+  away (the combined counts in S2 keep both runs).
+
+S4. Standing gate and neighbours (counts from log files)
+  Baseline gate on the merged tree (log
+  hidden_files/z103_baseline_gate.log) and final gate
+  on the slice tree (hidden_files/z103_gate_final.log):
+    GATE COUNTS: checks=4988 failed=0 skips=77 -- GREEN
+  both times, identical to the Z-001 baseline; this
+  slice adds no suite checks (standalone harness).
+  nm -D --defined-only build/libmimiralloc.so: 13
+  public symbols (the Wave-9 widened surface), unchanged
+  by this slice; the harness links $(LIBOBJS) directly
+  and exports nothing.
+
+S5. Bugs found
+  None in repo code. No core code is changed by this
+  slice; the only code is the new standalone harness
+  plus its Makefile target.
+
+S6. Review record
+  Lead ran the six Mythic Engineering roles
+  SEQUENTIALLY itself (inspect, design, build, measure,
+  verify, record) -- no sub-agents were spawned for
+  this slice; all device-side work was executed by the
+  lead alone in this worktree, recorded plainly per
+  campaign law. Transfer note: the harness source was
+  landed by plain-text heredoc appends in three parts
+  (281 lines, line-count verified against the authored
+  source) after two encoded-payload transfers were
+  removed by platform classifiers; no bad bytes landed
+  (the build compiled the heredoc-landed source and
+  both runs above are its output).
+
+S7. Files in this slice
+  tests/core/test_z103_chaos.c          (new; harness)
+  Makefile                              (test-z103 target)
+  tests/perf/recorded_run_z13_z103.txt  (this file)
+CAMPAIGN_STATE.md updated on disk only, never committed.
+Not pushed: banking is the keeper's job at the seat, in
+roadmap order behind Z-101/Z-102.
