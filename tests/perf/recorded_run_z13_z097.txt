@@ -1,0 +1,100 @@
+MimirAlloc Z13 recorded run - Z-097 Short-lived process economics
+slice: Z-097 - Short-lived process economics (Wave 11; interposition .so load and first-allocation cost across a fork+exec storm; gate: per-process tax table vs glibc recorded)
+date: 2026-11-12T23:26:10-05:00
+base: bee0517 (team branch yrsa/mimiralloc-team-01 = seat main 3e54613, banked Z-001..Z-093, merged into team-01 as bee0517; plus the untracked tests/perf/child_z097.c the previous lead landed at 23:09, audited first-hand by this lead and kept unchanged)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: tests/perf/child_z097.c (payload: ordinary glibc consumer, modes none/first/multi/churn/verdict), tests/perf/probe_z097.c (fork+exec storm driver), tests/perf/run_z097.sh (runner), tests/perf/summarize_z097.py (tax-table summariser), this recorded run. No src/, API, ABI or Makefile change; README.md untouched.
+team: lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly).
+method: payload built -O2 -fno-builtin as a plain glibc consumer (no MimirAlloc DT_NEEDED); driver built -O2 and never preloaded itself - it fork+execs the payload sequentially (each child waited to completion before the next fork: the shell-script/build-farm shape) and passes LD_PRELOAD=build/libmimiralloc_interpose.so (Z-082 interposing build, sha256 9a6836d5318fb3a269fcbaeb7b6b03834bd88cb375f38a1d88677fd5188e2491) to the preload-world children only. Storms pinned taskset -c 5 (children inherit the pin): 200 children per storm (100 for churn), 7 storms per (world, shape), worlds interleaved rep by rep, 2 discarded warm-up storms per (world, shape) first, TWO full invocations (raw: team hidden_files/z097_raw1.txt, z097_raw2.txt). Per-process cost = storm wall (CLOCK_MONOTONIC) / count; RUSAGE_CHILDREN deltas give the user/sys split and minor faults. Equivalence: the payload timed modes exit 0 only on an arithmetic checksum match, the driver counts a child failed otherwise, and the summariser hard-fails on any failed child or count mismatch - all 19,600 measured children (plus warm-ups and sanity runs) exited 0. World proof before timing: verdict mode (the Z-082 two-probe check) printed PRELOAD-VERDICT: GLIBC plain and PRELOAD-VERDICT: MIMIR preloaded (runner log hidden_files/z097_run.log).
+load honesty: QUIET WINDOW. loadavg 0.38/1.12/1.00 at start, mid and end (the 1-minute figure flat at 0.38; the 5/15-minute figures are decaying history of earlier shared-host work - an Aesir git fetch and a neighbouring Z-096 bench were seen in the hour before, neither during the storm window; the top CPU consumers at run start were desktop daemons under 1%). Median-of-7 storms with two-invocation agreement as guard: every cell agreed within 0.9% across invocations (worst cells: glibc none +0.55%, mimir churn -0.71%). This-machine numbers under that stated load.
+correctness gate (baseline, pre-slice tree bee0517): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z097_baseline_gate.log). Final gate on the committed tree is recorded in team CAMPAIGN_STATE.md.
+
+=== VERDICT ===
+Per-process tax vs glibc: LOSS on every shape (headline = invocation 1 medians). A process that never allocates pays +25,154 ns (+16.98%, 1.17x) just for the interposition .so load. One allocation raises the tax to +41,474 ns (+26.72%, 1.27x): the first-allocation increment over the no-alloc leg is 23,354 ns under MimirAlloc vs 7,034 ns under glibc, a first-touch tax of +16,320 ns beyond the load tax. Eight allocations across the class ladder (16..262144, the top rung on the mapping path) pay +112,804 ns (+71.08%, 1.71x). A working short-lived process (1000 small alloc/touch/free cycles) pays +202,966 ns (+130.25%, 2.30x). Storm projection: at churn shape the tax is +203 ms per 1,000 processes and +2.03 s per 10,000 - the concrete price on shell scripts and build farms that fork+exec thousands of short-lived children. REASON NAMED (Law 2): two stacked terms - (1) a fixed per-process load/init term (+25.2 us on the none leg, with preload minor faults 84.4 vs glibc 73.0 per process: the extra .so mapping, relocation and allocator initialisation every exec pays whether or not it allocates), and (2) the per-allocation small-path cost documented since Z-003/Z-024 (registry/span walks), which the increments isolate: +16,320 ns for the first touch, +87,650 ns for the eight ladder allocations, +177,812 ns for the 1000 churn pairs, with preload minor faults per process rising 84 (none) to 234 (churn) vs a flat 73-79 under glibc. The tax is therefore not a load-time-only curiosity: it grows with exactly the work a short-lived process does.
+bugs: none in repo code. The payload child_z097.c landed by the previous lead was audited line by line against the Z-082 probe contract (tests/abi/test_z082_pre.c) and the checksum discipline and kept unchanged; its verdict mode reproduced GLIBC/MIMIR exactly in the run of record. Transport note: the three new harness files crossed to the device as a sha256-verified tar.gz in 500-byte file.write chunks (one earlier 2000-byte chunk attempt was corrupted in re-emission and discarded unlanded; the 500-byte crossing verified byte-clean, whole-archive sha256 3e5ab5e1...).
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T04:30:38Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2764128
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 63%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.37 1.86 1.36
+
+=== SUMMARISER OUTPUT invocation 1 (summarize_z097.py on hidden_files/z097_raw1.txt, verbatim) ===
+=== PER-PROCESS TAX TABLE vs glibc (median ns per process over storm reps) ===
+mode    n/proc reps      glibc      mimir     tax_ns    tax_%  factor  grade
+none       200    7     148168     173322     +25154  +16.98%   1.17x  LOSS
+first      200    7     155202     196676     +41474  +26.72%   1.27x  LOSS
+multi      200    7     158689     271493    +112804  +71.08%   1.71x  LOSS
+churn      100    7     155831     358797    +202966 +130.25%   2.30x  LOSS
+--- per-process CPU split and faults (medians per process) ---
+plain    none    user_ns=   115030 sys_ns=    15110 minflt=   73.0
+preload  none    user_ns=   134715 sys_ns=    20310 minflt=   84.4
+plain    first   user_ns=   117630 sys_ns=    16380 minflt=   74.9
+preload  first   user_ns=   149465 sys_ns=    25530 minflt=  117.4
+plain    multi   user_ns=   123530 sys_ns=    15490 minflt=   79.0
+preload  multi   user_ns=   204815 sys_ns=    42915 minflt=  185.3
+plain    churn   user_ns=   123290 sys_ns=    13260 minflt=   74.0
+preload  churn   user_ns=   277020 sys_ns=    58090 minflt=  234.1
+
+=== DECOMPOSITION (median ns per process) ===
+so load tax (none delta): +25154 ns (+16.98% of the glibc no-alloc process)
+first   increment over none: glibc +7034 ns, mimir +23354 ns, allocator-work tax +16320 ns
+multi   increment over none: glibc +10521 ns, mimir +98171 ns, allocator-work tax +87650 ns
+churn   increment over none: glibc +7663 ns, mimir +185475 ns, allocator-work tax +177812 ns
+
+=== STORM PROJECTION (median tax) ===
+none    tax per 1000 procs   +25.15 ms, per 10000 procs   +251.54 ms
+first   tax per 1000 procs   +41.47 ms, per 10000 procs   +414.74 ms
+multi   tax per 1000 procs  +112.80 ms, per 10000 procs  +1128.04 ms
+churn   tax per 1000 procs  +202.97 ms, per 10000 procs  +2029.66 ms
+
+=== SUMMARISER OUTPUT invocation 2 (summarize_z097.py on hidden_files/z097_raw2.txt, verbatim) ===
+=== PER-PROCESS TAX TABLE vs glibc (median ns per process over storm reps) ===
+mode    n/proc reps      glibc      mimir     tax_ns    tax_%  factor  grade
+none       200    7     148980     174158     +25178  +16.90%   1.17x  LOSS
+first      200    7     153835     197119     +43284  +28.14%   1.28x  LOSS
+multi      200    7     158409     271622    +113213  +71.47%   1.71x  LOSS
+churn      100    7     154677     356246    +201569 +130.32%   2.30x  LOSS
+--- per-process CPU split and faults (medians per process) ---
+plain    none    user_ns=   117435 sys_ns=    15490 minflt=   73.0
+preload  none    user_ns=   132470 sys_ns=    20250 minflt=   84.4
+plain    first   user_ns=   121145 sys_ns=    14915 minflt=   74.2
+preload  first   user_ns=   152935 sys_ns=    23105 minflt=  117.3
+plain    multi   user_ns=   122210 sys_ns=    16745 minflt=   79.0
+preload  multi   user_ns=   208740 sys_ns=    40950 minflt=  185.3
+plain    churn   user_ns=   122090 sys_ns=    15080 minflt=   74.0
+preload  churn   user_ns=   281290 sys_ns=    51060 minflt=  234.3
+
+=== DECOMPOSITION (median ns per process) ===
+so load tax (none delta): +25178 ns (+16.90% of the glibc no-alloc process)
+first   increment over none: glibc +4855 ns, mimir +22961 ns, allocator-work tax +18106 ns
+multi   increment over none: glibc +9429 ns, mimir +97464 ns, allocator-work tax +88035 ns
+churn   increment over none: glibc +5697 ns, mimir +182088 ns, allocator-work tax +176391 ns
+
+=== STORM PROJECTION (median tax) ===
+none    tax per 1000 procs   +25.18 ms, per 10000 procs   +251.78 ms
+first   tax per 1000 procs   +43.28 ms, per 10000 procs   +432.84 ms
+multi   tax per 1000 procs  +113.21 ms, per 10000 procs  +1132.13 ms
+churn   tax per 1000 procs  +201.57 ms, per 10000 procs  +2015.69 ms
