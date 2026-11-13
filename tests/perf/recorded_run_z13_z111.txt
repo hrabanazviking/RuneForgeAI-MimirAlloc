@@ -1,0 +1,292 @@
+MimirAlloc Z13 recorded run - Profile-guided class table v2
+slice: Z-111 - Reserve slice 3 (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md
+  Wave 13; pool choice recorded in the seat WAVE_PLAN.md before the
+  slice started: profile-guided class table v2; reason: Z-095's
+  near-miss carried in the Z-108 verdict section 6 - v1 won the
+  traces but regressed oracle small_churn +6.13% past its 2% bar;
+  success measure: Z-095's pre-registered adoption bars applied
+  UNCHANGED - adoption only if no oracle workload regresses past
+  the bar AND the trace win reproduces against the banked
+  canonical traces (Z-094 traces), else honest NO-ADOPTION)
+date: 2026-11-13, 11:15-11:44 EST (America/Indiana/Indianapolis);
+  baseline gate 11:15 EST, stage-1 isolation 11:22 EST, measure
+  run of record 11:23-11:43 EST, oracle recheck 11:44 EST,
+  final gate 11:44 EST (16:44Z)
+base: team branch yrsa/mimiralloc-team-03 at 6edbf41 (this team's
+  Z-107 commit, already banked at the seat as 85b856f) plus merge
+  6f52d73 of seat main 7e76e47 (banked Z-001..Z-108, Wave 12
+  complete) - clean merge, no conflicts; the merge added exactly
+  the Z-108 verdict fold-in files (4 files, +941). CAMPAIGN_STATE.md
+  preserved uncommitted throughout (git-excluded bookkeeping).
+host: purpleraider (ASUS ROG Flow Z13, AMD RYZEN AI MAX+ 395
+  w/ Radeon 8060S, x86-64, 4 KiB pages, 128 GB UMA), Ubuntu 26.10,
+  kernel 7.3.0-10-generic, glibc 2.44. Host truth at final gate:
+  scripts/z13/host_truth.sh 2026-11-13T16:44:16Z (team-local log).
+team: fresh lead (keeper restart; the previous Z-111 lead was
+  stopped by a cron execution timeout with no side effects - no
+  merge, no edits, no commit - verified against this worktree's
+  state at 6edbf41, clean). NO sub-agents were spawned (platform
+  depth); the lead ran the six Mythic Engineering roles itself
+  sequentially (evidence re-read, variant design, harness build,
+  measurement, adoption-bar grading, gate/commit review),
+  recorded plainly per the muster rule. All work in this
+  worktree only; no push from here.
+
+=== THE QUESTION ===
+Z-095 tested a uniform TLS bin 32 / batch 16 (its v1) against
+its own three captured traces and the bench_k002 oracle:
+the traces improved (ollama -13.87%, python -5.37%, git TIE
+-1.34%) and the oracle improved on mixed_lifecycle (-45.29%)
+and mixed_batch (-4.21%), but small_churn regressed +6.13%,
+past the pre-registered 2% oracle bar, so v1 was NOT ADOPTED
+and Z-095 filed two things forward: (1) an OWED re-validation
+of its candidates against Z-094's canonical traces when they
+banked (they have: seat 3e54613 line, traces in
+tests/perf/traces/), and (2) the follow-up proposal this
+slice executes: per-class TLS bin sizing, on the evidence
+that bigger bins pay on real streams while a UNIFORM 32
+costs the small-class churn leg.
+
+=== ADOPTION BARS (Z-095's, applied UNCHANGED) ===
+Registered in tests/perf/summarize_z095.py at Z-095 and
+restated verbatim in tests/perf/summarize_z111.py before
+any Z-111 verdict: a candidate is adoptable only if
+  (a) on the trace suite its median ns/op improves >= 3%
+      over the v0 baseline on at least 2 of 3 traces AND
+      regresses no trace by more than 2%, AND
+  (b) on the synthetic oracle (bench_k002) it regresses no
+      workload's median ns/op by more than 2%.
+For Z-111 the trace suite OF RECORD is the banked canonical
+Z-094 traces (per the WAVE_PLAN success measure); Z-095's
+own traces are run as a continuity suite and graded with
+the same bar shape. The bars were not moved.
+
+=== METHOD ===
+Converter (tests/perf/convert_z111.py): each banked Z-094
+canonical trace (.trace.gz) is folded to the Z-095 probe
+format (A/F/R, allocation-order indices) - C folded to A of
+nmemb*size, A (aligned) folded to A of size (1353 counted
+on ollama, 1 on python), zero-size allocations dropped with
+their later references (303 git / 318 ollama, the D-013
+posture, counted), retire-form R emitted as F, failed-realloc
+E counted as no-ops (0 in all three), foreign frees F 0
+counted as no-ops (1937 git). The converter verifies the
+emitted stream reproduces the canonical header's
+peak_live_bytes and final_live_bytes EXACTLY (all three
+traces pass):
+  git_object_churn    in 576623 -> out 574080 ops,
+    peak 508627126, final 508619240, sha256 of converted
+    stream 8408c04951fb06e3ba56915a29340a36b0f6d66f91d1b341b0f29169f5f865fa
+  ollama_session      in 2382302 -> out 2381666 ops,
+    peak 594768279, final 594748917, sha256
+    325a323ff30b84d68f3131545a6c9eb1b83d6e52338e242d3f8ff42f3bfe4b5f
+  python_import_storm in 28694 -> out 28694 ops,
+    peak 8645075, final 595116, sha256
+    31dc8b4662dd13980512b86d200e14153387e77fc49883a47d08756094697859
+Converted traces live only in build/z111/traces/ (generated
+by the runner from the banked .gz, never committed).
+Variants are scratch builds (tests/perf/patch_z111.py
+rewrites a copy of the core + the Z-028 header; production
+sources are never edited by the harness): the header macros
+become storage maxima, per-class cap/batch tables drive the
+three full-bin checks, the refill bound and the drain batch.
+Every patch site is count-asserted. Variants:
+  v0  baseline: cap 16 / batch 8, all classes (pristine)
+  v1  Z-095 near-miss reference: cap 32 / batch 16 uniform
+  wA  isolation: cap 32 / batch 8 uniform
+  wB  isolation: cap 16 / batch 16 uniform
+  v2  per-class candidate: batch 8 everywhere; cap 32 on
+      the trace-hot union classes from Z-095's banked
+      histograms (ollama 16..96, git 16..160, python
+      512..1024 -> class indices 0,1,2,3,4,5,7,8,15,16,17,
+      18,19), cap 16 on the cold middle (112, 192..448 ->
+      indices 6,9,10,11,12,13,14). Tables are literals in
+      run_z111.sh (CAPS_V2/BATCH_V2), chosen after stage 1.
+Measurement: Z-004 shape via tests/perf/probe_z095.c and
+bench_k002.c - taskset -c 5, 5 measured reps, variants and
+legs interleaved round-robin, medians by
+tests/perf/summarize_z111.py. Replay checksums agree
+exactly per trace across all legs and variants (one
+checksum per trace; a disagreement is a hard FAIL in the
+summariser and none occurred). Raw: hidden_files/
+z111_replay.raw, z111_oracle.raw, z111_stage1_oracle.raw,
+z111_oracle_recheck.raw, z111_convert.log (team-local).
+
+=== STAGE 1 - ISOLATION (oracle only, quiet window) ===
+2026-11-13 11:22 EST, loadavg 0.11/0.24/0.61 at start,
+0.18/0.26/0.62 at end, no co-tenant process above 1% CPU.
+Median ns/op (MimirAlloc leg):
+  v0  large 99.37  mixed_batch 31.52  lifecycle 536.37  churn 33.56
+  v1  large 98.59 (-0.78%)  mixed 30.81 (-2.25%)
+      lifecycle 294.00 (-45.19%)  churn 35.11 (+4.62%)
+  wA  large 99.56 (+0.19%)  mixed 31.29 (-0.73%)
+      lifecycle 300.21 (-44.03%)  churn 33.29 (-0.80%)
+  wB  large 99.14 (-0.23%)  mixed 30.99 (-1.68%)
+      lifecycle 525.46 (-2.03%)  churn 35.16 (+4.77%)
+Findings: (1) Z-095's v1 reproduces in this window -
+lifecycle -45.19% (Z-095: -45.29%) and the small_churn
+regression direction (+4.62%; Z-095: +6.13%). (2) The
+regression is carried by the BATCH, not the capacity:
+batch 16 alone (wB) reproduces it (+4.77%) while buying
+almost nothing on lifecycle (-2.03%); capacity 32 alone
+(wA) keeps nearly all of v1's lifecycle win (-44.03%) with
+NO churn regression (-0.80%). Mechanism, consistent with
+the code: in one-live-block churn every refill/drain cycle
+moves a full batch through the locked core, so doubling
+the batch doubles that per-cycle take/return work, while
+capacity only bounds how many already-freed blocks wait
+locally. v2 was therefore designed batch-8 everywhere.
+Cross-check: this window's v0 (churn 33.56, lifecycle
+536.37) sits on top of Z-095's v0 (33.62, 538.44) - the
+two windows are measuring the same machine state.
+
+=== STAGE 2 - FULL SUITES (run of record) ===
+2026-11-13 11:23-11:43 EST. Load honesty: the window
+STARTED quiet (loadavg 0.16/0.24/0.59 in the replay raw
+header) and a co-tenant arrived during it - the stage-2
+oracle ran at loadavg 5.33 falling to 5.14, with team-01's
+Z-109 fuzz process (./build/fuzz_z109, ~100% CPU) live at
+the end. Reps are interleaved round-robin across variants
+and legs, so every median shares the window; the canonical
+trace suite ran FIRST, in the quiet part. The verdict
+below does not rest on any contended cell: the canonical
+trace clause fails for every variant on traces measured
+from loadavg 0.16, and v1's oracle regression appears in
+BOTH the quiet stage-1 window (+4.62%) and stage 2
+(+3.02%). v2's oracle clause was additionally rechecked
+at 11:44 EST (below).
+
+CANONICAL trace suite (median ns/op, MimirAlloc leg) -
+the suite of record:
+  v0  git 7117.45   ollama 14843.75   python 1938.90
+  v1  git 7085.34 (-0.45%)  ollama 13656.44 (-8.00%)
+      python 1895.67 (-2.23%)
+  v2  git 7111.42 (-0.08%)  ollama 13666.49 (-7.93%)
+      python 1911.37 (-1.42%)
+  wA  git 7114.51 (-0.04%)  ollama 14374.97 (-3.16%)
+      python 1899.62 (-2.03%)
+  glibc context: git 25.35, ollama 17.51, python 42.70
+  ns/op - MimirAlloc's replay LOSS vs glibc stands, as at
+  Z-095; this slice grades TUNING deltas, not the leg gap.
+  Note the canonical streams are far heavier than Z-095's
+  capped ones (574k-2.38M ops, 508-594 MB peak live vs
+  71k-300k ops, 8-35 MB): at that live-set scale the
+  per-op cost is dominated by live-set effects (v0 ollama
+  14843.75 ns/op here vs 558.04 on Z-095's capped stream),
+  which dilutes every bin-depth delta.
+
+Z095-OWN trace suite (continuity, median ns/op):
+  v0  git 350.21   ollama 556.57   python 2987.09
+  v1  git 347.60 (-0.75%)  ollama 484.67 (-12.92%)
+      python 2809.99 (-5.93%)
+  v2  git 342.92 (-2.08%)  ollama 557.72 (+0.21%)
+      python 2788.86 (-6.64%)
+  wA  git 341.85 (-2.39%)  ollama 560.98 (+0.79%)
+      python 2803.96 (-6.13%)
+  v1 reproduces Z-095's own table closely (ollama -13.87%
+  -> -12.92%, python -5.37% -> -5.93%, git -1.34% ->
+  -0.75%): Z-095's near-miss is real on its own traces.
+  But v2 and wA LOSE v1's ollama win here (+0.21% /
+  +0.79%): on the capped ollama stream the win was carried
+  by batch 16 (deep same-class cycling in a small live
+  set), the very knob the oracle convicts. On the
+  canonical ollama stream the same batch is worth only
+  ~0.1 point (v1 -8.00% vs v2 -7.93%).
+
+ORACLE bench_k002, stage 2 (median ns/op; contended tail,
+see load honesty - stage 1 is the quiet oracle of record
+for v0/v1/wA/wB):
+  v0  large 100.27  mixed 32.39  lifecycle 559.58  churn 34.76
+  v1  large +0.00%  mixed -2.32%  lifecycle -43.88%  churn +3.02%
+  v2  large -0.10%  mixed -1.73%  lifecycle -27.05%  churn -2.91%
+  wA  large +0.41%  mixed -2.53%  lifecycle -43.14%  churn -2.01%
+Oracle recheck (v0 vs v2 only, 11:44 EST, loadavg 2.59,
+Z-109 fuzz co-tenant live, interleaved): v2 large +1.01%,
+mixed -4.40%, lifecycle -27.73%, churn +0.03% - v2's
+oracle clause PASS is consistent across the stage-2 and
+recheck windows. v2's lifecycle win (-27%) is smaller
+than the uniform-capacity variants' (-43/-44%): the
+mixed_lifecycle workload cycles all 20 classes, so the
+cold-middle classes held at cap 16 give back part of the
+depth win - the honest price of selectivity, recorded.
+
+=== VERDICT (Z-095 bars unchanged, canonical suite) ===
+  v1: traces improved >=3% on 1/3 (ollama only); oracle
+      worst +3.02% stage 2 / +4.62% stage 1 (small_churn)
+      -> NOT ADOPTED (both clauses fail)
+  v2: traces improved >=3% on 1/3 (ollama -7.93%; python
+      -1.42%, git -0.08%); oracle worst -0.10% stage 2 /
+      +1.01% recheck -> oracle clause PASSES, trace clause
+      FAILS -> NOT ADOPTED
+  wA: traces improved >=3% on 1/3 (ollama -3.16%);
+      oracle worst +0.41% -> NOT ADOPTED (trace clause)
+ADOPTED TUNING: NONE. The banked class table and the
+Z-028 TLS constants (bin 16 / batch 8) stand unchanged -
+again not by inertia but by measurement, now on the
+banked canonical traces Z-095's verdict was owed against:
+on the canonical streams no bin variant improves 2 of 3
+traces by the bar's 3% - only canonical ollama moves,
+because at canonical live-set scale the allocator's cost
+sits in the live-set machinery, not in bin depth. The
+per-class v2 DID discharge the other half of Z-095's
+filing: it removes v1's oracle regression entirely (the
+batch was the regression; capacity was not), and it keeps
+most of the canonical-ollama win (-7.93% of v1's -8.00%)
+and a real lifecycle win (-27%). It is the best-behaved
+candidate measured on this machine - and it still does
+not meet the bar, so it is not adopted. Production
+sources, the Z-028 contract header and the Makefile are
+untouched by this slice.
+
+=== DEFECTS FOUND AND FIXED IN SCOPE ===
+One defect in THIS SLICE's own tooling, found on review
+of the first summary and fixed before this record was
+written: summarize_z111.py initialised its worst-oracle
+tracker at 0.0, so a variant whose every oracle delta was
+negative printed worst_oracle_delta=+0.00% with no
+workload named. Fixed to -inf initialisation; the summary
+was regenerated from the same raw files (no re-measurement)
+and now reports v2's true worst oracle delta (-0.10%,
+large_batch). No allocator defect was found: variant and
+baseline replays agree on checksums exactly on all six
+traces, and the standing gate is green (below). The
+canonical traces' high per-op cost at 508-594 MB peak live
+is a measured standing of the shipped allocator (the
+campaign's known live-set walk costs), not a defect in
+this slice's scope; it is the reason the trace clause
+fails, and it is recorded here in full.
+
+=== GATE ===
+Baseline on the merged tree (hidden_files/z111_gate_
+baseline.log) and final on the slice tree (hidden_files/
+z111_gate_final.log): scripts/z13/run_gate.sh, GATE
+COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN,
+exit 0 - identical to the Z-001 baseline, as constructed
+(this slice adds no suite tests and changes no production
+source). Slice's own executions: canonical conversions
+3/3 with header live-byte verification; stage-1 oracle
+4 variants + glibc x 5 reps; stage-2 replays 6 traces x
+(4 variants + glibc) x 5 reps = 150 processes, all exit 0
+with checksum agreement; stage-2 oracle + recheck, all
+exit 0.
+
+=== OWED / FOLLOW-UP ===
+- Z-095's OWED re-validation is DISCHARGED by this run:
+  its candidates were re-run against the banked Z-094
+  canonical traces; the no-adoption verdict stands, and
+  v1's near-miss is re-graded: on canonical traces it is
+  not a near-miss (1/3 traces) - the near-miss shape was
+  an artefact of Z-095's capped streams.
+- The remaining honest road to a trace win on canonical
+  streams is the live-set cost itself (span/registry
+  walks at 400k live blocks), which is the Z-108 verdict
+  section 8 architectural road (span-grouped processing),
+  not a bin-tuning slice. No further bin variant is
+  proposed: cap, batch, and per-class splits of both are
+  now all measured on both suites.
+
+=== ARTIFACT HASHES (sha256) ===
+convert_z111.py    986f6a807ef8843385f60e736cfa8721cf4b52d590579e3af29299b790bff020
+patch_z111.py      09d519904dffce517756d46e37962a55a7a3b91accefc5bde0e428a638f53036
+run_z111.sh        1c8333659f1c3b53000ec78ae4a74f322212e55e561e426e29e45f3555fc5c7b
+summarize_z111.py  0a34008fb94a74d61563b7cd9722b8ad68fea9140ffb5cd9da0bd2be7a233095
