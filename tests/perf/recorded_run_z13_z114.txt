@@ -1,0 +1,85 @@
+MimirAlloc Z13 recorded run - Z-114 Perf-per-watt tuning at the 70 W envelope
+slice: Z-114 - Reserve slice 6 (WAVE_PLAN Wave 13 pool choice: perf-per-watt tuning at the 70 W envelope; reason: roadmap pool over the Z-007/Z-107 energy evidence base; success measure: perf-per-watt at the 70 W envelope vs the untuned baseline on the oracle workloads, graded WIN/TIE/LOSS with the envelope method recorded. Gate: that measure + standing correctness gate.)
+date: run of record 2026-11-13T12:19:15-05:00 to 12:20:45-05:00 (hidden_files/z114_run.log, America/New_York)
+base: e6bd44b (team branch yrsa/mimiralloc-team-06, merge of seat main 58af001, banked Z-001..Z-111)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below from hidden_files/z114_host_truth.txt)
+artifacts: tests/perf/run_z114.sh (sha256 1ea0ac109d9608a0c254c5b1dd1b18336a1733376ef3febb8ddd93c4a2b555e2), tests/perf/batch_z114.sh (ee90e3b058feb7d37a3da5a0df4a8a70e72f5692bba38ff382c1b19c0e5ade93), tests/perf/summarize_z114.py (82ce0860d3716d90fb828508d6e441936cd07f763dfa24e2b2f3664d07bfc2cc). Harness: tests/perf/probe_z007.c over bench_k002.c UNMODIFIED (the banked Z-007 energy probe; per-block checksum proof in the summariser). Slice doc: docs/Z13_Z114_PERF_PER_WATT_70W.md. No src/, API, ABI or Makefile change; README.md untouched.
+team: lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly). All work in this worktree only.
+raw evidence: team hidden_files/z114_run.log (sha256 63d6e0a9b57cb79b1d0bd8612b7a11464e38ee0d1ec248017f53577a79765c97), z114_energy_raw.txt (6ba728696beab083e74682b7d67106b62d9f49604a4741dafe5ef348e9a1e51f), z114_sum.txt (6c39484f8a4d8f2cb8a0b2c6a4cf577e1a95bead990b3a44618dfc49c0b23612).
+
+=== ENVELOPE METHOD - RECORDED BEFORE THE NUMBERS ===
+RAPL on this host is MEASUREMENT-ONLY: /sys/class/powercap/intel-rapl:0/ contains energy_uj, max_energy_range_uj, name, power, uevent, device, subsystem - NO constraint_* files exist, so no PPT/powercap power cap can be set on this host (probed 2026-11-13 before the run). The amd-pstate EPP files refuse writes (cpupower set --epp and a direct tee both returned Device or resource busy; preference stays performance). The one working power lever is the amd-pstate frequency cap, cpupower frequency-set -u (sudo -n, proven in calibration and inside the run: cpu2 scaling_max_freq read 3500000 during tuned batches, 5187500 before and after).
+Calibration (28-proc large_batch batches, whole-package perf stat -a, 2026-11-13 ~12:15-12:16 EST, Aesir co-tenant starting up): untuned 89.11 J / 1.078 s = 82.7 W gross and a repeat at 88.16 J / 1.090 s = 80.9 W; cap 4.0 GHz 134.03 J / 1.947 s = 68.8 W; cap 3.0 GHz 185.93 J / 2.688 s = 69.2 W. On that oversubscribed 28-proc shape the caps cost more time than power. The run of record uses a different, stated shape (14 procs, one per physical core) and its own per-block gross W is the envelope evidence - calibration is context, not the grade.
+TUNED CONFIGURATION (tuned70): scaling_max_freq capped at 3500000 kHz on all CPUs, applied ONLY around each tuned batch and restored immediately after (runner trap + explicit restore; post-run read-back 5187500 kHz = the pre-run value, verified twice). Nothing else on the host was changed: governor performance, platform_profile performance, no sysctl, no powercap write (none exists to write).
+MEASUREMENT: per workload, 5 blocks per leg, legs interleaved block by block (mimir_untuned, mimir_tuned70, glibc untuned context), each block = 14 parallel probe_z007 processes (even CPUs 0..26) under one system-wide perf stat -a RAPL window; reps 200/30/100/15 (banked energy-leg set); idle sleep samples interleaved (5, median 6.877 W). Net J/op by the banked Z-007 idle-subtraction method; perf-per-watt = ops per net joule; PPW grades on the Z-004 5% band. Checksum proof: every block's summed CSV checksum equals 14 x reps x the Z-003 per-pass checksum - summariser PASS, 65/65 blocks.
+LOAD STATE AND CONFOUNDS - RECORDED HONESTLY: this is a CO-TENANT window, NOT a verified quiet window (no quiet claim is made; Z-110's quiet-window re-run remains open and is not discharged here). An Aesir mojo run_all (aesir-team-22) was live from 12:15 EST through the run; loadavg 1.90/2.29/1.99 at start, 9.21/4.61/2.84 at end (the end figure includes this slice's own batches). perf stat -a measures the WHOLE package (all co-tenants, CPU + iGPU domain): the frequency cap is host-wide, so it also throttles co-tenant work during tuned batches, which deflates tuned gross W beyond the allocator's own share, while co-tenant burn inflates untuned blocks. The idle subtraction removes only the idle floor. The PPW factors below are therefore this-run, this-method numbers - direction and rough size, not a quiet-machine constant. This-machine numbers only.
+
+=== VERDICT ===
+PERF-PER-WATT (mimir tuned70 vs mimir untuned, ops per net J): small_churn 7,245,449 vs 3,785,564 = 1.914x WIN; mixed_batch 6,092,568 vs 3,538,518 = 1.722x WIN; large_batch 2,253,407 vs 999,189 = 2.255x WIN; mixed_lifecycle 476,506 vs 244,630 = 1.948x WIN. PPW: WIN on all four oracle workloads.
+ENVELOPE: untuned mimir batches ran ABOVE the envelope on every workload (median gross package W 72.5-80.9, max block 80.9); tuned70 batches held it on every workload (medians 28.0-38.2 W, overall max block 39.7 W). 70 W envelope HELD by the tuned configuration, EXCEEDED by the untuned baseline - read from the run's own per-block gross W.
+THROUGHPUT COST: aggregate ops/s fell 25.2% (small_churn), 26.9% (mixed_batch), 27.0% (large_batch), 26.7% (mixed_lifecycle) under the cap - the tuning buys its perf-per-watt with roughly a quarter of peak throughput. That trade is the filed result: at a hard 70 W ceiling the tuned configuration delivers 1.7-2.3x the work per joule; where no ceiling binds, untuned is faster in absolute ops/s.
+CONTEXT (net nJ/op vs glibc untuned, banked energy bands): tuning narrows but does not close the allocator's energy gap - small_churn LOSS 7.76x untuned / 4.05x tuned, mixed_batch LOSS 6.68x / 3.88x, mixed_lifecycle LOSS 46.86x / 24.06x, large_batch WIN 0.13x / 0.06x. The slice's question was the envelope tuning of THIS allocator against its own untuned baseline, and that is the grade above; the glibc columns are context, consistent in direction with Z-107.
+RUNNER CORRECTNESS: PASS - engagement proof PASS, 65/65 blocks, checksums true, Z-114 RESULT: PASS (verbatim summariser output below). Correctness gate recorded in team CAMPAIGN_STATE.md.
+
+=== SUMMARISER OUTPUT (hidden_files/z114_sum.txt, verbatim) ===
+IDLE baseline: median 6.877 W (min 6.387, max 19.979, n=5)
+leg           workload         med_net_nJ/op   ops/netJ med_grossW max_grossW    agg_ops/s
+glibc         large_batch            7723.81   129469.8      79.29      81.83      9296546
+glibc         mixed_batch              42.29 23648663.5      67.53      68.01   1440104665
+glibc         mixed_lifecycle          87.23 11463813.5      70.05      70.31    721983949
+glibc         small_churn              34.05 29372504.3      74.83      75.07   1992273990
+mimir_tuned70 large_batch             443.77  2253406.6      28.04      31.25     47826531
+mimir_tuned70 mixed_batch             164.13  6092567.9      38.16      39.66    189950912
+mimir_tuned70 mixed_lifecycle        2098.61   476506.0      34.11      34.97     12997721
+mimir_tuned70 small_churn             138.02  7245448.5      35.77      35.81    209432850
+mimir_untuned large_batch            1000.81   999189.4      72.52      75.87     65487293
+mimir_untuned mixed_batch             282.60  3538517.9      80.34      80.91    259953661
+mimir_untuned mixed_lifecycle        4087.81   244630.0      79.38      79.70     17737946
+mimir_untuned small_churn             264.16  3785563.8      80.87      81.01    280088460
+
+=== PERF-PER-WATT VERDICTS - mimir tuned70 vs mimir untuned (ops/net J, 5% band) ===
+small_churn: untuned 3785563.8 ops/J (264.16 nJ/op) | tuned70 7245448.5 ops/J (138.02 nJ/op) | PPW factor 1.914x | WIN | thr untuned 280088460 -> tuned70 209432850 ops/s | grossW untuned med 80.9 -> tuned70 med 35.8 max 35.8
+mixed_batch: untuned 3538517.9 ops/J (282.60 nJ/op) | tuned70 6092567.9 ops/J (164.13 nJ/op) | PPW factor 1.722x | WIN | thr untuned 259953661 -> tuned70 189950912 ops/s | grossW untuned med 80.3 -> tuned70 med 38.2 max 39.7
+large_batch: untuned 999189.4 ops/J (1000.81 nJ/op) | tuned70 2253406.6 ops/J (443.77 nJ/op) | PPW factor 2.255x | WIN | thr untuned 65487293 -> tuned70 47826531 ops/s | grossW untuned med 72.5 -> tuned70 med 28.0 max 31.2
+mixed_lifecycle: untuned 244630.0 ops/J (4087.81 nJ/op) | tuned70 476506.0 ops/J (2098.61 nJ/op) | PPW factor 1.948x | WIN | thr untuned 17737946 -> tuned70 12997721 ops/s | grossW untuned med 79.4 -> tuned70 med 34.1 max 35.0
+
+=== CONTEXT - mimir net nJ/op vs glibc untuned (banked energy bands) ===
+small_churn: mimir_untuned 264.16 vs glibc 34.05 nJ/op | factor 7.76x | LOSS
+small_churn: mimir_tuned70 138.02 vs glibc 34.05 nJ/op | factor 4.05x | LOSS
+mixed_batch: mimir_untuned 282.60 vs glibc 42.29 nJ/op | factor 6.68x | LOSS
+mixed_batch: mimir_tuned70 164.13 vs glibc 42.29 nJ/op | factor 3.88x | LOSS
+large_batch: mimir_untuned 1000.81 vs glibc 7723.81 nJ/op | factor 0.13x | WIN
+large_batch: mimir_tuned70 443.77 vs glibc 7723.81 nJ/op | factor 0.06x | WIN
+mixed_lifecycle: mimir_untuned 4087.81 vs glibc 87.23 nJ/op | factor 46.86x | LOSS
+mixed_lifecycle: mimir_tuned70 2098.61 vs glibc 87.23 nJ/op | factor 24.06x | LOSS
+
+ENVELOPE: tuned70 median gross package W per workload ['28.0', '38.2', '34.1', '35.8']; overall max block 39.7 W; 70 W envelope HELD at median on every workload
+Z-114 RESULT: PASS (checksums true, idle baseline valid)
+
+=== HOST TRUTH (hidden_files/z114_host_truth.txt, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T17:19:16Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5100292
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 87%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.90 2.29 1.99
