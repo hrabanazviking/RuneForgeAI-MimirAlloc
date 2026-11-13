@@ -1,0 +1,148 @@
+MimirAlloc Z13 recorded run - Z-101 Storm battery, final form
+slice: Z-101 - Storm battery, final form (Wave 12; thread-churn (Z-042) + free-storm (Z-043) + fork storm combined at machine scale against the near-final core. Gate: battery green; retained-bytes figures recorded.)
+date: 2026-11-13; recorded run 13:48-13:49Z (08:48 EST); baseline gate before, final gate after, same morning.
+base: team branch yrsa/mimiralloc-team-02 after merging seat main b8bca272d9b23a8a2d9ea23555cb22a854417bae (banked Z-001..Z-100, 100/117) as merge commit 2f83756ccad405938e6fb9752bc6fda513314a9b, clean tree. No production code, no Makefile, no src/ or include/ change by this slice (verified: git diff vs HEAD for Makefile/src/include empty before commit); the standing gate's counts cannot move.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below).
+artifacts: tests/perf/probe_z101.c (sha256 89ee4bf40b1f1fa42d74f9382266b32905b29def5dea104a6cf533f5a000eebf), tests/perf/run_z101.sh (6bd41500c0cb771cbf2425612bb4bb2478329577dc59df5289974e356379938b), tests/perf/summarize_z101.py (e20b7195095bfe4843ac6c5a784f04f32b417b67b441d200a3f6f4466ab9d11b), this recorded run. Probe binaries built by the runner into build/z101/ (the Z-034/Z-042 pattern): probe_z101_mimir 384b11f1becf05587c2e66f45fbcfb975324987b36940b9138ae830211beda33, probe_z101_glibc 74fcada9ea568e6f14cb4ec78d512e818c97e07a2911bfc876046eaf5f217372.
+team: lead ran the six Mythic Engineering roles sequentially itself (method design, probe authoring, accounting audit, gate verification, ledger, risk review); no sub-agents spawned (recorded plainly).
+load honesty: LIGHT WINDOW on a shared host. loadavg 1.30/2.36/2.05 at runner start and 1.21/2.27/2.03 at runner end (1-minute figure ~1.2-1.3 on 32 hardware threads; the 5/15-minute figures are decaying history). An Aesir mojo test run occupied the host earlier in the hour and had finished before the recorded window; top CPU consumers during the window were system daemons under 1%. The battery's correctness identities (exit counters, byte accounting, cross-free counts, checksums) are scheduling-independent and are asserted exactly in every rep; only wall times carry the window's load and are reported per rep. One earlier trial under that Aesir load (combined wall 3.575 s vs 0.455-0.508 s recorded) is the contention contrast and is NOT a baseline.
+correctness gate (baseline, merged tree 2f83756 before any Z-101 work): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z101_baseline_gate.log).
+correctness gate (final, slice tree): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z101_gate.log) - identical to baseline, as constructed.
+
+=== METHOD ===
+One probe source, two legs (Z-004 protocol via run_z101.sh: one warm-up process per leg discarded, then 3 recorded processes per leg, alternating): mimir (full accounting) and glibc (-DUSE_GLIBC, identical shapes, wall-time comparator only). Per process, in order:
+  CAL calibration: one thread runs the exact Z-042 churn shape and captures its own TLS snapshot before exit (cached_blocks=46, cached_bytes=14912, identical in every rep, identical to Z-042's calibration): the exit destructor must return exactly those 46 blocks.
+  CMB the combined storm - the three storms OVERLAP in one window: 16 churn looper threads run short-lived alloc/touch/verify/free cycles continuously; 16 ring workers run fixed cross-free rounds (16 x 20 x 256 blocks of 64 B = 81,920 remote frees, every block pattern-verified by its freer); while both run, main performs 256 fork+exec(/bin/true) children (the Z-044 E2 proven shape - the child only execs). Churn loopers run for the whole fork window (stop flag set only after the last child is reaped). Exit drains at the post-combined snapshot: 33 = 1 calibration + 16 loopers + 16 ring workers, exactly.
+  STM thread-churn at Z-042 scale: 10,000 one-shot churn threads in waves of 32, 35 allocations each (8 in each of classes 16/64/256/1024, one 2048 B large, two held blocks handed to main). Asserted exactly as Z-042: exit drains +10,000, exit-drained blocks +460,000 (= 10,000 x 46), counters settled after a 100 ms quiesce, live exactly baseline + 20,000 held; main then verifies and frees the held blocks and live returns to baseline.
+  RNG free-storm at Z-043 S1 scale: 32 threads ring cross-free, 3 rounds x 2,048 blocks of 64 B = 196,608 remote frees, pattern-verified by the freer before the free.
+  FRK fork storm, supported shapes only (Z-044): 16 quiescent fork+alloc children (parent single-threaded at the fork instant; child allocates/verifies/frees and _exit(0/42)) + 500 sequential fork+exec(/bin/true). The fork-while-busy ALLOC shape stays measured-unsupported per Z-044 B1 and is not exercised as a correctness leg; under load this battery forks only to exec (CMB).
+  TRIM byte-exact close (Z-042): main drains its own TLS cache, mimir_core_trim_retained() releases exactly the pre-trim retained spans (9 spans / 36,864 B in every rep), the Z-048 pool is released too, and bytes_mapped returns to the pristine S0 figure (0) to the byte - the leak arbiter for the whole battery.
+Workload equivalence (K-002): the churn checksum (storm-only, reset before STM) is 89250992 in all 6 recorded reps, both legs - byte-identical to Z-042's recorded storm checksum, so the final-form churn leg did exactly Z-042's work. The ring checksum is 94003200 in all 6 reps, both legs. Total cross frees per rep: 278,528 (= 81,920 combined + 196,608 ring), exact in every rep. Total per battery rep: 772 forked children (256 combined exec + 16 fork+alloc + 500 fork+exec), all exiting 0. Raw output: team hidden_files/z101_raw.txt (warm-ups in z101_raw.txt.warm_*, discarded).
+
+=== ACCOUNTING FINDING (probe defect, fixed in-slice; no production defect) ===
+The first trial run FAILED one identity in every snapshot: bytes_mapped exceeded live_span_bytes + live_mapping_bytes by 8,192 B early and 131,072 B after the churn storm. Root cause, proven from source before any fix: the two-term identity is Z-042's and predates the Z-048 mapping pool - on the near-final core Q-MAPPED is DEFINED as live span bytes + live mapping bytes + pooled mapping bytes ("a pooled mapping is still mapped", src/core/mimir_core.c Q-MAPPED comment; snapshot composition at the mimir_core_stats_snapshot site). The probe now reads the pool through its own Z-048 query pair (tests/core/mimir_pool_z048.h) and asserts the three-term identity at every snapshot; it holds exactly in all recorded reps (pool_bytes per rep-1 snapshots annexed below: 0 at S0, 8,192 after calibration, 114,688 after the churn storm, 0 after trim). This was a stale comparator in this slice's own probe, not an allocator bug: every other identity (cached == retained, retained == empty spans x 4096, metadata walk, byte-exact trim close) held even in the failed trial, and the final mapped figure returns to 0 with pool_bytes 0. Recorded per the never-leave-a-bug rule: the defect was in the slice's harness, fixed inside the slice's scope, and the fix is part of the banked probe source.
+
+=== RESULTS (medians of the 3 recorded reps; per-rep values in the summariser output) ===
+  combined wall:      mimir 0.489 s (0.489/0.508/0.455)   glibc 0.543 s (0.543/0.634/0.527)
+  churn wall (STM):   mimir 1.123 s (1.121/1.123/1.133)   glibc 0.122 s (0.122/0.120/0.122)
+  ring wall (RNG):    mimir 1.069 s (1.070/1.069/1.065)   glibc 0.004 s (0.004/0.005/0.004)
+  fork wall (FRK):    mimir 0.784 s (0.784/0.786/0.780)   glibc 0.818 s (0.838/0.818/0.815)
+  worst churn wave:   mimir 5.6 ms median               glibc 1.0 ms median
+  checks: 61 CHECK lines per mimir rep, all PASS; 210 CHECK lines across the raw file, 0 FAIL; BATTERY RESULT: PASS in all 6 reps; zero alloc/pattern/create failures in every rep.
+  peak_mapped during the battery (rep 1): 6,791,168 B.
+
+RETAINED-BYTES FIGURES (the gate's named figures; identical in all 3 mimir reps):
+  after combined storm:  36,864 B (9 empty spans)
+  after churn storm:     20,480 B (5 empty spans) - identical to Z-042's retained-after-storm figure on the Wave-5 core; the G-007 retention policy (bound 2 per class, read from the allocator at runtime) explains the figure exactly as it did there, and the TRIM phase of the same process is the leak arbiter.
+  after ring storm:      36,864 B (9 empty spans)
+  after fork storm:      36,864 B (9 empty spans)
+  pre-trim:              36,864 B (9 spans; trim released exactly 9 spans / 36,864 B in every rep)
+  final (post-trim):     0 B, bytes_mapped back to the pristine 0 to the byte, pool_bytes 0.
+
+=== VERDICTS ===
+- Roadmap gate: MET. Battery GREEN in every recorded rep on both legs; retained-bytes figures recorded above.
+- Combined storm: GREEN at machine scale - thread churn, cross-free storm and a 256-child fork+exec storm running concurrently against the near-final core produced zero failures, exact accounting, and a byte-exact close. The fork+exec-under-load shape Z-044 proved in isolation holds inside the full battery.
+- Context walls (recorded, NOT this slice's gate; graded here for the Wave-12 verdict slices, Law 2): the churn whole-shape wall ratio vs glibc is ~9.2x (1.123 s vs 0.122 s), the same shape and scale of loss Z-042 recorded (~10.1x) on the Wave-5 core - the near-final core did not close it. The ring cross-free leg remains a proven LOSS vs glibc at every scale (1.069 s vs 0.004 s for 196,608 cross frees, ~5.4 us/op under the one-global-lock convoy Z-043 priced), unchanged in character from Z-043. The fork storm wall is process-creation-bound and allocator-insensitive at this shape (0.784 s mimir vs 0.818 s glibc for 516 children - inside run-to-run variation, no allocator claim made). The combined wall (0.489 s) is dominated by the fork window both legs share.
+- Bugs: none in production code. One defect in this slice's own probe (stale pre-pool mapped-bytes identity), found by the battery's first trial, fixed in-slice, recorded above.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T13:48:53Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 61%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.30 2.36 2.05
+
+=== SUMMARISER OUTPUT (summarize_z101.py on hidden_files/z101_raw.txt, verbatim) ===
+REP leg=mimir i=1 ===
+  combined_wall_s=0.489 churn_wall_s=1.121 worst_wave_ms=5.6 ring_wall_s=1.070 fork_wall_s=0.784
+  cmb_forks=256 frk_alloc=16 frk_exec=500 cross_total=278528 checksum=89250992 ring_checksum=94003200
+  retained_combined_bytes=36864
+  retained_storm_bytes=20480
+  retained_ring_bytes=36864
+  retained_fork_bytes=36864
+  retained_pre_trim_bytes=36864
+  retained_final_bytes=0
+  result=PASS
+REP leg=glibc i=1 ===
+  combined_wall_s=0.543 churn_wall_s=0.122 worst_wave_ms=1.2 ring_wall_s=0.004 fork_wall_s=0.838
+  cmb_forks=256 frk_alloc=16 frk_exec=500 cross_total=278528 checksum=89250992 ring_checksum=94003200
+  result=PASS
+REP leg=mimir i=2 ===
+  combined_wall_s=0.508 churn_wall_s=1.123 worst_wave_ms=5.8 ring_wall_s=1.069 fork_wall_s=0.786
+  cmb_forks=256 frk_alloc=16 frk_exec=500 cross_total=278528 checksum=89250992 ring_checksum=94003200
+  retained_combined_bytes=36864
+  retained_storm_bytes=20480
+  retained_ring_bytes=36864
+  retained_fork_bytes=36864
+  retained_pre_trim_bytes=36864
+  retained_final_bytes=0
+  result=PASS
+REP leg=glibc i=2 ===
+  combined_wall_s=0.634 churn_wall_s=0.120 worst_wave_ms=0.7 ring_wall_s=0.005 fork_wall_s=0.818
+  cmb_forks=256 frk_alloc=16 frk_exec=500 cross_total=278528 checksum=89250992 ring_checksum=94003200
+  result=PASS
+REP leg=mimir i=3 ===
+  combined_wall_s=0.455 churn_wall_s=1.133 worst_wave_ms=6.3 ring_wall_s=1.065 fork_wall_s=0.780
+  cmb_forks=256 frk_alloc=16 frk_exec=500 cross_total=278528 checksum=89250992 ring_checksum=94003200
+  retained_combined_bytes=36864
+  retained_storm_bytes=20480
+  retained_ring_bytes=36864
+  retained_fork_bytes=36864
+  retained_pre_trim_bytes=36864
+  retained_final_bytes=0
+  result=PASS
+REP leg=glibc i=3 ===
+  combined_wall_s=0.527 churn_wall_s=0.122 worst_wave_ms=1.0 ring_wall_s=0.004 fork_wall_s=0.815
+  cmb_forks=256 frk_alloc=16 frk_exec=500 cross_total=278528 checksum=89250992 ring_checksum=94003200
+  result=PASS
+MEDIAN churn_wall_s leg=mimir 1.123 (n=3)
+MEDIAN churn_wall_s leg=glibc 0.122 (n=3)
+RETAINED combined figures across mimir reps: [36864, 36864, 36864]
+RETAINED storm figures across mimir reps: [20480, 20480, 20480]
+RETAINED ring figures across mimir reps: [36864, 36864, 36864]
+RETAINED fork figures across mimir reps: [36864, 36864, 36864]
+RETAINED pre_trim figures across mimir reps: [36864, 36864, 36864]
+RETAINED final figures across mimir reps: [0, 0, 0]
+CHURN CHECKSUM identical across all reps/legs: 89250992
+RING CHECKSUM identical across all reps/legs: 94003200
+SUMMARY RESULT: PASS
+
+=== REP 1 (mimir) SNAPSHOTS (verbatim from the raw file) ===
+SNAP S0_pristine mapped=0 cached=0 released=0 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 pool_bytes=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=0 exit_blocks=0 metadata=0 retention_bound=2 peak_mapped=0
+SNAP S_cal mapped=36864 cached=20480 released=4096 live_small=2 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 pool_bytes=8192 empty_spans_sum=5 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+CALIB cached_blocks=46 cached_bytes=14912
+SNAP S_base mapped=36864 cached=28672 released=4096 live_small=0 live_spans=7 live_mappings=0 live_span_bytes=28672 live_mapping_bytes=0 retained_bytes=28672 retained_spans=7 pool_bytes=8192 empty_spans_sum=7 total_spans_sum=7 exit_drains=1 exit_blocks=46 metadata=0 retention_bound=2 peak_mapped=40960
+SNAP S_cmb mapped=45056 cached=36864 released=4988928 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 pool_bytes=8192 empty_spans_sum=9 total_spans_sum=9 exit_drains=33 exit_blocks=430 metadata=0 retention_bound=2 peak_mapped=516096
+SNAP S1_after_storm mapped=6672384 cached=20480 released=50364416 live_small=20000 live_spans=1601 live_mappings=0 live_span_bytes=6557696 live_mapping_bytes=0 retained_bytes=20480 retained_spans=5 pool_bytes=114688 empty_spans_sum=5 total_spans_sum=1601 exit_drains=10033 exit_blocks=460430 metadata=0 retention_bound=2 peak_mapped=6791168
+SNAP S2_after_held mapped=151552 cached=36864 released=56885248 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 pool_bytes=114688 empty_spans_sum=9 total_spans_sum=9 exit_drains=10033 exit_blocks=460430 metadata=0 retention_bound=2 peak_mapped=6791168
+SNAP S3_after_ring mapped=151552 cached=36864 released=69861376 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 pool_bytes=114688 empty_spans_sum=9 total_spans_sum=9 exit_drains=10065 exit_blocks=460430 metadata=0 retention_bound=2 peak_mapped=6791168
+SNAP S4_after_fork mapped=151552 cached=36864 released=69861376 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 pool_bytes=114688 empty_spans_sum=9 total_spans_sum=9 exit_drains=10065 exit_blocks=460430 metadata=0 retention_bound=2 peak_mapped=6791168
+SNAP S_pre_trim mapped=151552 cached=36864 released=69861376 live_small=0 live_spans=9 live_mappings=0 live_span_bytes=36864 live_mapping_bytes=0 retained_bytes=36864 retained_spans=9 pool_bytes=114688 empty_spans_sum=9 total_spans_sum=9 exit_drains=10065 exit_blocks=460430 metadata=0 retention_bound=2 peak_mapped=6791168
+TRIM released_spans=9 released_bytes=36864
+SNAP S5_final mapped=0 cached=0 released=70012928 live_small=0 live_spans=0 live_mappings=0 live_span_bytes=0 live_mapping_bytes=0 retained_bytes=0 retained_spans=0 pool_bytes=0 empty_spans_sum=0 total_spans_sum=0 exit_drains=10065 exit_blocks=460430 metadata=0 retention_bound=2 peak_mapped=6791168
+
+REPRO
+  sh tests/perf/run_z101.sh hidden_files/z101_raw.txt
+  python3 tests/perf/summarize_z101.py hidden_files/z101_raw.txt
+  bash scripts/z13/run_gate.sh hidden_files/z101_gate.log
