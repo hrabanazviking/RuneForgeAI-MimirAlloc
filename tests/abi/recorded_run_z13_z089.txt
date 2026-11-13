@@ -1,0 +1,75 @@
+=== Z-089 rollback drill recorded run ===
+date_utc: 2026-11-13T01:35:23Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: 000fb486d7cc060bdfa6407714e3e18a1a85c915
+branch: yrsa/mimiralloc-team-06
+loadavg: 0.56 1.53 1.48 1/1262 2511545
+page_size: 4096
+containment: private mktemp root; drill subjects are harness processes spawned by this script only; no real service, display manager, systemd unit or live desktop process is preloaded or signalled
+broken_state: spawned harness + LD_PRELOAD=<poison .so whose malloc/calloc/realloc always return NULL>
+rollback: unset LD_PRELOAD (one variable; nothing else changes)
+=== S0 live-system hands-off record (before) ===
+pid1_comm_before: systemd
+live sddm pids before: 19282 
+live plasmashell pids before: 19610 
+live kwin_wayland pids before: 19417 
+=== S1 build: interposing variant, harness, poison ===
+  [ok] make lib-interpose (log hidden_files/z089_build_interpose.log)
+interpose defined dynamic exports: 20
+  [ok] interpose export count == 20 (Z-082 variant, unchanged)
+  [ok] build harness (log hidden_files/z089_build_harness.log)
+  [ok] build poison allocator (log hidden_files/z089_build_poison.log)
+  [ok] build zero-allocation env dumper (log hidden_files/z089_build_envdump.log)
+harness sha256: 89a432d9d29a11c54b20f1380778af126aadfe619dbe6ba47b0f1bd573306356
+poison sha256: ea0fcce52544775bd48523ecb339af960c2dc7322666d50948042629f98b8f8d
+interpose sha256: 9a6836d5318fb3a269fcbaeb7b6b03834bd88cb375f38a1d88677fd5188e2491
+=== S2 control: harness on glibc (no preload) ===
+HARNESS-RESULT: OK checksum=139217 blocks=3 bytes=1120
+  control rc=0
+  [ok] control exits 0 on glibc
+  [ok] control prints the fixed OK checksum
+=== S3 healthy preload: harness under the real Z-082 interposer ===
+HARNESS-RESULT: OK checksum=139217 blocks=3 bytes=1120
+  healthy preload rc=0
+  [ok] healthy preload exits 0
+  [ok] healthy preload output byte-identical to glibc control
+=== S4 BROKEN state: same harness, poison preload (twice, deterministic) ===
+HARNESS-RESULT: BROKEN allocation returned NULL
+  broken run 1 rc=3
+  [ok] broken run 1 exits 3 (allocator failure detected by the harness)
+  [ok] broken run 1 prints BROKEN, never OK
+HARNESS-RESULT: BROKEN allocation returned NULL
+  broken run 2 rc=3
+  [ok] broken run 2 exits 3 (allocator failure detected by the harness)
+  [ok] broken run 2 prints BROKEN, never OK
+  [ok] broken state is deterministic across both runs
+=== S5 one-variable proof: env diff, broken vs rolled-back ===
+  method: the environment is dumped from INSIDE each invocation by tests/abi/envdump_z089.c (write(2) only, zero allocations, so it runs truthfully under the poison; /usr/bin/env cannot - it allocates at startup and died under the poison in this drill's first run, filed in the ops doc)
+  env diff (broken -> rolled-back):
+    2d1
+    < LD_PRELOAD=/tmp/z089_drill.HiAEFk/poison.so
+  changed env lines: 1 (removed LD_PRELOAD lines: 1, added lines: 0)
+  [ok] exactly ONE variable differs: LD_PRELOAD is removed and nothing else changes
+=== S6 ROLLBACK: identical command with LD_PRELOAD unset ===
+HARNESS-RESULT: OK checksum=139217 blocks=3 bytes=1120
+  rollback rc=0
+  [ok] rolled-back harness exits 0 (healthy again)
+  [ok] rolled-back output byte-identical to the glibc control (same checksum)
+ROLLBACK_PROVEN: broken rc=3 -> unset LD_PRELOAD -> rc=0, output identical to control
+=== S7 banking tooling healthy on glibc after the drill (never preloaded) ===
+  [ok] git rev-parse HEAD works in this repo after the drill
+  [ok] git status works in this repo after the drill
+=== S8 teardown and live-system proof (after) ===
+  [ok] containment root deleted (/tmp/z089_drill.HiAEFk)
+pid1_comm_after: systemd
+live sddm pids after: 19282 
+live plasmashell pids after: 19610 
+live kwin_wayland pids after: 19417 
+  [ok] PID 1 unchanged (systemd)
+  [ok] live sddm untouched (same pids before and after)
+  [ok] live plasmashell untouched (same pids before and after)
+  [ok] live kwin_wayland untouched (same pids before and after)
+  runner shell LD_PRELOAD: unset (the drill never exports it)
+loadavg: 0.60 1.52 1.47 1/1262 2511703
+=== Z-089 ROLLBACK DRILL RESULT: PASS ===

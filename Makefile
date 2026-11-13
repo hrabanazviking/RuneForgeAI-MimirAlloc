@@ -2431,3 +2431,20 @@ test-z088: $(IPOLIB) $(BUILD)/drill_z088
 	bash tests/abi/run_z088.sh
 
 .PHONY: test-z088
+# Z-089: rollback and never-preload packet
+# (tests/abi/run_z089.sh) - one-variable rollback proven
+# from a broken state: a harness process spawned by the
+# script, preloaded with a deliberately poisoned
+# allocator (tests/abi/poison_z089.c), fails with rc 3;
+# the identical command with LD_PRELOAD unset is healthy
+# and byte-identical to the glibc control. The script is
+# the drill and its stdout is the recorded run
+# (tests/abi/recorded_run_z13_z089.txt). The never-
+# preload ops doc is docs/Z13_Z089_ROLLBACK_NEVER_PRELOAD.md.
+# Standalone via `make test-z089`; NOT part of `make test`
+# (standing gate counts untouched).
+
+test-z089: $(IPOLIB)
+	bash tests/abi/run_z089.sh
+
+.PHONY: test-z089
