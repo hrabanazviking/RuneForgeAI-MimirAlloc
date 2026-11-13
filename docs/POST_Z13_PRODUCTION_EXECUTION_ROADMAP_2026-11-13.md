@@ -1440,15 +1440,15 @@ The following order is a *dependency-first suggestion*, not a claim that work is
 | 19 | PBR-018 | occupancy bitmap design | correctness under all interleavings |
 | 20 | PBR-019 | guarded allocation path adoption candidate | complete standing/standalone suite |
 | 21 | PBR-020 | guarded free path adoption candidate | ensure no silent ownership error |
-| 22 | PBR-025 | final hot-path closure report | measured gain or documented rejection |
-| 23 | PBR-026–PBR-035 | thread/remote free work | race and lifetime invariants |
-| 24 | PBR-046–PBR-057 | adversarial safety/fuzz | severe bug blocks release |
+| 22 | PBR-026 | final hot-path closure report | measured gain or documented rejection |
+| 23 | PBR-027–PBR-036 | thread/remote free work | race and lifetime invariants |
+| 24 | PBR-047–PBR-058 | adversarial safety/fuzz | severe bug blocks release |
 | 25 | Z-100–Z-104 | long soak, chaos, sanitizer matrix | shared-host guard / owner resource cap |
 | 26 | Z-105–Z-108 | release, docs, final head-to-head/verdict | no production rebranding |
 | 27 | Z-109–Z-117 | reserve/closure as evidence selects | no guessing remaining slice themes |
-| 28 | PBR-058–PBR-069 | ABI + interposition containment | contract freeze needs owner |
-| 29 | PBR-070–PBR-089 | Linux and Android target work | physical device / NDK approval |
-| 30 | PBR-090 onward | app proof, performance, releases and longer-term extensions | G1–G4 and later G5/G6 |
+| 28 | PBR-059–PBR-070 | ABI + interposition containment | contract freeze needs owner |
+| 29 | PBR-071–PBR-090 | Linux and Android target work | physical device / NDK approval |
+| 30 | PBR-091 onward | app proof, performance, releases and longer-term extensions | G1–G4 and later G5/G6 |
 
 **Note:** the numbered PBR ranges above are illustrative ordering helpers; the *individual headings* in workstreams A–P are the authoritative titles. Any revision to the count/order should update the critical path automatically and must never mark an ID banked when it has merely been planned.
 
