@@ -2584,3 +2584,20 @@ test-z104:
 	bash tests/abi/run_z104.sh
 
 .PHONY: test-z104
+# ------------------------------------------------------------------
+# Z-105: release engineering (tests/abi/run_z105.sh) --
+# the version-packet evidence and reproducible-build
+# proof on this host: two full clean builds staged
+# outside the tree, compared hash by hash; surface
+# proofs (13 default / 20 interpose exports, SONAME,
+# batch prototype not public); staged install + E-004
+# consumer proof; sha256sum -c from a fresh directory.
+# Slice doc docs/Z13_Z105_RELEASE_ENGINEERING.md;
+# decision D-017. Standalone via `make test-z105`;
+# NOT part of `make test` (standing gate counts
+# untouched).
+# ------------------------------------------------------------------
+test-z105:
+	bash tests/abi/run_z105.sh
+
+.PHONY: test-z105

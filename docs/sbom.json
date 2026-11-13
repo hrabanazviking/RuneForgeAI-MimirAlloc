@@ -1,18 +1,18 @@
 {
-  "spdxVersion": "SPDX-2.3-lite (manual, slice M-008)",
+  "spdxVersion": "SPDX-2.3-lite (manual, slice M-008; refreshed Z-105)",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "MimirAlloc-SBOM-M008",
-  "documentNamespace": "https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/sbom/m008-6b312e3",
+  "name": "MimirAlloc-SBOM-Z105",
+  "documentNamespace": "https://github.com/hrabanazviking/RuneForgeAI-MimirAlloc/sbom/z105-c3424b2",
   "creationInfo": {
-    "created": "2026-11-07T21:03:34Z",
-    "creators": ["Tool: manual-inventory-m008", "Organization: RuneForgeAI-MimirAlloc"]
+    "created": "2026-11-13T14:18:58Z",
+    "creators": ["Tool: manual-inventory-z105", "Organization: RuneForgeAI-MimirAlloc"]
   },
   "packages": [
     {
       "SPDXID": "SPDXRef-Package-MimirAlloc",
       "name": "MimirAlloc",
-      "versionInfo": "NOASSERTION - unversioned at base 6b312e3; versioning is M-007 work in flight",
+      "versionInfo": "0.1.0 (VERSION file, M-007 D1; decision D-017 at Z-105 assigns 0.2.0 to the next release cut)",
       "supplier": "Organization: hrabanazviking/RuneForgeAI-MimirAlloc",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": true,
@@ -22,6 +22,8 @@
         "include/mimir_alloc.h",
         "src/api/mimir_alloc.c",
         "src/api/mimir_alloc.map",
+        "src/api/mimir_interpose.c",
+        "src/api/mimir_interpose.map",
         "src/core/mimir_core.c",
         "src/core/mimir_core.h",
         "src/platform/mimir_platform.c",
@@ -31,17 +33,17 @@
     {
       "SPDXID": "SPDXRef-Package-glibc-runtime",
       "name": "glibc (libc.so.6)",
-      "versionInfo": "2.36 (Debian GLIBC 2.36-9+rpt2+deb12u14, recorded on the build host)",
+      "versionInfo": "2.44 (Ubuntu GLIBC 2.44-1ubuntu2, recorded on the build host)",
       "supplier": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
-      "comment": "Sole DT_NEEDED entry of build/libmimiralloc.so per readelf -d in tests/abi/recorded_run_m008.txt. Runtime dependency."
+      "comment": "Sole library DT_NEEDED entry of build/libmimiralloc.so.0.1.0 besides ld-linux-x86-64.so.2 (host toolchain loader entry) per readelf -d in tests/abi/recorded_run_z13_z105.txt. Runtime dependency."
     },
     {
       "SPDXID": "SPDXRef-Package-gcc-build",
       "name": "GCC (cc)",
-      "versionInfo": "12.2.0 (Debian 12.2.0-14+deb12u1, recorded on the build host)",
+      "versionInfo": "15.3.0 (Ubuntu 15.3.0-4ubuntu1, recorded on the build host)",
       "supplier": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -51,7 +53,7 @@
     {
       "SPDXID": "SPDXRef-Package-make-build",
       "name": "GNU Make",
-      "versionInfo": "4.3 (recorded on the build host)",
+      "versionInfo": "4.4.1 (recorded on the build host)",
       "supplier": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
@@ -71,10 +73,10 @@
   ],
   "relationships": [
     {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Package-MimirAlloc"},
-    {"spdxElementId": "SPDXRef-Package-MimirAlloc", "relationshipType": "DEPENDS_ON", "relatedSpdxElement": "SPDXRef-Package-glibc-runtime", "comment": "Expressed as: MimirAlloc dependsOn glibc only at runtime; DT_NEEDED = [libc.so.6]."},
+    {"spdxElementId": "SPDXRef-Package-MimirAlloc", "relationshipType": "DEPENDS_ON", "relatedSpdxElement": "SPDXRef-Package-glibc-runtime", "comment": "Expressed as: MimirAlloc dependsOn glibc only at runtime; DT_NEEDED = [libc.so.6, ld-linux-x86-64.so.2 (loader)]."},
     {"spdxElementId": "SPDXRef-Package-MimirAlloc", "relationshipType": "BUILD_DEPENDENCY_OF", "relatedSpdxElement": "SPDXRef-Package-gcc-build"},
     {"spdxElementId": "SPDXRef-Package-MimirAlloc", "relationshipType": "BUILD_DEPENDENCY_OF", "relatedSpdxElement": "SPDXRef-Package-make-build"},
     {"spdxElementId": "SPDXRef-Package-MimirAlloc", "relationshipType": "TEST_DEPENDENCY_OF", "relatedSpdxElement": "SPDXRef-Package-mojo-testenv"}
   ],
-  "comment": "Third-party runtime libraries: NONE beyond libc. Root-tree media files are out-of-package repository content, listed in docs/SBOM.md, not as packages here."
+  "comment": "Third-party runtime libraries: NONE beyond libc. Root-tree media files are out-of-package repository content, listed in docs/SBOM.md, not as packages here. Refresh of the M-008 SBOM at Z-105 (base c3424b2); M-008 original preserved in git history."
 }

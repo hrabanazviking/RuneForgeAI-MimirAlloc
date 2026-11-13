@@ -58,6 +58,7 @@ leaves open. Statuses in this ledger mean:
 | D-014 | Z13 budget enforcement adopted (L-03 / D-04): the Phase-9 soft budget over Q-MAPPED is enforced at every backing-growth point, reclaim-before-refusal, refusals counted once in Q-REFUSED-BUDGET (INC-I001-14 discharged) | Adopted | Z13 roadmap Z-079; docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3 (I-002); docs/Z13_BUDGET_Z079.md | Z-079 (settler) |
 | D-015 | Z13 interposing variant (L-01 opt-in route): separate opt-in libmimiralloc_interpose.so interposes the ten standard names with direct mimir_* counterparts; default library unchanged (exactly ten namespaced exports, no standard name); every glibc family symbol INTERPOSED, MISSING-NAMED, or INTERNAL in the filed audit | Adopted | Z13 roadmap Z-082; L-01; D-012 reservation; D-013 contract | Z-082 (settler) |
 | D-016 | Z13 gap closure (Wave 10): namespaced mimir_memalign / mimir_valloc / mimir_pvalloc over Z-074; standard names left to Z-082's variant; strdup class assessed, not shimmed; gap remainder proven unreachable | Adopted | Z13 roadmap Z-083; Z-073/Z-074 aligned contract; D-013; docs/Z13_Z083_GAP_CLOSURE.md | Z-083 (settler) |
+| D-017 | Z13 release version at Z-105: next cut is 0.2.0 (nine compatible additions since 0.1.0); ABI epoch stays 0; anonymous node retained; 1.0 withheld | Adopted | Z13 roadmap Z-105; M-007 D1/D2 version rules | Z-105 (settler); execution at the release cut |
 
 ---
 
@@ -879,6 +880,47 @@ leaves open. Statuses in this ledger mean:
   verdict reads; Z-082's symbol diff, when it banks,
   composes with S1 of the gap doc (its standard-name
   column is this decision's SIBLING rows).
+
+## D-017 - Z13 release version at Z-105: the next cut is 0.2.0, the ABI epoch stays 0, 1.0 remains withheld
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice
+  Z-105 (Wave 12, release engineering), applying the
+  version rules of docs/PHASE_13_VERSIONING_AND_RELEASE_M007.md
+  D1/D2 (SemVer with major held at 0 while the surface is
+  Proposed; minor for compatible surface/behaviour change;
+  ABI version = SONAME epoch). Full packet:
+  docs/Z13_Z105_RELEASE_ENGINEERING.md S1; proof:
+  tests/abi/recorded_run_z13_z105.txt.
+- **Decision:** (1) The next release cut of this tree is
+  version **0.2.0**: nine compatible symbol additions since
+  the 0.1.0 cut (Z-074 aligned pair, Z-075 usable size,
+  Z-076 statistics, Z-077 trim pair, Z-083 memalign family;
+  default exports 4 -> 13, proven by nm in the recorded
+  run) plus the D-013/D-014 behaviour decisions make 0.1.0
+  a false label for the current tree; one minor step
+  counts the single unreleased accumulation (M-007 D1
+  argument (c)). (2) The ABI epoch is UNCHANGED at 0 -
+  every addition is compatible, no removal or signature
+  change - so the SONAME stays libmimiralloc.so.0 and the
+  cut's versioned filename is libmimiralloc.so.0.2.0.
+  (3) The version script's ANONYMOUS node is retained
+  (M-007 D2 reasoning stands). (4) 1.0 remains WITHHELD:
+  the contracts.md Section 5.5 promotion is unmet and
+  U-03 unresolved. (5) Execution happens at the cut, not
+  in Z-105: VERSION stays 0.1.0 in-tree until the cutting
+  slice (or Volmarr, whose act a public cut is) follows
+  the S1.3(5) checklist - bump VERSION, re-run
+  `make test-z105`, regenerate release/SHA256SUMS and
+  the reproducible-build pins on the cutting host,
+  refresh the SBOM version fields. (6) Signing stays
+  deferred-by-absence (M-007 D4), owner Volmarr.
+- **Evidence:** two clean builds on purpleraider produced
+  byte-identical hashes for all five release artifacts
+  (recorded run S1/S2); SBOM refreshed to this tree in
+  the same slice (docs/SBOM.md, docs/sbom.json).
+- **Supersedes:** nothing. M-007 D1-D5 stand as the rules
+  this entry applies. **Status of entry:** Current.
 
 ## Notes - roadmap inconsistencies discovered in the A-002 design phase
 

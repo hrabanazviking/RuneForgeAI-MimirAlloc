@@ -1,0 +1,120 @@
+MimirAlloc Z13 recorded run - Z-105 Release engineering
+slice: Z-105 - Release engineering (Wave 12; version-bump decision packet, SBOM refresh, reproducible-build proof on this host: two clean builds, identical hashes. Gate: packet + reproducibility proof in-tree.)
+base: team branch yrsa/mimiralloc-team-05 after merging seat main c3424b2bffeace26648911c5d3d37b34ce3f84b5 (banked Z-001..Z-101, 101/117) as merge commit 080e254cec38af016ed48e32cea914907e1d0cf2, merged tree verified byte-identical to the seat (git diff vs c3424b2 empty) before slice work. This slice builds AHEAD; it banks only after Z-102, Z-103 and Z-104 in roadmap order.
+team: lead ran the six Mythic Engineering roles sequentially itself (release archaeology, version design, SBOM sweep, reproducibility measurement, gate verification, ledger + commit scope); no sub-agents spawned (recorded plainly).
+artifacts: docs/Z13_Z105_RELEASE_ENGINEERING.md (sha256 83da8e217b90cb4a91418b8c69090ca16d7fa2a7244d947733bd918dd15830c2), tests/abi/run_z105.sh (a30c28782ee2af3da72f11f86b4cb763a06090b5cdf8f72e481d66b39e670df9), docs/SBOM.md (7f5b2c7642ea4404084593a427ffb27c15d0e0214f86bb57fdc608c02e446e2e), docs/sbom.json (67b5d79ab78ec6c3654a839885c9f6366b23275f96aa2750696656696357031b, python3 -m json.tool parses clean), docs/DECISION_LEDGER.md (2c15369b8d62adb9b17fa9087a2afd68fa367e606d5f9eece38e235d846d4f09; D-017 index row + body appended, append-only), Makefile (77249dc5aa938bdcaefdf4c2e3c977e33342c1e3ce02f1287ce238eaf1dbf0c4; test-z105 standalone block appended only), this recorded run.
+decision: D-017 - the next release cut is 0.2.0 (nine compatible symbol additions since the 0.1.0 cut: default exports 4 -> 13); ABI epoch stays 0 (SONAME libmimiralloc.so.0 unchanged); anonymous version node retained; 1.0 withheld (contracts.md S5.5 promotion unmet, U-03 unresolved); VERSION stays 0.1.0 in-tree until the cut executes the packet checklist (slice doc S1.3(5)); signing remains deferred-by-absence, owner Volmarr.
+reproducibility verdict: PASS - two full clean builds on this host produced byte-identical sha256 for all five staged artifacts (versioned library, static archive, interposing library, header copy, normalised source tarball) and byte-identical staged SHA256SUMS. Staged install + E-004 consumer proof PASS (consumer DT_NEEDED names the SONAME; exit 0). sha256sum -c from a fresh directory: all OK. Runner checks 18/18, exit 0. The committed Pi release/SHA256SUMS differ for every artifact - EXPECTED-DIFFER under the M-007 D5 same-host scope (run S6), including the header, whose content itself changed as the surface grew.
+findings: F-Z105-1 the interposing variant still carries the Z-082-era 10-name namespaced set (no mimir_memalign / mimir_valloc / mimir_pvalloc; no standard-name memalign family either) - filed in the slice doc S4 with an owner, NOT fixed here (export-contract change, own decision + slice). F-Z105-2 the Pi-era REPRODUCIBLE_BUILD pins / release checksums cannot verify any current artifact; discharged by the cut checklist, no silent rewrite. One slice-harness defect found and fixed in-slice (runner built no unversioned lib for its own S3 check; trial run 17/18, fix recorded in slice doc S4).
+correctness gate (baseline, merged tree 080e254 before any Z-105 work): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z105_gate_baseline.log).
+correctness gate (final, slice tree): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z105_gate_final.log) - identical to baseline; the slice target is standalone and does not enter gate counts.
+load honesty: light-to-moderate shared-host window (loadavg 0.46-2.51 on 32 hardware threads across the slice's runs, recorded per run below and in the gate logs). No timing is graded anywhere in this slice; hashes, export counts and checksums are load-independent.
+
+=== RUNNER OUTPUT (make test-z105 on the final slice tree, verbatim) ===
+bash tests/abi/run_z105.sh
+=== S0 - host, toolchain, tree state ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T14:19:36Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 73%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.23 1.00 1.45
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+make: GNU Make 4.4.1
+ld: GNU ld (GNU Binutils for Ubuntu) 2.47
+head: 080e254cec38af016ed48e32cea914907e1d0cf2  branch: yrsa/mimiralloc-team-05
+VERSION file: 0.1.0
+CFLAGS line: CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O3
+SOURCE_DATE_EPOCH (tarball): 1794577930 (committer time of seat base c3424b2)
+loadavg at start: 0.23 1.00 1.45 1/1420 3275734
+=== S1 - two full clean builds ===
+  [ok] clean build A (log hidden_files/z105_build_A.log)
+-- build A staged at /tmp/z105-relA; file list 857 files
+   b7078708bc18c919888bc0750921e59fad447be766a73c7e4781f0b60c73fd27  libmimiralloc.so.0.1.0
+   1f515350a40615c02f1469e4744eeaf09b99edc3a2a623db1bc17792d698562d  libmimiralloc-0.1.0.a
+   85bf4227a3e16ef480d0a3ad9102c8f6c614a0456f0d6a72206fb9cfbd1f1347  libmimiralloc_interpose.so
+   9102b6b7b6069549fed16948290e6596dae13ddff6f18a01118fa6e4f3cf9299  mimir_alloc.h
+   1894aef5ee3389972802083b2a1b635e1fe8203cb1ac9748d53e6d3db33ead80  mimiralloc-0.1.0.tar.gz
+  [ok] clean build B (log hidden_files/z105_build_B.log)
+-- build B staged at /tmp/z105-relB; file list 857 files
+   b7078708bc18c919888bc0750921e59fad447be766a73c7e4781f0b60c73fd27  libmimiralloc.so.0.1.0
+   1f515350a40615c02f1469e4744eeaf09b99edc3a2a623db1bc17792d698562d  libmimiralloc-0.1.0.a
+   85bf4227a3e16ef480d0a3ad9102c8f6c614a0456f0d6a72206fb9cfbd1f1347  libmimiralloc_interpose.so
+   9102b6b7b6069549fed16948290e6596dae13ddff6f18a01118fa6e4f3cf9299  mimir_alloc.h
+   1894aef5ee3389972802083b2a1b635e1fe8203cb1ac9748d53e6d3db33ead80  mimiralloc-0.1.0.tar.gz
+=== S2 - reproducibility comparison (A vs B, this host) ===
+  [ok] identical: libmimiralloc.so.0.1.0
+  [ok] identical: libmimiralloc-0.1.0.a
+  [ok] identical: libmimiralloc_interpose.so
+  [ok] identical: mimir_alloc.h
+  [ok] identical: mimiralloc-0.1.0.tar.gz
+  [ok] SHA256SUMS of build A and build B are byte-identical
+=== S3 - surface proofs on build B ===
+versioned .so defined dynamic symbols: 13 (expect 13)
+  [ok] versioned library exports exactly 13
+default .so defined dynamic symbols: 13 (expect 13)
+  [ok] default library exports exactly 13 (same tree state)
+interpose .so defined dynamic symbols: 20 (expect 20 = 10 namespaced + 10 standard, Z-082 contract)
+  [ok] interposing variant exports exactly 20 (Z-082 contract unchanged)
+  [ok] SONAME of versioned library is libmimiralloc.so.0
+DT_NEEDED of versioned library:
+    0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+    0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+  [ok] Z-092 batch prototype is NOT a public symbol (0 mimir_batch_* exports)
+=== S4 - staged install + consumer proof (build B artifacts) ===
+  [ok] make install DESTDIR staged (log hidden_files/z105_install.log)
+   /tmp/z105-install/usr/local/include:
+   total 24
+   -rw-r--r-- 1 volmarr volmarr 22512 Nov 13 09:19 mimir_alloc.h
+   
+   /tmp/z105-install/usr/local/lib:
+   total 68
+   lrwxrwxrwx 1 volmarr volmarr    18 Nov 13 09:19 libmimiralloc.so -> libmimiralloc.so.0
+   lrwxrwxrwx 1 volmarr volmarr    22 Nov 13 09:19 libmimiralloc.so.0 -> libmimiralloc.so.0.1.0
+   -rwxr-xr-x 1 volmarr volmarr 66976 Nov 13 09:19 libmimiralloc.so.0.1.0
+  [ok] consumer (tests/abi/test_e004.c) compiles+links against staged install
+  [ok] consumer DT_NEEDED names the SONAME libmimiralloc.so.0
+  [ok] consumer runs against staged install (exit 0)
+=== S5 - checksum verification from clean extraction ===
+   libmimiralloc.so.0.1.0: OK
+   libmimiralloc-0.1.0.a: OK
+   libmimiralloc_interpose.so: OK
+   mimir_alloc.h: OK
+   mimiralloc-0.1.0.tar.gz: OK
+  [ok] sha256sum -c SHA256SUMS: every artifact OK in a fresh directory
+=== S6 - contrast with committed release/SHA256SUMS (Pi, M-007) ===
+committed (aarch64 Pi, gcc 12.2, pre-Z13 flags):
+   411450c32a03e7a91735e1edc2f659f5a3d570d09e3b83dc5a7c7597f916311a  libmimiralloc.so.0.1.0
+   09fd7009bbd57c18f0eda06d05d8b27e0aa369f401d4aa24b5ac3b9ebfd82f00  libmimiralloc-0.1.0.a
+   55107f05b3eb8c120230f76b2193fdc953af800af57a91caa405c84971af8772  mimir_alloc.h
+   48bf1f4b235224231d5a8dde5dd130a981d71ea71d40b01265526d53356e67e6  mimiralloc-0.1.0.tar.gz
+this host build B (x86-64, gcc 15.3, -O3 Z-096 set):
+   b7078708bc18c919888bc0750921e59fad447be766a73c7e4781f0b60c73fd27  libmimiralloc.so.0.1.0
+   1f515350a40615c02f1469e4744eeaf09b99edc3a2a623db1bc17792d698562d  libmimiralloc-0.1.0.a
+   9102b6b7b6069549fed16948290e6596dae13ddff6f18a01118fa6e4f3cf9299  mimir_alloc.h
+   1894aef5ee3389972802083b2a1b635e1fe8203cb1ac9748d53e6d3db33ead80  mimiralloc-0.1.0.tar.gz
+verdict: hashes DIFFER across hosts, as M-007 D5 scopes the claim (same-host only). Not a failure.
+=== S7 - verdict ===
+checks: total=18 ok=18 failed=0
+Z-105 RESULT: PASS
+loadavg at end: 0.29 1.00 1.44 1/1420 3276000
