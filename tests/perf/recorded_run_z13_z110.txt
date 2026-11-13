@@ -1,0 +1,48 @@
+MimirAlloc Z13 recorded run - Z-110 Quiet-window energy re-run
+slice: Z-110 - Reserve slice 2 (Wave 13 pool choice, seat WAVE_PLAN.md): quiet-window energy re-run. Reason: Z-108 verdict S5.2 - the Z-107 closing energy leg ran in an Aesir co-tenant window and the quiet-window run remained unrun. Success measure: the Z-107 energy leg re-run in a VERIFIED quiet window with load/co-tenants recorded, closing energy grades re-filed against both glibc columns, control bounds never weakened.
+STATUS: BLOCKED-CONTENTION - the quiet window did not exist on this host during this lead's run. No energy grade is filed by this slice; the Z-107 energy grades remain the grades of record (Z-108 verdict S5.2 stands, its hand-off remains open). This file is the honest blocked record, per the slice gate.
+base: e14505a47d57042d3c99027cb6cd90c5f15e349a (team branch yrsa/mimiralloc-team-02, merge of seat main 7e76e47, banked Z-001..Z-108)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth in team hidden_files/z110_host_truth.txt, attempt runs)
+artifacts: tests/perf/run_z110.sh (derived on-device from the banked tests/perf/run_z107.sh: build, tunable engagement proof and energy leg verbatim, hidden_files output names re-pointed z107->z110, latency/counters/RSS legs removed, quiet gate inserted before the energy leg; grading by the BANKED tests/perf/summarize_z107.py energy mode, unmodified), this recorded run, docs/Z13_Z110_QUIET_WINDOW_ENERGY.md. No src/, API, ABI or Makefile change; README.md untouched.
+team: this lead ran the six Mythic Engineering roles itself sequentially (harness derivation, method/control review, quiet-window watch, measurement, gate verification, ledger); no sub-agents spawned (recorded plainly per campaign rule).
+baseline gate (pre-slice tree, by the previous lead): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips (team hidden_files/z110_gate_baseline.log). Final gate on this slice tree is recorded in team CAMPAIGN_STATE.md.
+
+=== ATTEMPT 1 - 2026-11-13 ~11:24 EST - GATE BLOCKED (team hidden_files/z110_run_attempt1.log) ===
+Engagement proof PASS (hblkhd deltas default=0 mm4k=77824 mm1m=0). Quiet gate v1: cpu idle 96.8% (second top sample), but the co-tenant name screen tripped on the resident ollama daemon (ollama serve, 0.0% CPU, 0:01 CPU time since 05:14 - an idle daemon, resident in the idle baseline of every leg including Z-107's) AND the gate's own top snapshot showed a REAL co-tenant: team-03's Z-111 probe_mimir at 99.8% CPU replaying z094_git_churn.trace. Runner exited 3 (BLOCKED-CONTENTION); NO measurement was taken.
+Gate v1 defect found and fixed in-slice (runner only): the name screen (a) false-positived on the idle ollama daemon and (b) did not name the sibling probe binaries. Gate v2 excludes the ollama daemon by name (any inference load still surfaces via llama-server and the idle screen) and adds probe_mimir / probe_glibc to the screen. The idle >= 90% bound was NOT changed; no control bound was weakened anywhere in this slice.
+
+=== ATTEMPT 2 - 2026-11-13 11:32:26-11:33:06 EST - GATE PASSED AT ITS INSTANT, LEG CONTENDED IN FACT (team hidden_files/z110_run_attempt2.log, raw hidden_files/z110_energy_raw.txt) ===
+Engagement proof PASS. Quiet gate v2 at its instant: cpu idle 96.8%, name screen none - BUT the gate's own printed top snapshot (seconds after the ps screen) shows team-03's Z-111 v1 probe_mimir at 100% CPU (0:11 CPU time) replaying z094_ollama_session.trace: the sibling battery started inside the gate's own check window, after the ps screen snapshot. Load: 1.76/1.67/1.13 at host truth, 1.66/1.65/1.15 at leg end, with the same probe at 99.9% CPU (0:47 CPU time) in the end snapshot. Idle samples in leg order (RAPL pkg, ~3.005 s each): 23.0 W, 23.5 W, 20.9 W, 27.7 W, 24.0 W (summariser median 23.334 W, min 20.696, max 27.521, n=5) - sample 4 (before mixed_lifecycle) carries the sibling's heat; the baseline spread itself proves the window was not steady-quiet.
+The summariser graded the leg ENERGY RESULT: PASS (checksums true, idle baseline valid - a measurement-validity pass), and its figures are preserved verbatim below for the record. RULING: those grades are NOT ADOPTED and are NOT filed as Z-110 grades - the leg ran with a proven live co-tenant, and this campaign does not grade energy from a contended run. Directionally they agree with Z-107 (small_churn LOSS, large_batch WIN vs default, the rest adverse), which is consistency, not a filing.
+
+=== SUMMARISER OUTPUT - ATTEMPT 2 ENERGY (hidden_files/z110_sum_energy.txt, verbatim, NOT ADOPTED) ===
+IDLE baseline: median 23.334 W (min 20.696, max 27.521, n=5)
+leg         workload          med_net_nJ/op        min        max  med_gross_nJ/op
+glibc       large_batch             6479.09    4781.50   11869.91         23697.92
+glibc       mixed_batch               13.77       8.61      16.35           162.76
+glibc       mixed_lifecycle           46.17      31.85      78.18           332.03
+glibc       small_churn               39.43      36.13      41.59           145.50
+glibc_tuned large_batch             -299.61    -341.25     -91.03           510.42
+glibc_tuned mixed_batch               12.58       8.10      22.34           158.85
+glibc_tuned mixed_lifecycle          -13.11     -18.62      -7.86           164.93
+glibc_tuned small_churn               39.61      38.24      53.71           147.00
+mimiralloc  large_batch              572.04     470.23    1675.72          3479.17
+mimiralloc  mixed_batch              303.55     284.50     320.51          1062.50
+mimiralloc  mixed_lifecycle         4186.88    3510.18    4701.59         13643.66
+mimiralloc  small_churn              272.08     248.30     339.82           983.00
+
+=== ENERGY VERDICTS (median net J/op; WIN < 0.95x, TIE 0.95-1.05x, LOSS > 1.05x) ===
+small_churn: mimir net 272.08 nJ/op vs glibc 39.43 nJ/op | factor 6.90x | LOSS
+small_churn: mimir net 272.08 nJ/op vs glibc_tuned 39.61 nJ/op | factor 6.87x | LOSS
+mixed_batch: mimir net 303.55 nJ/op vs glibc 13.77 nJ/op | factor 22.04x | LOSS
+mixed_batch: mimir net 303.55 nJ/op vs glibc_tuned 12.58 nJ/op | factor 24.12x | LOSS
+large_batch: mimir net 572.04 nJ/op vs glibc 6479.09 nJ/op | factor 0.09x | WIN
+large_batch: mimir net 572.04 nJ/op vs glibc_tuned -299.61 nJ/op - BELOW IDLE-SUBTRACTION RESOLUTION for the reference, no ratio claimed (gross medians: mimir 3479.17 vs glibc_tuned 510.42 nJ/op)
+mixed_lifecycle: mimir net 4186.88 nJ/op vs glibc 46.17 nJ/op | factor 90.68x | LOSS
+mixed_lifecycle: mimir net 4186.88 nJ/op vs glibc_tuned -13.11 nJ/op - BELOW IDLE-SUBTRACTION RESOLUTION for the reference, no ratio claimed (gross medians: mimir 13643.66 vs glibc_tuned 164.93 nJ/op)
+
+Z-009 baseline (Z-007): LOSS in direction on all four; proven net factor large_batch 4.42x; small_churn factor indicative only; mixed_batch / mixed_lifecycle net factors below resolution in that contended window.
+ENERGY RESULT: PASS (checksums true, idle baseline valid)
+
+=== WHAT CLOSES THIS SLICE ===
+Re-run tests/perf/run_z110.sh unchanged in a verified quiet window (gate v2 PASS with no sibling probe in BOTH the ps screen and the top snapshot, idle samples steady), file the grades against both glibc columns, and supersede this blocked record. The blocker is purely the shared host: team-03's Z-111 trace battery was live continuously 11:15-11:35+ EST on 2026-11-13 (probes cycling v0/v1/wA over z094 traces, load to 3.91). When Z-111 banks and the host is quiet, this slice is a single runner invocation plus the final gate.
