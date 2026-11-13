@@ -1,0 +1,77 @@
+MimirAlloc Z13 recorded run - Z-094 Real workload traces
+slice: Z-094 - Real workload traces (Wave 11; allocation traces captured from real programs on this host via the audit-hook route: python import storm, git object churn, an Ollama session; a replay harness that re-runs a trace against any allocator leg. Gate: three traces in-tree with replay checksums matching.)
+date: 2026-11-12T23:33-05:00 (capture 2026-11-13T04:27:34Z; replay and final gate same evening)
+base: e903e46 (team branch yrsa/mimiralloc-team-02 = merge of seat main 4188da8, banked Z-001..Z-092, into the team line; the seat has since banked Z-093 at 3e54613, so this slice banks immediately after it in roadmap order)
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA)
+artifacts: Makefile (test-z094 block, standalone; NOT part of make test), docs/Z13_Z094_REAL_WORKLOAD_TRACES.md (slice doc), tests/perf/mimir_trace_z094.c (audit-hook LD_PRELOAD tracer), tests/perf/summarize_z094.py (raw streams to canonical trace), tests/perf/replay_z094.py (replay harness, glibc + mimir legs), tests/perf/capture_z094.sh (one-time capture driver), tests/perf/run_z094.sh (make test-z094 verification runner), tests/perf/test_z094_trace_smoke.c (pipeline self-test consumer), tests/perf/traces/z094_python_import.trace.gz, tests/perf/traces/z094_git_churn.trace.gz, tests/perf/traces/z094_ollama_session.trace.gz, this recorded run. No src/, include/, API or ABI change.
+team: lead ran the six Mythic Engineering roles sequentially itself; no sub-agents spawned (recorded plainly).
+method: capture once on this host under the tracer shim (built -fno-builtin; interposed set of eight PLT-boundary entry points; traced programs run on plain glibc, MimirAlloc not in the capture path). Summariser folds per-process shim ids into canonical logical ids (realloc moves keep one identity; retire and failure forms preserved; foreign frees are F 0 no-ops) and hashes the canonical op bytes (FNV-1a64 + SHA-256) into the trace header. Verification replays each banked trace on both legs and requires checksum, op count, peak live bytes and final live residual to match the header with zero outcome failures; the runner first re-proves the whole pipeline on a fresh scripted smoke trace.
+load honesty: SHARED HOST. Capture loadavg 0.91 1.11 1.00 at start, 1.29 1.19 1.03 at end, with the Aesir forge mojo suite as co-tenant throughout (a 247%-CPU mojo process was live during the window); replay-run loadavg 1.95 at start, 4.31 at end under the same co-tenancy; final standing gate ended at loadavg 2.87 2.57 1.72. This slice claims NO timing or benchmark number - traces are correctness artefacts - so no verdict here is load-sensitive; the load state is recorded because the law requires it, and every trace header carries its own capture loadavg.
+correctness gate (baseline, merged tree, keeper-run): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/gate_z094_baseline.log). Final gate on the complete tree: GREEN, same counts (hidden_files/gate_z094_final.log; footer excerpted verbatim below).
+
+=== VERDICT ===
+Gate MET: three traces in-tree with replay checksums matching. make test-z094: Z-094 RESULT: PASS. Smoke pipeline MATCH on both legs (12 ops). python_import_storm 28,694 ops MATCH glibc + MATCH mimir (fnv1a64 478338dba68de321). git_object_churn 576,623 ops / 622 processes MATCH + MATCH (fnv1a64 2ff165b183a9a269; mimir leg d013_zero_size=303 counted D-013 normalisations). ollama_session 2,382,302 ops / 11 processes MATCH + MATCH (fnv1a64 8c99dd8de5e6658d; mimir d013_zero_size=318). All legs failures=0, calloc_dirty=0; peaks and final residuals equal the headers exactly. The Ollama session is proven real in the capture log: response begins 'The sea, a vast and boundless body of water,', eval_count 12, done_reason length, /api/ps shows qwen2.5:0.5b loaded under the llamacpp runner on the private 127.0.0.1:11499 serve (system service untouched).
+bugs: four defects found in this slice's own new tooling, all fixed in scope, none in the banked core: (1) fork inheritance poisoned multi-process streams (inherited id map; git child freeing parent allocations logged unknown shim ids; summariser refused at trace.3271294.raw:101) - fixed with a pthread_atfork child reset plus defensive pid-change reset; inherited pointers now log F 0 in the child's own stream; proven by targeted fork regression and the 622-process git capture. (2) Byte-wise flush left torn final records in signal-killed processes (Ollama streams ending 'M 24' / 'M 34423' at exact 64 KiB sizes) - fixed with record-aligned flush (a killed process leaves a true record prefix) plus a summariser hard refusal of any stream not ending at a record boundary (negative test on the old torn stream passes: refused by name). (3) Private Ollama serve could not see the model store (system override OLLAMA_MODELS=/mnt/vault/models/ollama; default-store serve reported the model not found and the first capture banked an empty session) - capture now sets the real store and hard-checks done/eval_count before summarising. (4) Smoke consumer assigned a failing realloc's NULL over the only copy of the live pointer - caught by GCC -Wnonnull fortify at -Werror (why the landed test-z094 had never run green); fixed with a scratch variable per the E-form contract.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T04:33:05Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5040695
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 65%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 2.87 2.57 1.72
+
+=== CAPTURE SUMMARY LINES (hidden_files/z094_capture.log, verbatim) ===
+SUMMARY workload=python_import_storm procs=1 ops=28694 M=14339 C=734 A=1 R=2007 E=0 F=11613 alloc_failures=0 peak_live_bytes=8645075 final_live_count=3461 final_live_bytes=595116 checksum_fnv1a64=478338dba68de321 ops_sha256=e74b229c9771698a50e704f16146c95946e320c49fa2352b9bf5377f18626ee3 gz_bytes=88594
+SUMMARY workload=git_object_churn procs=622 ops=576623 M=307899 C=34230 A=0 R=9829 E=0 F=224665 alloc_failures=0 peak_live_bytes=508627126 final_live_count=119401 final_live_bytes=508619240 checksum_fnv1a64=2ff165b183a9a269 ops_sha256=3f225e3113585417b9db4f63582afbb27c8385a7d0cd5c05492916383e499fbe gz_bytes=1750895
+OLLAMA response: 'The sea, a vast and boundless body of water,' eval_count: 12 done: length
+OLLAMA session check: OK length 12
+SUMMARY workload=ollama_session procs=11 ops=2382302 M=1381621 C=6948 A=1353 R=649 E=0 F=991731 alloc_failures=0 peak_live_bytes=594768279 final_live_count=398191 final_live_bytes=594748917 checksum_fnv1a64=8c99dd8de5e6658d ops_sha256=83e9a670834a725364df2752b48f602510575f4aea3535dfc3491c6cd4e1b521 gz_bytes=6270694
+# loadavg_end: 1.29 1.19 1.03 3/1451 4091216
+CAPTURE RESULT: DONE
+
+=== REPLAY VERDICTS (hidden_files/z094_replay_run.log, verbatim) ===
+REPLAY leg=glibc workload=smoke ops=12 checksum_fnv1a64=3439be23886ca21b expected=3439be23886ca21b ops_sha256_match=True peak_live_bytes=105136 expected_peak=105136 final_live_count=0 expected=0 final_live_bytes=0 expected=0 failures=0 calloc_dirty=0 d013_zero_size=0 d013_realloc_zero=0 verdict=MATCH
+SMOKE REPLAY glibc: MATCH
+REPLAY leg=mimir workload=smoke ops=12 checksum_fnv1a64=3439be23886ca21b expected=3439be23886ca21b ops_sha256_match=True peak_live_bytes=105136 expected_peak=105136 final_live_count=0 expected=0 final_live_bytes=0 expected=0 failures=0 calloc_dirty=0 d013_zero_size=0 d013_realloc_zero=0 verdict=MATCH
+SMOKE REPLAY mimir: MATCH
+REPLAY leg=glibc workload=python_import_storm ops=28694 checksum_fnv1a64=478338dba68de321 expected=478338dba68de321 ops_sha256_match=True peak_live_bytes=8645075 expected_peak=8645075 final_live_count=3461 expected=3461 final_live_bytes=595116 expected=595116 failures=0 calloc_dirty=0 d013_zero_size=0 d013_realloc_zero=0 verdict=MATCH
+TRACE REPLAY tests/perf/traces/z094_python_import.trace.gz glibc: MATCH
+REPLAY leg=mimir workload=python_import_storm ops=28694 checksum_fnv1a64=478338dba68de321 expected=478338dba68de321 ops_sha256_match=True peak_live_bytes=8645075 expected_peak=8645075 final_live_count=3461 expected=3461 final_live_bytes=595116 expected=595116 failures=0 calloc_dirty=0 d013_zero_size=0 d013_realloc_zero=0 verdict=MATCH
+TRACE REPLAY tests/perf/traces/z094_python_import.trace.gz mimir: MATCH
+REPLAY leg=glibc workload=git_object_churn ops=576623 checksum_fnv1a64=2ff165b183a9a269 expected=2ff165b183a9a269 ops_sha256_match=True peak_live_bytes=508627126 expected_peak=508627126 final_live_count=119401 expected=119401 final_live_bytes=508619240 expected=508619240 failures=0 calloc_dirty=0 d013_zero_size=0 d013_realloc_zero=0 verdict=MATCH
+TRACE REPLAY tests/perf/traces/z094_git_churn.trace.gz glibc: MATCH
+REPLAY leg=mimir workload=git_object_churn ops=576623 checksum_fnv1a64=2ff165b183a9a269 expected=2ff165b183a9a269 ops_sha256_match=True peak_live_bytes=508627126 expected_peak=508627126 final_live_count=119401 expected=119401 final_live_bytes=508619240 expected=508619240 failures=0 calloc_dirty=0 d013_zero_size=303 d013_realloc_zero=0 verdict=MATCH
+TRACE REPLAY tests/perf/traces/z094_git_churn.trace.gz mimir: MATCH
+REPLAY leg=glibc workload=ollama_session ops=2382302 checksum_fnv1a64=8c99dd8de5e6658d expected=8c99dd8de5e6658d ops_sha256_match=True peak_live_bytes=594768279 expected_peak=594768279 final_live_count=398191 expected=398191 final_live_bytes=594748917 expected=594748917 failures=0 calloc_dirty=0 d013_zero_size=0 d013_realloc_zero=0 verdict=MATCH
+TRACE REPLAY tests/perf/traces/z094_ollama_session.trace.gz glibc: MATCH
+REPLAY leg=mimir workload=ollama_session ops=2382302 checksum_fnv1a64=8c99dd8de5e6658d expected=8c99dd8de5e6658d ops_sha256_match=True peak_live_bytes=594768279 expected_peak=594768279 final_live_count=398191 expected=398191 final_live_bytes=594748917 expected=594748917 failures=0 calloc_dirty=0 d013_zero_size=318 d013_realloc_zero=0 verdict=MATCH
+TRACE REPLAY tests/perf/traces/z094_ollama_session.trace.gz mimir: MATCH
+Z-094 RESULT: PASS
+
+=== FINAL STANDING GATE FOOTER (hidden_files/gate_z094_final.log, verbatim) ===
+# GATE Z-008 standing correctness gate
+# make exit code: 0
+# GATE COUNTS: checks=4988 failed=0 skips=77
+# GATE DETAIL: smoke=18/18 checks-lines=7 result-fail-lines=0 make-exit=0
+# GATE RESULT: GREEN

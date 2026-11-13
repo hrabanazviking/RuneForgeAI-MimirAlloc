@@ -2466,3 +2466,28 @@ test-z092:
 	bash tests/contract/run_z092.sh
 
 .PHONY: test-z092
+# ------------------------------------------------------------------
+# Z-094: real workload traces
+# (tests/perf/mimir_trace_z094.c) -- audit-hook
+# LD_PRELOAD tracer shim forwarding to glibc and
+# logging every malloc-family call; canonical traces
+# in tests/perf/traces/ (python import storm, git
+# object churn, Ollama session) are captured once by
+# tests/perf/capture_z094.sh and verified by replay
+# (tests/perf/replay_z094.py) on glibc and mimir legs
+# via tests/perf/run_z094.sh. Slice doc
+# docs/Z13_Z094_REAL_WORKLOAD_TRACES.md.
+# Standalone via `make test-z094`; NOT part of
+# `make test` (standing gate counts untouched).
+# ------------------------------------------------------------------
+$(BUILD)/libmimirtrace_z094.so: tests/perf/mimir_trace_z094.c | $(BUILD)
+	$(CC) -std=c11 -Wall -Wextra -Werror -O2 -shared -fPIC -fno-builtin tests/perf/mimir_trace_z094.c -o $@ -ldl
+
+trace-lib-z094: $(BUILD)/libmimirtrace_z094.so
+
+.PHONY: trace-lib-z094
+
+test-z094:
+	bash tests/perf/run_z094.sh
+
+.PHONY: test-z094
