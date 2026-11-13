@@ -317,6 +317,52 @@ void *mimir_aligned_alloc(size_t alignment, size_t size);
 int mimir_posix_memalign(void **memptr, size_t alignment,
                          size_t size);
 
+/* Z-083 (Wave 10), per decision D-016 (by analogy under
+ * U-03 to MA-6.1-ALIGNED-01/-02, the Z-073/Z-074 aligned
+ * rows): the historical memalign shape over the Z-074
+ * construction. The validity domain is EXACTLY
+ * mimir_aligned_alloc's -- a non-zero power of two -- and
+ * every outcome is that entry's: an invalid alignment is
+ * a defined failure (exactly null), zero size is the
+ * D-013 contract null, a valid but unsatisfiable request
+ * is exactly null, and on success the returned pointer
+ * satisfies (uintptr_t)ptr % alignment == 0 and is
+ * releasable by mimir_free exactly once. This diverges
+ * from this host's glibc by recorded decision, as Z-074
+ * already did: glibc's memalign accepts non-power-of-two
+ * alignments and returns a distinct pointer for size 0
+ * (both measured at Z-083); this family refuses the first
+ * and nulls the second. The size need NOT be a multiple
+ * of the alignment. errno is not promised (U-10, settled
+ * by D-013). */
+void *mimir_memalign(size_t alignment, size_t size);
+
+/* Z-083 (Wave 10), per decision D-016: the page-aligned
+ * shape -- a request of the given size whose pointer is
+ * aligned to this host's page size (4096, recorded at
+ * Z-002). The size is NOT rounded up; only the pointer's
+ * alignment is page-grade, and the block is releasable by
+ * mimir_free exactly once. Zero size is the D-013
+ * contract null (glibc returns a distinct pointer;
+ * diverged from, by D-013). Failure is exactly null;
+ * errno is not promised (U-10, settled by D-013). */
+void *mimir_valloc(size_t size);
+
+/* Z-083 (Wave 10), per decision D-016: valloc with the
+ * size first rounded UP to a whole multiple of this
+ * host's page size -- the historical pvalloc shape, so
+ * mimir_usable_size of a successful result is at least
+ * the rounded size. The round-up is checked before it is
+ * relied on: a size whose rounding would overflow is
+ * exactly null and no wrapped-around size is allocated.
+ * Zero size is the D-013 contract null, applied BEFORE
+ * any rounding -- it is never rounded into a one-page
+ * allocation (glibc returns a minimum block for
+ * pvalloc(0); diverged from, by D-013). The result is
+ * page-aligned and releasable by mimir_free exactly
+ * once. errno is not promised (U-10, settled by D-013). */
+void *mimir_pvalloc(size_t size);
+
 /* Z-075, per decision D-012 (by analogy under U-03 to
  * MA-COND-USABLE-01/-02; the V-05 semantics for this
  * target are defined by D-012): the exact usable extent

@@ -92,6 +92,26 @@ void *mimir_core_aligned_alloc(size_t alignment, size_t size);
 int mimir_core_posix_memalign(void **memptr, size_t alignment,
                               size_t size);
 
+/* Memalign family (Z-083, Wave 10; roadmap Z-083 gap
+ * closure over the Z-074 construction; decision D-016):
+ * mimir_core_memalign is the historical memalign shape
+ * over mimir_core_aligned_alloc -- the SAME validity
+ * domain (a non-zero power of two), the same failure
+ * channel (exactly NULL; invalid alignment counted as a
+ * genuine failure, zero size as the D-013 contract null),
+ * and results releasable by mimir_core_free exactly once.
+ * mimir_core_valloc(size) is the page-aligned shape:
+ * aligned_alloc at this host's page size; the size is NOT
+ * rounded. mimir_core_pvalloc(size) rounds the size UP to
+ * a whole multiple of the page size first (an overflowing
+ * round-up is exactly NULL, counted as a failure), then
+ * serves it as valloc; its zero size is the D-013
+ * contract null, never a rounded allocation. Full rules
+ * in mimir_core.c. */
+void *mimir_core_memalign(size_t alignment, size_t size);
+void *mimir_core_valloc(size_t size);
+void *mimir_core_pvalloc(size_t size);
+
 /* Usable size (Z-075, Wave 9; decision D-012): the exact
  * usable extent of a live block -- the span's class size
  * for a class-machinery block, the descriptor's

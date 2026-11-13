@@ -315,3 +315,50 @@ void *mimir_reallocarray(void *ptr, size_t nmemb, size_t size)
                        __ATOMIC_RELAXED);
     return mimir_core_reallocarray(ptr, nmemb, size);
 }
+
+/*
+ * Z-083 audit counters: the E-005 shape carried to the
+ * three Wave 10 memalign-family entry points -- each
+ * counts CALLS at this L1 boundary, exactly once per
+ * invocation, whatever the outcome. Appended after every
+ * earlier counter; declared in no installed header, read
+ * only by a test-only static build (the declarations are
+ * appended to tests/abi/mimir_audit_e005.h), and bound
+ * local in the shared library by the version script's
+ * local: * -- the .so export count is exactly the
+ * thirteen public entry points after Z-083, never these.
+ */
+_Alignas(64) unsigned long mimir_audit_call_memalign;
+_Alignas(64) unsigned long mimir_audit_call_valloc;
+_Alignas(64) unsigned long mimir_audit_call_pvalloc;
+
+/* Z-083 (Wave 10, decision D-016): the memalign-family
+ * forwarders. They own no allocator logic: each forwards
+ * to the core entry of the same shape, which builds over
+ * the Z-074 aligned construction. Behaviour is the core's
+ * contract, stated in include/mimir_alloc.h: memalign
+ * shares mimir_aligned_alloc's validity domain and
+ * failure channels exactly; valloc is page-aligned with
+ * the size unrounded; pvalloc rounds the size up to a
+ * page multiple first, with the round-up overflow-checked.
+ * Every result is releasable by mimir_free exactly once. */
+void *mimir_memalign(size_t alignment, size_t size)
+{
+    __atomic_fetch_add(&mimir_audit_call_memalign, 1UL,
+                       __ATOMIC_RELAXED);
+    return mimir_core_memalign(alignment, size);
+}
+
+void *mimir_valloc(size_t size)
+{
+    __atomic_fetch_add(&mimir_audit_call_valloc, 1UL,
+                       __ATOMIC_RELAXED);
+    return mimir_core_valloc(size);
+}
+
+void *mimir_pvalloc(size_t size)
+{
+    __atomic_fetch_add(&mimir_audit_call_pvalloc, 1UL,
+                       __ATOMIC_RELAXED);
+    return mimir_core_pvalloc(size);
+}

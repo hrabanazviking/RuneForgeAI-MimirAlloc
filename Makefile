@@ -2330,3 +2330,50 @@ test-z082: $(BUILD)/test_z082 $(BUILD)/test_z082_dyn $(BUILD)/test_z082_cpp $(BU
 	LD_PRELOAD=$(CURDIR)/$(IPOLIB) ./$(BUILD)/test_z082_pre | grep -q 'PRELOAD-VERDICT: MIMIR'
 
 .PHONY: lib-interpose test-z082
+
+# ------------------------------------------------------------------
+# Z-083: memalign-family ABI + contract evidence -- the
+# static contract test (tests/abi/test_z083.c, LIBOBJS link
+# so the appended E-005 audit counters and the internal
+# J-002 stats snapshot are readable), the dynamic C
+# consumer (test_z083_dyn.c) and the C++ consumer
+# (test_z083_cpp.cpp), both linked ONLY against
+# build/libmimiralloc.so in the E-002/E-007 route, and the
+# header-only self-containment objects (C and C++).
+# Standalone via `make test-z083`; NOT part of `make test`
+# (standing gate counts untouched). The full ABI recorded
+# run (nm -D, DT_NEEDED, undefined-symbol and absence
+# proofs, plus the host glibc allocation-symbol inventory
+# the gap list is built from) is tests/abi/run_z083.sh,
+# filed as tests/abi/recorded_run_z13_z083.txt.
+# ------------------------------------------------------------------
+$(BUILD)/test_z083.o: tests/abi/test_z083.c include/mimir_alloc.h tests/abi/mimir_audit_e005.h tests/core/mimir_stats_j002.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/abi -Itests/core -c tests/abi/test_z083.c -o $@
+
+$(BUILD)/test_z083: $(LIBOBJS) $(BUILD)/test_z083.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z083.o -o $@
+
+$(BUILD)/test_z083_dyn.o: tests/abi/test_z083_dyn.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/test_z083_dyn.c -o $@
+
+$(BUILD)/test_z083_dyn: $(BUILD)/libmimiralloc.so $(BUILD)/test_z083_dyn.o
+	$(CC) $(CFLAGS) $(BUILD)/test_z083_dyn.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/test_z083_cpp.o: tests/abi/test_z083_cpp.cpp include/mimir_alloc.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c tests/abi/test_z083_cpp.cpp -o $@
+
+$(BUILD)/test_z083_cpp: $(BUILD)/libmimiralloc.so $(BUILD)/test_z083_cpp.o
+	$(CXX) $(CXXFLAGS) $(BUILD)/test_z083_cpp.o -L$(BUILD) -lmimiralloc -Wl,-rpath,'$$ORIGIN' -o $@
+
+$(BUILD)/header_only_z083_c.o: tests/abi/header_only_z083.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/abi/header_only_z083.c -o $@
+
+$(BUILD)/header_only_z083_cpp.o: tests/abi/header_only_z083.cpp include/mimir_alloc.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c tests/abi/header_only_z083.cpp -o $@
+
+test-z083: $(BUILD)/test_z083 $(BUILD)/test_z083_dyn $(BUILD)/test_z083_cpp $(BUILD)/header_only_z083_c.o $(BUILD)/header_only_z083_cpp.o
+	./$(BUILD)/test_z083
+	./$(BUILD)/test_z083_dyn
+	./$(BUILD)/test_z083_cpp
+
+.PHONY: test-z083

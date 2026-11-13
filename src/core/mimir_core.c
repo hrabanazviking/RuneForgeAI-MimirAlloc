@@ -7433,6 +7433,109 @@ int mimir_core_posix_memalign(void **memptr, size_t alignment,
 }
 
 /*
+ * Z-083 -- memalign family (Wave 10; roadmap Z-083, gap
+ * closure for real programs; decision D-016). The three
+ * shapes real programs call through the historical
+ * memalign family, built entirely over the Z-074 aligned
+ * construction above -- no new allocation machinery, no
+ * new release path: every block these entries publish is
+ * an ordinary family block (small-path or mapping
+ * registry, by the Z-074 routing) and is retired by
+ * mimir_core_free through the untouched courses, exactly
+ * once, by the exact returned pointer.
+ *
+ * - mimir_core_memalign(alignment, size): the historical
+ *   memalign shape. Its validity domain is EXACTLY the
+ *   Z-074 domain -- a non-zero power of two -- and its
+ *   outcomes are exactly mimir_core_aligned_alloc's:
+ *   invalid alignment is a defined failure (exactly NULL,
+ *   counted in alloc_failures, diag-reported), zero size
+ *   is the D-013 contract null (counted in
+ *   alloc_posture_nulls), a valid but unsatisfiable
+ *   request is exactly NULL. This is a recorded divergence
+ *   from this host's glibc 2.44, measured at Z-083: glibc
+ *   memalign ACCEPTS a non-power-of-two alignment (it
+ *   rounds the request up internally) and returns a
+ *   distinct freeable pointer for size 0; the family
+ *   contract refuses the first and nulls the second, as
+ *   it already did at Z-074 / Z-078. errno is not
+ *   promised (U-10, settled by D-013).
+ * - mimir_core_valloc(size): the page-aligned shape --
+ *   mimir_core_aligned_alloc at this host's page size
+ *   (4096, Z-002). The SIZE is not rounded: a 100-byte
+ *   valloc request is a 100-byte request whose pointer
+ *   happens to be page-aligned (the Z-074 routing serves
+ *   it from the mapping path, so its usable extent is the
+ *   mapping's, at least the request). Zero size is the
+ *   D-013 contract null through the same aligned path.
+ * - mimir_core_pvalloc(size): valloc with the size first
+ *   rounded UP to a whole multiple of the page size, the
+ *   historical pvalloc shape (measured on this host's
+ *   glibc: pvalloc(100) has usable extent one page up,
+ *   pvalloc(4097) two pages up). The round-up is checked
+ *   before it is relied on: a size whose rounding would
+ *   overflow size_t is exactly NULL, counted as a genuine
+ *   failure (never a wrapped small allocation). Zero size
+ *   is the D-013 contract null BEFORE any rounding -- it
+ *   is never rounded into a one-page allocation (glibc
+ *   returns a minimum block for pvalloc(0); diverged
+ *   from, by the same D-013 decision).
+ * A page-size query failure on the valloc / pvalloc road
+ * is exactly NULL, counted as a failure and diag-reported
+ * with the PAGESIZE cause, the Z-074 aligned road's own
+ * posture for that failure.
+ */
+void *mimir_core_memalign(size_t alignment, size_t size)
+{
+    return mimir_core_aligned_alloc(alignment, size);
+}
+
+void *mimir_core_valloc(size_t size)
+{
+    size_t page_size = 0;
+
+    if (mimir_platform_page_size(&page_size) !=
+            MIMIR_PLATFORM_OK ||
+        page_size == 0) {
+        mimir_stats_note_failure();
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               MIMIR_DIAG_CAUSE_PAGESIZE,
+                               (uint64_t)size);
+        return NULL;
+    }
+    return mimir_core_aligned_alloc(page_size, size);
+}
+
+void *mimir_core_pvalloc(size_t size)
+{
+    size_t page_size = 0;
+    size_t rounded;
+
+    if (size == 0) {
+        mimir_stats_note_posture();
+        return NULL;
+    }
+    if (mimir_platform_page_size(&page_size) !=
+            MIMIR_PLATFORM_OK ||
+        page_size == 0) {
+        mimir_stats_note_failure();
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               MIMIR_DIAG_CAUSE_PAGESIZE,
+                               (uint64_t)size);
+        return NULL;
+    }
+    if (size > SIZE_MAX - (page_size - 1)) {
+        mimir_stats_note_failure();
+        mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
+                               MIMIR_DIAG_CAUSE_ARITHMETIC,
+                               (uint64_t)size);
+        return NULL;
+    }
+    rounded = (size + (page_size - 1)) & ~(page_size - 1);
+    return mimir_core_aligned_alloc(page_size, rounded);
+}
+
+/*
  * Z-052 mremap growth (roadmap Wave 6): attempt to grow a
  * LIVE mapping-registry block through the L6 mremap
  * primitive, caller holds the lock and has already

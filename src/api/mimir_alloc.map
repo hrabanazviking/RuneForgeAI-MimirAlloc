@@ -40,6 +40,9 @@
     mimir_stats_snapshot;
     mimir_trim;
     mimir_reallocarray;
+    mimir_memalign;
+    mimir_valloc;
+    mimir_pvalloc;
   local:
     *;
 };

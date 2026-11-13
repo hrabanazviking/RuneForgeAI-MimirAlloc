@@ -63,6 +63,11 @@ extern unsigned long mimir_audit_call_stats_snapshot; /* Z-076 */
  * entry points; every declaration above is unchanged. */
 extern unsigned long mimir_audit_call_trim;
 extern unsigned long mimir_audit_call_reallocarray;
+/* Z-083: appended for the three Wave 10 memalign-family
+ * entry points; every declaration above is unchanged. */
+extern unsigned long mimir_audit_call_memalign;
+extern unsigned long mimir_audit_call_valloc;
+extern unsigned long mimir_audit_call_pvalloc;
 
 extern unsigned long mimir_audit_alloc_published;
 extern unsigned long mimir_audit_mapping_retired;

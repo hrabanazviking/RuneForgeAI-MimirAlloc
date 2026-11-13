@@ -57,6 +57,7 @@ leaves open. Statuses in this ledger mean:
 | D-013 | Z13 zero-size and errno closure (L-09): zero-size is a defined non-failure contract NULL (U-09); realloc-to-zero preserves the block (U-12); errno never promised, checked refusals leave it untouched (U-10) | Adopted | Z13 roadmap Z-078; contracts.md V-01/V-02/V-04; docs/Z13_Z078_ZERO_SIZE_ERRNO.md | Z-078 (settler) |
 | D-014 | Z13 budget enforcement adopted (L-03 / D-04): the Phase-9 soft budget over Q-MAPPED is enforced at every backing-growth point, reclaim-before-refusal, refusals counted once in Q-REFUSED-BUDGET (INC-I001-14 discharged) | Adopted | Z13 roadmap Z-079; docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3 (I-002); docs/Z13_BUDGET_Z079.md | Z-079 (settler) |
 | D-015 | Z13 interposing variant (L-01 opt-in route): separate opt-in libmimiralloc_interpose.so interposes the ten standard names with direct mimir_* counterparts; default library unchanged (exactly ten namespaced exports, no standard name); every glibc family symbol INTERPOSED, MISSING-NAMED, or INTERNAL in the filed audit | Adopted | Z13 roadmap Z-082; L-01; D-012 reservation; D-013 contract | Z-082 (settler) |
+| D-016 | Z13 gap closure (Wave 10): namespaced mimir_memalign / mimir_valloc / mimir_pvalloc over Z-074; standard names left to Z-082's variant; strdup class assessed, not shimmed; gap remainder proven unreachable | Adopted | Z13 roadmap Z-083; Z-073/Z-074 aligned contract; D-013; docs/Z13_Z083_GAP_CLOSURE.md | Z-083 (settler) |
 
 ---
 
@@ -824,6 +825,60 @@ leaves open. Statuses in this ledger mean:
   unchanged. **Status of entry:** Current.
 
 ---
+
+## D-016 - Z13 gap closure for real programs at Z-083: the memalign family shimmed namespaced, the strdup class assessed, the remainder proven unreachable
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice
+  Z-083 (Wave 10), which requires shims for the symbol
+  classes real programs actually call (the memalign /
+  valloc / pvalloc family over Z-074), an honest
+  assessment of the strdup class (libc-internal users
+  cannot be interposed, and the doc must say so), and a
+  gap list shrunk to the provably-unreachable remainder.
+  Full record: docs/Z13_Z083_GAP_CLOSURE.md.
+- **Decision:** (1) The memalign family is taken in the
+  NAMESPACED shape, following the Z-074 / Z-075 / Z-077
+  surface precedent and D-012's usable-size ruling:
+  mimir_memalign, mimir_valloc and mimir_pvalloc are
+  declared, exported (the .so count goes 10 -> 13) and
+  built entirely over the Z-074 aligned construction.
+  No standard-name symbol is added by this slice:
+  standard names belong to Z-082's opt-in interposing
+  variant, which was in flight in parallel and is not on
+  this slice's base; its memalign / valloc / pvalloc are
+  one-line compositions over these entries when it banks.
+  (2) mimir_memalign carries EXACTLY the Z-074 contract:
+  validity is a non-zero power of two, invalid alignment
+  is a defined failure (NULL, counted as a failure),
+  zero size is the D-013 contract null. glibc 2.44 on
+  this host accepts non-power-of-two memalign alignments
+  and returns distinct pointers for zero sizes (measured
+  at Z-083); both divergences are recorded, not adopted.
+  (3) mimir_valloc aligns to this host's page size
+  without rounding the size; mimir_pvalloc rounds the
+  size UP to a page multiple first, the round-up
+  overflow-checked (exactly NULL, a genuine failure),
+  and its zero size is the D-013 null BEFORE rounding.
+  (4) The strdup class is ASSESSED, NOT SHIMMED: a
+  namespaced string API closes no allocator gap; the
+  standard-name composition belongs to Z-082; and
+  libc-internal users of strdup (and of every allocation
+  entry) bind inside libc and cannot be interposed by
+  any preload, which the gap doc states plainly for the
+  Z-084 / Z-085 batteries and the Z-090 verdict.
+  (5) The remaining assessed rows (memalignment,
+  free_sized / free_aligned_sized, cfree, mallopt, the
+  mallinfo class) are not shimmed, each with its reason
+  in the gap doc; the __libc_* aliases and all
+  libc-internal callers are recorded as the
+  provably-unreachable remainder -- a property of how
+  glibc is linked, not a backlog item.
+- **Supersedes / settles:** nothing banked is superseded.
+  The Z-083 gap list is the Wave 10 record the Z-090
+  verdict reads; Z-082's symbol diff, when it banks,
+  composes with S1 of the gap doc (its standard-name
+  column is this decision's SIBLING rows).
 
 ## Notes - roadmap inconsistencies discovered in the A-002 design phase
 

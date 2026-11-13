@@ -1,0 +1,120 @@
+=== Z-083 ABI recorded run ===
+date_utc: 2026-11-13T00:08:29Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+head: b5a8753e82b07145bd07c2c933517ded82907696
+branch: yrsa/mimiralloc-team-04
+loadavg: 0.06 0.27 0.62 1/1207 299980
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + z083 consumers (log hidden_files/z083_build.log)
+=== S2 shared library exports (nm -D) - exactly the 13 public symbols ===
+00000000000063e0 T mimir_aligned_alloc
+0000000000006230 T mimir_calloc
+00000000000058f0 T mimir_free
+00000000000058d0 T mimir_malloc
+0000000000006fb0 T mimir_memalign
+0000000000006400 T mimir_posix_memalign
+0000000000007030 T mimir_pvalloc
+00000000000063c0 T mimir_realloc
+0000000000006f50 T mimir_reallocarray
+00000000000065e0 T mimir_stats_snapshot
+0000000000006da0 T mimir_trim
+0000000000006480 T mimir_usable_size
+0000000000006fd0 T mimir_valloc
+defined dynamic symbol count: 13
+  [ok] count == 13
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_usable_size
+  [ok] exported: mimir_stats_snapshot
+  [ok] exported: mimir_trim
+  [ok] exported: mimir_reallocarray
+  [ok] exported: mimir_memalign
+  [ok] exported: mimir_valloc
+  [ok] exported: mimir_pvalloc
+=== S3 absence proofs - no internal or standard-name symbol is exported ===
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+  [ok] no standard-name exports (they belong to the Z-082 opt-in variant)
+=== S4 consumers bind to the .so (DT_NEEDED + undefined symbols) ===
+-- test_z083_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z083_dyn DT_NEEDED names libmimiralloc.so
+                 U mimir_memalign
+                 U mimir_pvalloc
+                 U mimir_valloc
+  [ok] test_z083_dyn references the three new symbols as undefined (U)
+  [ok] test_z083_dyn does not define the new symbols (not statically absorbed)
+-- test_z083_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z083_cpp DT_NEEDED names libmimiralloc.so
+                 U mimir_memalign
+                 U mimir_pvalloc
+                 U mimir_valloc
+  [ok] test_z083_cpp references the three new symbols as undefined (U)
+  [ok] test_z083_cpp does not define the new symbols (not statically absorbed)
+-- C++ consumer object: unmangled references --
+                 U mimir_memalign
+                 U mimir_pvalloc
+                 U mimir_valloc
+  [ok] test_z083_cpp.o undefined references are unmangled (extern C guards cover the new declarations)
+=== S5 header-only translation units (compile-only) ===
+-rw-r--r-- 1 volmarr volmarr 4200 Nov 12 19:08 build/header_only_z083_c.o
+-rw-r--r-- 1 volmarr volmarr 1440 Nov 12 19:08 build/header_only_z083_cpp.o
+  [ok] header-only C and C++ objects built (header self-contained, exact prototypes)
+=== S6 static contract test ===
+Z-083 memalign-family contract test
+test_z083: 301 checks / 0 failed - PASS
+  [ok] test_z083 exit 0
+=== S7 dynamic C consumer ===
+test_z083_dyn: PASS
+  [ok] test_z083_dyn exit 0
+=== S8 C++ consumer ===
+test_z083_cpp: PASS
+  [ok] test_z083_cpp exit 0
+=== S9 neighbour evidence: E-005 audit readers ===
+  [ok] make test-e005 still passes (log hidden_files/z083_test_e005.log)
+=== S10 host glibc allocation-symbol inventory (gap-list evidence) ===
+libc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44 at /usr/lib/x86_64-linux-gnu/libc.so.6
+aligned_alloc
+calloc
+cfree
+free
+free_aligned_sized
+free_sized
+__libc_calloc
+__libc_free
+__libc_mallinfo
+__libc_malloc
+__libc_mallopt
+__libc_memalign
+__libc_pvalloc
+__libc_realloc
+__libc_reallocarray
+__libc_valloc
+mallinfo
+mallinfo2
+malloc
+malloc_info
+malloc_stats
+malloc_trim
+malloc_usable_size
+mallopt
+memalign
+memalignment
+posix_memalign
+pvalloc
+realloc
+reallocarray
+strdup
+strndup
+valloc
+  [ok] glibc inventory listed
+=== Z-083 ABI RUN RESULT: PASS ===
