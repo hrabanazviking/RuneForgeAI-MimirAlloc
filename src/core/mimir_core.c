@@ -574,6 +574,55 @@ static void mimir_stats_note_posture(void)
                        __ATOMIC_RELAXED);
 }
 
+/* Z-079 (D-014): budget enforcement state (roadmap Z-079;
+ * design docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3,
+ * adopted by decision D-014 in docs/DECISION_LEDGER.md;
+ * discharges INC-I001-14 / L-03 / defect D-04). The budget
+ * is one size_t scalar under the one global lock, exactly
+ * like the G-007 retention bound: 0 means no budget set
+ * (the default; I-002 S3.2 sentinel, INC-I002-03), and a
+ * non-zero value caps Q-MAPPED (live mapping bytes + live
+ * span bytes + pooled mapping-cache bytes, the Z-048
+ * definition the J-002 snapshot reports as bytes_mapped).
+ * budget_failures is Q-REFUSED-BUDGET (I-002 S3.2): the
+ * monotone count of entry-point calls the budget refused,
+ * disjoint from alloc_failures (Q-FAILED-OS) and from
+ * alloc_posture_nulls. It is a pre-lock atomic on its own
+ * 64 B line (the Z-064/Z-065 posture), because the entry
+ * points count a refusal after unlocking. The refusal
+ * flag is thread-local (the Z-066 label discipline): a
+ * locked construction path sets it when the budget gate
+ * refuses, and the entry point of the same call consumes
+ * it after unlocking -- counting exactly one refusal per
+ * refused call and emitting no J-007 line, because the
+ * J-007 channel is wired only to genuine failures and a
+ * budget refusal must stay distinguishable from them by
+ * counters alone (I-002 S3.3 step 4, S6.3 FC-4). */
+static size_t mimir_budget_mapped_bytes; /* 0 at start: unset */
+_Alignas(64) static uint64_t mimir_stats_budget_failures; /* Z-079: own 64 B line - post-unlock atomic (Z-016 rule) */
+static _Thread_local int mimir_budget_refused;
+static int budget_admit_locked(size_t new_length,
+                               int may_reclaim);
+
+static void mimir_stats_note_budget(void)
+{
+    __atomic_fetch_add(&mimir_stats_budget_failures, 1ULL,
+                       __ATOMIC_RELAXED);
+}
+
+/* Consume this call's budget-refusal flag: returns 1 (and
+ * counts the one refusal) when the locked construction
+ * the entry point just ran was refused by the budget. */
+static int budget_consume_refusal(void)
+{
+    if (!mimir_budget_refused) {
+        return 0;
+    }
+    mimir_budget_refused = 0;
+    mimir_stats_note_budget();
+    return 1;
+}
+
 /* Z-064 (D-01): record one failed central unlock. Called
  * from the unlock wrappers below at the unlock site, where
  * the lock state is by definition unknown (the unlock just
@@ -1382,6 +1431,22 @@ static void *alloc_locked(size_t size, int zero_user,
         }
     }
     if (base == NULL) {
+        /* Z-079 budget gate (I-002 S3.3): a fresh acquire
+         * grows Q-MAPPED by the exact mapping_length the
+         * acquire will return (the checked round-up the
+         * pool probe above computed), so the gate judges
+         * that length before any backing exists. A pool
+         * hit never reaches here: reuse grows nothing and
+         * is served regardless of the budget (S3.3 step 1).
+         * A refusal publishes nothing, acquires nothing,
+         * and returns NULL with the refusal flag set; the
+         * entry point counts Q-REFUSED-BUDGET (D-014). */
+        if (total_unrounded <= SIZE_MAX - (page_size - 1) &&
+            !budget_admit_locked(
+                ((total_unrounded + page_size - 1) /
+                 page_size) * page_size, 1)) {
+            return NULL;
+        }
         /* L6 acquire, lock held across the call (S9.4
          * DECISION). L6 applies the checked page round-up
          * (B-007 A5/A6) and is all-or-nothing: on failure
@@ -1583,6 +1648,17 @@ static void *alloc_aligned_locked(size_t alignment, size_t size)
         return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_ARITHMETIC);
     }
     total_unrounded = alignment + page_size + size;
+
+    /* Z-079 budget gate (I-002 S3.3), as in alloc_locked:
+     * the fresh mapping grows Q-MAPPED by its checked
+     * page round-up; a refusal acquires and publishes
+     * nothing and returns NULL with the flag set. */
+    if (total_unrounded <= SIZE_MAX - (page_size - 1) &&
+        !budget_admit_locked(
+            ((total_unrounded + page_size - 1) /
+             page_size) * page_size, 1)) {
+        return NULL;
+    }
 
     status = mimir_platform_map_acquire(total_unrounded,
                                         &base,
@@ -2634,6 +2710,34 @@ static struct mimir_span_header *span_acquire_locked(size_t class_index)
         page_size - MIMIR_SPAN_HEADER_SIZE <
             mimir_class_sizes[class_index]) {
         return MIMIR_DIAG_FAIL(MIMIR_DIAG_CAUSE_INTERNAL);
+    }
+    /* Z-079 budget gate (I-002 S3.3): a fresh span grows
+     * Q-MAPPED by exactly one page (plus, in an
+     * MIMIR_OOL_META build, the Z-034 side page acquired
+     * below for a trial class). A refusal acquires and
+     * publishes nothing and returns NULL with the flag
+     * set. Under MIMIR_LOCK_SHARD this acquire runs under
+     * one shard lock, where the gate's cross-class reclaim
+     * walk would break shard discipline, so the reclaim
+     * step is not run there (may_reclaim 0): the gate
+     * still refuses exactly, only without reclaim-first;
+     * the production build runs the full S3.3 procedure. */
+    {
+        size_t budget_len = page_size;
+#ifdef MIMIR_OOL_META
+        if (ool_class_is(class_index)) {
+            budget_len += page_size;
+        }
+#endif
+        if (!budget_admit_locked(budget_len,
+#ifdef MIMIR_LOCK_SHARD
+                                 0
+#else
+                                 1
+#endif
+                                 )) {
+            return NULL;
+        }
     }
     status = mimir_platform_map_acquire(page_size, &base,
                                         &mapping_length);
@@ -5480,6 +5584,13 @@ static void *tls_alloc(size_t size, int zero_user,
 #endif /* MIMIR_LOCK_SHARD */
     if (tls_refill_locked(class_index) == 0) {
         int cause = mimir_diag_last_cause;
+        if (budget_consume_refusal()) {
+            /* Z-079: the refill was refused by the budget
+             * (its span acquire ran the gate): counted in
+             * Q-REFUSED-BUDGET only, no J-007 line. */
+            (void)core_central_unlock(class_index);
+            return NULL;
+        }
         mimir_stats_note_failure();
         (void)core_central_unlock(class_index);
         mimir_core_diag_report(op, cause, (uint64_t)size);
@@ -5827,6 +5938,128 @@ static size_t trim_some_locked(size_t max_spans)
     return released;
 }
 
+/*
+ * Z-079 budget gate (roadmap Z-079; design I-002 S3.3,
+ * adopted by decision D-014): the decision procedure,
+ * evaluated under the allocator lock at exactly the
+ * points where backing would grow -- a fresh large
+ * mapping (alloc_locked, and its aligned variant), a
+ * fresh span (span_acquire_locked), and an mremap growth
+ * (grow_mremap_locked, on the delta). Returns 1 to admit
+ * the growth, 0 to refuse it; a refusal sets the calling
+ * thread's refusal flag and acquires nothing. Steps, per
+ * I-002 S3.3: (2) projected = Q-MAPPED + new_length,
+ * computed overflow-saturated; equality with the budget
+ * is admitted. (3) Over budget, reclaim before refusal:
+ * retained EMPTY spans are released one at a time through
+ * the one trim walk (stop exactly at need, I-002 S5.2.3),
+ * re-judging after each; when no EMPTY span remains, the
+ * Z-048 mapping pool -- retained dead mappings, inside
+ * Q-MAPPED by the same definition -- is released whole
+ * and the projection re-judged once. (4) Still over:
+ * refuse. The gate never touches a live span or mapping,
+ * never blocks or retries, and frees never run it. When
+ * may_reclaim is 0 (the MIMIR_LOCK_SHARD span acquire,
+ * see span_acquire_locked) step 3 is skipped: refusal is
+ * still exact, only reclaim-first is not run under a
+ * shard lock. With no budget set the gate is one scalar
+ * read and admits everything, so unconfigured behaviour
+ * is byte-for-byte the banked behaviour.
+ */
+static int budget_admit_locked(size_t new_length,
+                               int may_reclaim)
+{
+    size_t budget = mimir_budget_mapped_bytes;
+    size_t mapped;
+    size_t projected;
+
+    if (budget == 0) {
+        return 1;
+    }
+    for (;;) {
+        mapped = mimir_live_bytes + mimir_live_span_bytes +
+                 mimir_pool_bytes;
+        projected = new_length > SIZE_MAX - mapped
+                        ? SIZE_MAX
+                        : mapped + new_length;
+        if (projected <= budget) {
+            return 1;
+        }
+        if (!may_reclaim || trim_some_locked(1) == 0) {
+            break;
+        }
+    }
+    if (may_reclaim && mimir_pool_bytes > 0) {
+        (void)pool_release_all_locked();
+        mapped = mimir_live_bytes + mimir_live_span_bytes +
+                 mimir_pool_bytes;
+        projected = new_length > SIZE_MAX - mapped
+                        ? SIZE_MAX
+                        : mapped + new_length;
+        if (projected <= budget) {
+            return 1;
+        }
+    }
+    mimir_budget_refused = 1;
+    return 0;
+}
+
+/*
+ * Z-079 budget surface (I-002 S3.6, the G-007 pattern
+ * verbatim): an internal setter/getter pair over the one
+ * locked scalar, INC-E001-07 shape (b) exactly like the
+ * G-007 pair above -- declared in src/core/mimir_core.h
+ * and re-declared for tests only in
+ * tests/core/mimir_budget_z079.h, bound local in the
+ * shared library, and NO public symbol is added: the
+ * public promotion question stays owed to a future
+ * contract slice (INC-I002-03 / INC-I002-05 posture),
+ * and the public statistics struct keeps its v1 layout
+ * (the budget fields live in the internal J-002 snapshot
+ * only, per the Z-076 versioning rule). The setter
+ * stores under the global lock and returns 0 on success,
+ * -2 on lock failure with nothing changed (the G-007
+ * setter's lock posture; the budget has no out-of-range
+ * value -- every size_t is meaningful, 0 unsets).
+ * Setting performs NO release (I-002 S3.4): a budget set
+ * below current Q-MAPPED binds only future acquisitions.
+ * The getter returns (size_t)-1 only if the lock cannot
+ * be taken (the G-007 getter posture).
+ * mimir_core_budget_failures is the lock-free read of
+ * Q-REFUSED-BUDGET (the Z-064 getter pattern): a single
+ * atomic load, readable even when the lock cannot be
+ * taken.
+ */
+int mimir_budget_set_mapped_bytes(size_t value)
+{
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return -2;
+    }
+    tls_flush_locked(); /* Z-029 */
+    mimir_budget_mapped_bytes = value;
+    (void)core_global_unlock();
+    return 0;
+}
+
+size_t mimir_budget_get_mapped_bytes(void)
+{
+    size_t value;
+
+    if (mimir_platform_global_lock() != MIMIR_PLATFORM_OK) {
+        return (size_t)-1;
+    }
+    tls_flush_locked(); /* Z-029 */
+    value = mimir_budget_mapped_bytes;
+    (void)core_global_unlock();
+    return value;
+}
+
+uint64_t mimir_core_budget_failures(void)
+{
+    return __atomic_load_n(&mimir_stats_budget_failures,
+                           __ATOMIC_RELAXED);
+}
+
 /* Counted registry walk (lock held): the EMPTY spans and
  * their total mapping bytes -- Q-RETAINED of I-002 S3.2,
  * computed exactly from the registry under the lock,
@@ -5987,8 +6220,10 @@ size_t mimir_core_drain_retained(void)
  * _some form is the stop-at-need mechanism of I-002
  * S5.2.3: it releases at most max_spans spans in
  * class-fair order and then stops, without acquiring or
- * refusing anything -- budget enforcement itself remains
- * unimplemented (INC-I001-14 stands; see the slice doc).
+ * refusing anything. Since Z-079 (D-014) the budget gate
+ * is this walk's second caller: budget_admit_locked
+ * drives it one span at a time as its reclaim step
+ * (INC-I001-14 discharged; see docs/Z13_BUDGET_Z079.md).
  * The queries below read Q-RETAINED and Q-MAPPED (I-002
  * S3.2) as single locked snapshots; on lock failure they
  * return (size_t)-1 (the G-007 getter posture) rather than
@@ -6422,6 +6657,9 @@ int mimir_core_stats_snapshot(struct mimir_stats *out)
         &mimir_stats_alloc_failures, __ATOMIC_RELAXED);
     out->alloc_posture_nulls = __atomic_load_n(
         &mimir_stats_alloc_posture_nulls, __ATOMIC_RELAXED);
+    out->budget_failures = __atomic_load_n(
+        &mimir_stats_budget_failures, __ATOMIC_RELAXED);
+    out->budget_mapped_bytes = (uint64_t)mimir_budget_mapped_bytes;
     out->drain_lock_failures = __atomic_load_n(
         &mimir_stats_drain_lock_failures, __ATOMIC_RELAXED);
     out->trim_lock_failures = __atomic_load_n(
@@ -6899,6 +7137,7 @@ void *mimir_core_alloc(size_t size)
 #endif
     void *result;
 
+    mimir_budget_refused = 0; /* Z-079: per-call label */
     if (size == 0) {
         mimir_stats_note_posture(); /* J-002: U-09 posture */
         return NULL;
@@ -6921,6 +7160,13 @@ void *mimir_core_alloc(size_t size)
     mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
     tls_flush_locked(); /* Z-029 */
     result = alloc_any_locked(size, 0, NULL, NULL);
+    if (result == NULL && budget_consume_refusal()) {
+        /* Z-079: a budget refusal is counted in
+         * Q-REFUSED-BUDGET only -- never in Q-FAILED-OS,
+         * and no J-007 line (I-002 S3.3 step 4, FC-4). */
+        (void)core_global_unlock();
+        return NULL;
+    }
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
     }
@@ -6972,6 +7218,7 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
     size_t product;
     void *result;
 
+    mimir_budget_refused = 0; /* Z-079: per-call label */
     if (nmemb == 0 || size == 0) {
         mimir_stats_note_posture(); /* J-002: U-09 posture */
         return NULL;
@@ -7004,6 +7251,12 @@ void *mimir_core_calloc(size_t nmemb, size_t size)
     mimir_diag_last_cause = MIMIR_DIAG_CAUSE_INTERNAL;
     tls_flush_locked(); /* Z-029 */
     result = alloc_any_locked(product, 1, NULL, NULL);
+    if (result == NULL && budget_consume_refusal()) {
+        /* Z-079: budget refusal -- Q-REFUSED-BUDGET only,
+         * no Q-FAILED-OS, no J-007 line (D-014). */
+        (void)core_global_unlock();
+        return NULL;
+    }
     if (result == NULL) {
         mimir_stats_note_failure(); /* J-002: Q-FAILED-OS */
     }
@@ -7093,6 +7346,7 @@ void *mimir_core_aligned_alloc(size_t alignment, size_t size)
 {
     void *result;
 
+    mimir_budget_refused = 0; /* Z-079: per-call label */
     if (!z074_alignment_valid(alignment)) {
         mimir_stats_note_failure();
         mimir_core_diag_report(MIMIR_DIAG_OP_MALLOC,
@@ -7128,6 +7382,14 @@ void *mimir_core_aligned_alloc(size_t alignment, size_t size)
         } else {
             result = alloc_aligned_locked(alignment, size);
         }
+    }
+    if (result == NULL && budget_consume_refusal()) {
+        /* Z-079: budget refusal -- Q-REFUSED-BUDGET only,
+         * no Q-FAILED-OS, no J-007 line (D-014). The
+         * posix shape reports it as ENOMEM with memptr
+         * unchanged, indistinguishable by design. */
+        (void)core_global_unlock();
+        return NULL;
     }
     if (result == NULL) {
         mimir_stats_note_failure();
@@ -7281,6 +7543,18 @@ static void *grow_mremap_locked(struct mimir_descriptor *desc,
     if (delta > SIZE_MAX - mimir_live_bytes) {
         return NULL; /* counter-overflow guard, pre-change */
     }
+    /* Z-079 budget gate (I-002 S3.3): an mremap growth
+     * grows Q-MAPPED by delta without any new acquire, so
+     * it is judged here on the delta alone. A refusal
+     * returns NULL WITHOUT consuming the call: the caller
+     * falls back to the banked S4.5 move, whose own
+     * construction re-judges the budget in alloc_locked
+     * and counts the refusal exactly once if it also
+     * refuses (a pool-hit move grows nothing and may
+     * still succeed, in which case no refusal happened). */
+    if (!budget_admit_locked(delta, 1)) {
+        return NULL;
+    }
 
     registry_remove(desc);
     if (mimir_platform_map_grow(old_base, old_length,
@@ -7394,6 +7668,7 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
     void *new_ptr;
     size_t old_size;
 
+    mimir_budget_refused = 0; /* Z-079: per-call label */
     if (ptr == NULL) {
         return mimir_core_alloc(new_size);
     }
@@ -7453,6 +7728,14 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
          * retire the old block exactly once (step 5). */
         new_ptr = alloc_any_locked(new_size, 0, &new_desc,
                                    &new_span);
+        if (new_ptr == NULL && budget_consume_refusal()) {
+            /* Z-079: budget refusal -- the original block
+             * is live, unchanged and caller-owned exactly
+             * as in any grow failure (FC-2); counted in
+             * Q-REFUSED-BUDGET only, no J-007 line. */
+            (void)core_global_unlock();
+            return NULL;
+        }
         if (new_ptr == NULL) {
             int cause = mimir_diag_last_cause; /* J-007 */
             mimir_stats_note_failure(); /* J-002 */
@@ -7561,6 +7844,13 @@ void *mimir_core_realloc(void *ptr, size_t new_size)
         new_ptr = alloc_any_locked(new_size, 0, &new_desc,
                                    &new_span);
 #endif
+        if (new_ptr == NULL && budget_consume_refusal()) {
+            /* Z-079: budget refusal -- original preserved
+             * exactly as in any grow failure (FC-2);
+             * counted in Q-REFUSED-BUDGET only. */
+            (void)core_global_unlock();
+            return NULL;
+        }
         if (new_ptr == NULL) {
             int cause = mimir_diag_last_cause; /* J-007 */
             mimir_stats_note_failure(); /* J-002 */

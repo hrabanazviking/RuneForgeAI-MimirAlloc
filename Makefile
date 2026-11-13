@@ -2157,3 +2157,20 @@ test-z078: $(BUILD)/test_z078 $(BUILD)/test_z078_dyn $(BUILD)/test_z078_cpp $(BU
 	./$(BUILD)/test_z078_cpp
 
 .PHONY: test-z078
+
+# Z-079: budget enforcement evidence
+# (tests/core/test_z079_budget.c), built against the
+# internal budget / stats surfaces (shape (b) headers
+# under tests/core/). Standalone target
+# `make test-z079`; NOT part of `make test`.
+
+$(BUILD)/test_z079_budget.o: tests/core/test_z079_budget.c include/mimir_alloc.h tests/core/mimir_stats_j002.h tests/core/mimir_budget_z079.h | $(BUILD)
+	$(CC) $(CFLAGS) -Itests/core -c tests/core/test_z079_budget.c -o $@
+
+$(BUILD)/test_z079_budget: $(LIBOBJS) $(BUILD)/test_z079_budget.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/test_z079_budget.o -o $@
+
+test-z079: $(BUILD)/test_z079_budget
+	./$(BUILD)/test_z079_budget
+
+.PHONY: test-z079

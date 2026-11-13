@@ -1,0 +1,152 @@
+MimirAlloc Z13 recorded run - Z-079: Budget enforcement adopted
+Thu 2026-11-12 EST (host clock 19:05-19:14 EST during the runs)
+Host: purpleraider (ASUS ROG Flow Z13, Strix Halo, x86-64, page 4096, 128 GB UMA)
+Base: seat main 2fd40db (banked Z-001..Z-078), merged into
+  yrsa/mimiralloc-team-03 as 3988c5f (clean).
+  This slice banks in roadmap order after Z-078 (it is the
+  next unbanked slice; no build-ahead gap).
+Load state: quiet shared host for every graded run:
+  loadavg 0.25 0.70 0.90 at the slice-test build window,
+  0.76 0.83 0.81 at the standing gate. The Aesir /
+  Lifthrasir / Tensile lines were not running heavy work
+  in these windows. Every graded quantity is an exact
+  counter, size, or return value (load-independent); no
+  benchmark verdict is claimed by this slice.
+
+S1. Roadmap gate
+Gate (docs/MIMIRALLOC_Z13_ROADMAP.md Z-079): Phase-9 soft
+budgets enforced at last: counters, failure behaviour,
+and the budget-failure counter live (INC-I001-14
+discharged). Gate: enforcement tests green; over-budget
+behaviour proven.
+Result: design I-002 S3 adopted by decision D-014
+(docs/DECISION_LEDGER.md) and implemented as designed;
+enforcement suite green (S3 below); over-budget
+behaviour proven leg by leg, incl. reclaim-before-
+refusal on both reclaimable stores (retained EMPTY
+spans and the mapping pool). Slice doc:
+docs/Z13_BUDGET_Z079.md.
+
+S2. Mechanism (src/core/mimir_core.c/.h, +294/+37)
+One size_t budget scalar under the global lock (0 =
+unset, the default); _Alignas(64) atomic
+Q-REFUSED-BUDGET tally; thread-local refusal flag (the
+Z-066 label discipline). budget_admit_locked judges
+projected = Q-MAPPED + new_length (overflow-saturated,
+equality admitted) under the lock at the four growth
+points: fresh large mapping (alloc_locked, on the pool
+probe's checked round-up; pool hits never reach the
+gate), fresh aligned mapping (alloc_aligned_locked),
+fresh span (span_acquire_locked, one page + the Z-034
+side page under MIMIR_OOL_META; reclaim step skipped
+under MIMIR_LOCK_SHARD by shard discipline), mremap
+growth (grow_mremap_locked, delta only, refusal
+unconsumed so the fallback move re-judges and counts
+exactly once). Over budget: trim_some_locked releases
+retained EMPTY spans one at a time with re-judging,
+then the pool is released whole and re-judged once;
+still over, refuse. Entry points consume the flag
+after unlocking and count exactly one refusal per
+refused call: alloc, calloc, aligned_alloc (+ posix
+through it), realloc (both grow courses), reallocarray
+(through realloc), and the TLS refill course inside
+tls_alloc. Snapshot pair budget_failures /
+budget_mapped_bytes appended at the END of struct
+mimir_stats; lock-free getter mimir_core_budget_failures;
+setter/getter pair mimir_budget_set/get_mapped_bytes
+(G-007 posture: -2 / (size_t)-1 on lock failure;
+setting performs no release).
+
+S3. Enforcement suite (make test-z079, standalone)
+tests/core/test_z079_budget.c against the production
+LIBOBJS + tests/core/mimir_budget_z079.h. Three
+identical runs on the final tree:
+  Z079 baseline: page=4096 mapped0=0 budget_failures=0
+    alloc_failures=0
+  Z079 totals: budget_failures=8 (expected 8)
+    alloc_failures=1 mapped_end=0 mapped0=0
+  CHECKS: 70 run, 0 failed
+Legs: (0) unset baseline, getter==snapshot==0;
+(1) set/get round-trip incl. snapshot, unset-by-zero;
+(2) 1 MiB mapping succeeds unset, no refusal counted;
+(3) large path: budget = drained + 2 pages admits the
+first 2048 mapping at exact equality (Q-MAPPED grew by
+exactly 8192), refuses the second (+1, Q-FAILED-OS
+unmoved, nothing acquired); freed mapping re-served
+from the pool under the same budget; below-current
+budget (drained + 1 page) refuses a fresh 8192 request
+(+1) only after reclaiming the pool (Q-MAPPED back at
+the drained baseline);
+(4) a worker-warmed retained EMPTY span (exactly 1
+page) is reclaimed by the gate before the refusal
+lands (+1, retained bytes 0 afterwards);
+(5) at a 1-byte budget a TLS bin hit is served with no
+refusal counted, while a fresh class is refused at its
+span acquire (+1, Q-FAILED-OS unmoved); the same class
+succeeds once unset;
+(6) calloc over budget refused (+1); realloc grow over
+budget refused (+1) with the original block byte-
+intact and freeable (FC-2);
+(7) counter separation: zero-size moves only
+alloc_posture_nulls, oversize (SIZE_MAX) moves only
+alloc_failures, neither moves the budget counter
+(FC-4);
+(8) aligned surface: aligned_alloc(4096, 65536)
+refused (+1); posix_memalign answers ENOMEM with
+*memptr unchanged (+1);
+(9) unset restores admission; final identity: exactly
+the 8 leg refusals counted, getter agrees, Q-FAILED-OS
+moved only by the one oversize, Q-MAPPED reconciled
+to the leg-0 drained baseline (0).
+
+TEST-SIDE DEFECTS FOUND AND FIXED IN SCOPE (first run:
+70 checks, 15 failed -- every failure traced to the
+test, none to the allocator; hidden_files/z079_test.log):
+(1) Leg 3 second half set the budget to the drained
+baseline value itself, which measured 0 on this host,
+and 0 is the unset sentinel: the request was admitted
+by the (correctly) unset budget and the pooled bytes
+were never reclaimed. Fixed: budget = baseline + one
+page (below the pooled total, still refusing the
+3-page fresh mapping after reclaim).
+(2) Leg 8's 2048-byte aligned request fit the budget
+once the gate reclaimed the retained spans and the
+pool (reclaimable 16384 B >= request 12288 B): it was
+correctly admitted -- reclaim-before-refusal is the
+design, not a defect. Fixed: the leg now requests
+65536 bytes, beyond budget + all reclaimable bytes.
+After the fixes: 70 run, 0 failed, three identical
+runs. No allocator code changed between the runs.
+
+S4. Surface proofs
+nm -D build/libmimiralloc.so: exactly 10 dynamic text
+symbols (mimir_aligned_alloc, mimir_calloc, mimir_free,
+mimir_malloc, mimir_posix_memalign, mimir_realloc,
+mimir_reallocarray, mimir_stats_snapshot, mimir_trim,
+mimir_usable_size) -- unchanged from the banked tree;
+no budget symbol exported (grep budget: none).
+Core compiles -Werror-clean under MIMIR_LOCK_SHARD,
+MIMIR_LOCK_HIST, MIMIR_DEBUG, MIMIR_ARENA_CCD,
+MIMIR_OOL_META (single-object compiles of
+src/core/mimir_core.c, this run).
+
+S5. Standing gate
+scripts/z13/run_gate.sh on the final tree
+(hidden_files/z079_gate.log; underlying gate log
+gate_20261113T001344Z.log):
+  GATE COUNTS: checks=4988 failed=0 skips=77
+  GATE RESULT: GREEN
+Identical to the merged baseline
+(hidden_files/z079_merge_gate.log, also 4988/0/77):
+the slice suite is standalone under make test-z079 and
+does not move the gate total.
+
+S6. Files in the slice commit
+Makefile (+test-z079 standalone block), docs/
+DECISION_LEDGER.md (D-014 row + section), docs/
+Z13_BUDGET_Z079.md, src/core/mimir_core.c,
+src/core/mimir_core.h, tests/core/mimir_budget_z079.h,
+tests/core/test_z079_budget.c, tests/core/
+recorded_run_z13_z079.txt. CAMPAIGN_STATE.md is not in
+the commit. No README.md touched. No public header or
+API file touched.

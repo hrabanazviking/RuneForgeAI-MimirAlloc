@@ -55,6 +55,7 @@ leaves open. Statuses in this ledger mean:
 | D-012 | Z13 usable size: namespaced mimir_usable_size taken (malloc_usable_size shape NOT declared/exported); exact per-class semantics defined for this target (V-05) | Adopted | Z13 roadmap Z-075; contracts.md S2.9 (MA-COND-USABLE-01..04) | Z-075 (settler) |
 | D-012 | Z13 public statistics (L-04): mimir_stats_snapshot + versioned struct mimir_stats_v1; INC-J002-01 and INC-J002-02 CLOSED, INC-J002-05 PRICED | Adopted | Z13 roadmap Z-076; INC-J002-01/-02/-05; docs/Z13_PUBLIC_STATISTICS.md | Z-076 (settler) |
 | D-013 | Z13 zero-size and errno closure (L-09): zero-size is a defined non-failure contract NULL (U-09); realloc-to-zero preserves the block (U-12); errno never promised, checked refusals leave it untouched (U-10) | Adopted | Z13 roadmap Z-078; contracts.md V-01/V-02/V-04; docs/Z13_Z078_ZERO_SIZE_ERRNO.md | Z-078 (settler) |
+| D-014 | Z13 budget enforcement adopted (L-03 / D-04): the Phase-9 soft budget over Q-MAPPED is enforced at every backing-growth point, reclaim-before-refusal, refusals counted once in Q-REFUSED-BUDGET (INC-I001-14 discharged) | Adopted | Z13 roadmap Z-079; docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3 (I-002); docs/Z13_BUDGET_Z079.md | Z-079 (settler) |
 
 ---
 
@@ -651,6 +652,82 @@ leaves open. Statuses in this ledger mean:
   src/core/mimir_core.c and src/core/mimir_core.h (the
   contracts.md rows themselves are amended by Z-081's
   appendix audit, which owns that file's next revision).
+  **Status of entry:** Current.
+
+---
+
+## D-014 - Z13 budget enforcement adopted (L-03 / D-04) at Z-079: the Phase-9 soft budget enforced
+
+- **Decision:** the Phase-9 soft budget of
+  docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3
+  (I-002) is ADOPTED and ENFORCED on this target,
+  discharging INC-I001-14. (1) The budgeted quantity
+  is Q-MAPPED only: live mapping bytes + live span
+  bytes + pooled mapping-cache bytes (the Z-048
+  definition the J-002 snapshot reports as
+  bytes_mapped). The budget is one size_t scalar
+  under the global lock; 0 means no budget set (the
+  I-002 S3.2 sentinel, INC-I002-03) and is the
+  default, so unconfigured behaviour is the banked
+  behaviour unchanged. (2) Enforcement sits at every
+  backing-growth point — fresh large mapping, fresh
+  aligned mapping, fresh span, mremap growth (on the
+  delta) — judged BEFORE any backing is acquired, on
+  the exact checked length the acquire would return.
+  Reuse that grows nothing (TLS bin hits, span
+  free-list pops, mapping-pool hits) is served
+  regardless of the budget; frees are never gated.
+  (3) The procedure is I-002 S3.3 exactly: projected =
+  Q-MAPPED + new_length, overflow-saturated, equality
+  admitted; over budget, retained EMPTY spans are
+  released one at a time through the one trim walk
+  (stop-at-need, I-002 S5.2.3), then the mapping pool
+  is released whole and the projection re-judged once;
+  still over, the call is refused. Under
+  MIMIR_LOCK_SHARD the span acquire skips the reclaim
+  step (cross-class reclaim would break shard
+  discipline); refusal there is still exact. (4) A
+  refusal is exactly NULL — ENOMEM with *memptr
+  unchanged for the posix shape — counted exactly
+  once in Q-REFUSED-BUDGET (the snapshot field
+  budget_failures and the lock-free getter
+  mimir_core_budget_failures), disjoint from
+  Q-FAILED-OS and from the posture counter, with no
+  J-007 line (FC-4); a refused realloc grow leaves
+  the original block live, unchanged and caller-owned
+  (FC-2). (5) Setting the budget performs no release
+  (I-002 S3.4): a budget below current Q-MAPPED binds
+  only future acquisitions.
+- **Surface note:** internal only, INC-E001-07 shape
+  (b), the G-007 pattern: mimir_budget_set_mapped_bytes
+  / mimir_budget_get_mapped_bytes under the global
+  lock (setter -2 on lock failure, getter (size_t)-1),
+  declared in src/core/mimir_core.h and re-declared
+  for tests in tests/core/mimir_budget_z079.h, bound
+  local in the shared library — nm -D stays exactly
+  ten and no budget symbol is exported. The budget
+  pair is appended at the END of the internal struct
+  mimir_stats (the Z-064 append discipline); the
+  public mimir_stats_v1 layout is NOT extended (its
+  versioning rule reserves appends for a version
+  bump). Public promotion stays owed to a future
+  contract slice (INC-I002-03 / INC-I002-05 posture).
+- **Evidence:** docs/Z13_BUDGET_Z079.md;
+  tests/core/recorded_run_z13_z079.txt (make test-z079:
+  70 checks / 0 failed — exact-equality admission,
+  refusals counted once each on every entry-point
+  family, pool and retained-span reclaim proven before
+  refusal, counter separation, final identity of
+  exactly 8 refusals with Q-MAPPED reconciled to the
+  drained baseline), with the standing gate green
+  (4988/0/77) on the final tree.
+- **Supersedes:** the not-adopted statements of L-03
+  and defect D-04 in
+  docs/LIMITATIONS_AND_KNOWN_DEFECTS.md and the
+  0-by-absence grading of D-FAIL-BUDGET in the
+  Phase-10 records (those records stand as the history
+  of the absence; the register amendment itself is
+  left to the next audit slice, the Z-078 posture).
   **Status of entry:** Current.
 
 ---

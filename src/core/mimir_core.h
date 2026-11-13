@@ -480,6 +480,22 @@ struct mimir_stats {
     uint64_t small_frees_unrecorded;
     uint64_t live_requested_bytes;
     uint64_t live_requested_measured;
+    /* Z-079: budget enforcement tallies (D-014),
+     * appended at the END so every earlier field keeps
+     * its offset (the Z-064 append discipline; on the
+     * banked tree these sit after the Z-076 appends, in
+     * slice order). budget_failures is Q-REFUSED-BUDGET
+     * (I-002 S3.2): entry-point calls refused by the
+     * Phase-9 soft budget, monotone, disjoint from
+     * alloc_failures and alloc_posture_nulls.
+     * budget_mapped_bytes is the budget scalar itself at
+     * the snapshot instant (0 = no budget set). The
+     * public mimir_stats_v1 layout is NOT extended: its
+     * versioning rule reserves appends for a version
+     * bump, so these fields live in this internal
+     * snapshot only (docs/Z13_BUDGET_Z079.md S5). */
+    uint64_t budget_failures;
+    uint64_t budget_mapped_bytes;
 };
 int mimir_core_stats_snapshot(struct mimir_stats *out);
 
@@ -541,6 +557,27 @@ uint64_t mimir_core_double_free_poison_detections(void);
  * which reads the locked snapshot, not these getters). */
 uint64_t mimir_core_cross_thread_small_frees(void);
 uint64_t mimir_core_small_frees_unrecorded(void);
+
+/* Z-079 budget surface (roadmap Z-079; design I-002
+ * S3.6, adopted by decision D-014): the Phase-9 soft
+ * budget over Q-MAPPED, enforced by budget_admit_locked
+ * in mimir_core.c at every backing-growth point.
+ * mimir_budget_set_mapped_bytes stores the budget under
+ * the global lock (0 unsets; setting performs no
+ * release) and returns 0 on success, -2 on lock failure
+ * with nothing changed. mimir_budget_get_mapped_bytes
+ * reads it under the same lock and returns (size_t)-1
+ * only if the lock cannot be taken.
+ * mimir_core_budget_failures is the lock-free read of
+ * Q-REFUSED-BUDGET (the Z-064 getter pattern). Internal
+ * only, INC-E001-07 shape (b) exactly like the G-007
+ * tuning pair above: declared here and re-declared for
+ * tests only in tests/core/mimir_budget_z079.h; bound
+ * local in the shared library (the public surface in
+ * include/mimir_alloc.h is unchanged by this slice). */
+int mimir_budget_set_mapped_bytes(size_t value);
+size_t mimir_budget_get_mapped_bytes(void);
+uint64_t mimir_core_budget_failures(void);
 
 #ifdef MIMIR_DEBUG
 /* J-004 on-demand red-zone verification (debug builds only;
