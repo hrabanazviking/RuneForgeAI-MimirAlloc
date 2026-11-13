@@ -2567,3 +2567,20 @@ test-z102: probe-z102
 	bash tests/perf/run_z102.sh
 
 .PHONY: test-z102
+
+# ------------------------------------------------------------------
+# Z-104: sanitizer and warning matrix (tests/abi/run_z104.sh)
+# -- ASan/UBSan/both builds of the full suite plus the M-003
+# extended warning gates on the three shipped flavours on
+# x86-64, with detection controls (tests/abi/probe_z104.c)
+# proving the sanitizers can see and measuring the ASan
+# coverage boundary for mimir-served spans. Slice doc
+# docs/Z13_Z104_SANITIZER_WARNING_MATRIX.md; recorded run
+# tests/abi/recorded_run_z13_z104.txt. Standalone via
+# `make test-z104`; NOT part of `make test` (standing gate
+# counts untouched).
+# ------------------------------------------------------------------------
+test-z104:
+	bash tests/abi/run_z104.sh
+
+.PHONY: test-z104

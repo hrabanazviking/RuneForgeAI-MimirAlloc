@@ -1,0 +1,99 @@
+MimirAlloc Z13 recorded run - Z-104 Sanitizer and warning matrix
+slice: Z-104 - Sanitizer and warning matrix (Wave 12; ASan/UBSan builds of the full suite plus the warning gates (M-003 heritage) on x86-64. Gate: matrix report; every finding fixed or filed with an owner.)
+date: 2026-11-13; recorded run 14:33Z (09:33 EST) via make test-z104; a first identical run at 14:33Z the same morning (team hidden_files/z104_matrix_run.log) returned the same result line for line except timestamps and load figures.
+base: team branch yrsa/mimiralloc-team-02 after merging seat main c3424b2bffeace26648911c5d3d37b34ce3f84b5 (banked Z-001..Z-101, 101/117) as merge commit e97a13b, clean tree, tree byte-identical to the seat at merge. This slice BUILDS AHEAD: it banks only after Z-102 and Z-103 in roadmap order.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic, cc gcc 15.3.0, clang 22.1.8 (host truth annexed below).
+artifacts: tests/abi/run_z104.sh (sha256 f9bcab140b5b6fa3005c1af230884052efca3860117179ae1a4307adab546e29), tests/abi/probe_z104.c (sha256 b35c576d8a68b76b77f5f3e157fe438cdef3c346ab64c595ca88955d5472c9fb), Makefile test-z104 block appended at EOF (+18 lines, no existing line changed), docs/Z13_Z104_SANITIZER_WARNING_MATRIX.md, this recorded run. No production source change by this slice.
+team: lead ran the six Mythic Engineering roles sequentially itself (matrix design, warning-gate audit, sanitizer engineering, controls/coverage design, gate verification, ledger/risk); no sub-agents spawned (recorded plainly).
+load honesty: QUIET WINDOW on a shared host. loadavg 0.17/0.19/0.68 at runner start and 0.57/0.30/0.69 at end (1-minute figure under 0.6 on 32 hardware threads). No timing or benchmark number is claimed anywhere in this slice - the matrix grades warnings, sanitizer reports and check counts, none of which are load-sensitive - so no verdict carries a load caveat; load is recorded per the shared-machine law.
+correctness gate (baseline, merged tree e97a13b before any Z-104 work): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z104_baseline_gate.log).
+correctness gate (final, slice tree): scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed / 77 by-design skips, exit 0 (team hidden_files/z104_gate.log) - identical to baseline, as constructed (the slice suite is standalone).
+
+=== METHOD (summary; full text in docs/Z13_Z104_SANITIZER_WARNING_MATRIX.md) ===
+Warning legs: the M-003 extended set (-Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion) over each shipped flavour canonical build, first as an enumeration pass (no -Werror, make -k) then as a gate pass (-Werror). Production: make test lib. Debug: make DEBUG=1 all lib-debug with -DMIMIR_DEBUG=1 carried inside the CFLAGS override (a command-line CFLAGS override defeats the Makefile += that normally adds it - see the slice doc S6 note), runtime graded by make DEBUG=1 test-debug per-binary exits. Hardened: make lib-hardened test-j008. nm -D exports must be exactly 13 per flavour.
+Sanitizer legs: the full suite (make test, the standing gate composition) built into private BUILD dirs with -fsanitize=address / -fsanitize=undefined -fno-sanitize-recover=all / both, -O1 -g; required: make exit 0, parsed counts 4988/0/77, zero sanitizer report lines. Controls (tests/abi/probe_z104.c): a glibc-heap overflow under ASan and a signed overflow under UBSan must be DETECTED with nonzero exits, and the ASan coverage probe must confirm the boundary: byte past a glibc block poisoned (redzone), byte past a mimir block NOT poisoned (mimir spans are not ASan-redzoned). Clang leg: compile-only of the three library sources under the extended set + -Werror, informational (shipped compiler is cc/gcc); a failure is a filed finding, not a runner failure.
+Runner defect found and fixed during this slice (in the runner, not the tree): the first version kept its per-leg logs under build/z104-logs/ - the Makefile clean target removes the whole build/ tree, so the first make clean deleted the logs mid-run and every leg failed on a missing redirect. Logs and probe objects now live in a private mktemp dir under /tmp. The fixed runner is the filed one; both recorded runs above used it.
+
+=== MATRIX OUTPUT (make test-z104, verbatim) ===
+Z-104 SANITIZER AND WARNING MATRIX
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+date_utc: 2026-11-13T14:33:32Z
+loadavg_at_start: 0.35 0.24 0.68 1/1387 3283245
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+clang: Ubuntu clang version 22.1.8 (1ubuntu1)
+head: e97a13b451773139a829d5e295f20204ab20845d
+branch: yrsa/mimiralloc-team-02
+extended warning set: -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wdouble-promotion
+WARN enum production: make_exit=0 compiler_warnings=0 make_recipe_lines=0 exports=13
+WARN enum debug: make_exit=0 compiler_warnings=0 make_recipe_lines=18 exports=13
+WARN enum hardened: make_exit=0 compiler_warnings=0 make_recipe_lines=0 exports=13
+WARN gate production: make_exit=0 compiler_warnings=0 make_recipe_lines=0 exports=13
+WARN gate production suite counts: checks=4988 failed=0 skips=77
+WARN gate debug: make_exit=0 compiler_warnings=0 make_recipe_lines=18 exports=13
+  test-debug build-debug/test_smoke exit=0
+  test-debug build-debug/test_core exit=0
+  test-debug build-debug/test_b007 exit=1
+  test-debug build-debug/test_c005 exit=0
+  test-debug build-debug/test_c006 exit=1
+  test-debug build-debug/test_c007 exit=0
+  test-debug build-debug/test_c008 exit=0
+  test-debug build-debug/test_d004 exit=0
+  test-debug build-debug/test_j004 exit=0
+WARN gate debug test-debug: only the INC-J004-02 pair (b007, c006) exit 1 - by design
+WARN gate hardened: make_exit=0 compiler_warnings=0 make_recipe_lines=0 exports=13
+  hardened RESULT: PASS (25 checks, 0 failures)
+SAN asan: make_exit=0 counts(checks/failed/skips)=4988 0 77 sanitizer_reports=0 result_pass=7 result_fail=0
+SAN ubsan: make_exit=0 counts(checks/failed/skips)=4988 0 77 sanitizer_reports=0 result_pass=7 result_fail=0
+SAN asan+ubsan: make_exit=0 counts(checks/failed/skips)=4988 0 77 sanitizer_reports=0 result_pass=7 result_fail=0
+CONTROL asan-detect: DETECTED (exit=1, heap-buffer-overflow reported)
+  COVERAGE glibc block: in-block poisoned=0 byte-past poisoned=1 (expect 0/1)
+  COVERAGE mimir block: in-block poisoned=0 byte-past poisoned=0 (expect 0/0)
+  COVERAGE RESULT: boundary as expected - ASan redzones cover glibc heap, not mimir-served spans
+CONTROL ubsan-detect: DETECTED (exit=1, runtime error reported)
+CLANG LEG (informational; shipped compiler is cc/gcc; see F-104-1)
+CLANG src/api/mimir_alloc.c: PASS (zero warnings under the extended set)
+CLANG src/core/mimir_core.c: FAIL - first diagnostics:
+  src/core/mimir_core.c:783:9: error: address argument to atomic operation must be a pointer to integer, pointer or supported floating point type ('_Atomic(uint64_t) *' invalid)
+    783 |         __atomic_fetch_add(&mimir_metadata_detections, 1ULL,
+        |         ^                  ~~~~~~~~~~~~~~~~~~~~~~~~~~
+  src/core/mimir_core.c:801:5: error: address argument to atomic operation must be a pointer to integer, pointer or supported floating point type ('_Atomic(uint64_t) *' invalid)
+CLANG src/platform/mimir_platform.c: PASS (zero warnings under the extended set)
+loadavg_at_end: 0.57 0.30 0.69 1/1390 3284690
+Z-104 MATRIX RESULT: PASS (all gated legs green; clang leg informational, filed as F-104-1)
+
+=== VERDICTS ===
+- Roadmap gate: MET. Matrix report filed (this run + docs/Z13_Z104_SANITIZER_WARNING_MATRIX.md); every finding below is fixed in-slice or filed with an owner.
+- Warning matrix (gcc, shipped compiler): WIN against the M-003 heritage gate - all three flavours enumerate ZERO compiler warnings under the extended set on the near-final core (M-003 found and fixed 2 on the old core; the fix held and nothing new appeared), and all three gate passes are clean under -Werror with exactly 13 exports each. Production suite inside the gate pass: 4988/0/77. Debug runtime grading matches M-003 exactly: only the INC-J004-02 by-design pair (test_b007, test_c006) exits 1. The 18 GNU-make recipe lines in DEBUG=1 builds are INC-M003-01 tool noise, carried, owner unchanged (Makefile / a future build-hygiene slice); they are not compiler warnings and hide none.
+- Sanitizer matrix: CLEAN SWEEP, honestly bounded. ASan, UBSan and ASan+UBSan builds of the full suite each run 4988 checks / 0 failed / 77 by-design skips with ZERO sanitizer reports and no RESULT: FAIL. LSan (inside ASan by default on this platform) reported no leaks: the allocator retained spans stay reachable from its globals, as designed.
+- Controls: both DETECTED (ASan heap-buffer-overflow on a glibc block, exit 1; UBSan runtime error on signed overflow, exit 1) - the clean suite is not a vacuous pass.
+- Coverage boundary (measured, probe exit 0): ASan redzones cover glibc heap (byte-past poisoned=1) and do NOT cover mimir-served blocks (byte-past poisoned=0), because mimir blocks are carved from the allocator own mmap spans. So the sanitizer legs validate the allocator code paths, its stack/global state and its glibc-heap test scaffolding - they do not watch client traffic inside mimir spans. That traffic remains covered by the MIMIR_DEBUG redzones/quarantine (J-004/J-005) and the Wave-8 metadata detection (Z-103 grades it at scale). No coverage beyond this boundary is claimed.
+- F-104-1 (FILED, owner named): clang 22 cannot compile src/core/mimir_core.c - it rejects the __atomic_* builtins applied to _Atomic-qualified pointers (122 __atomic call sites in that file; first at line 783). The other two library sources pass clang under the full extended set with -Werror. The shipped compiler is cc/gcc, under which the code is warning-clean, so this is a portability LOSS for a future clang build, not a defect in the shipped build. Owner: the next core-touching portability slice (production roadmap PBR-053 line) - the fix is a deliberate migration of the core atomic surface to C11 atomic_fetch_add-style operations or plain-pointer casts, far outside this matrix slice scope; it is recorded here and in the slice doc, not silently dropped.
+- Bugs in production code: none found. One runner defect (log dir under build/) found by the matrix first runs, fixed in the runner before the recorded runs, recorded above.
+
+=== HOST TRUTH (scripts/z13/host_truth.sh, Z-002) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T14:34:38Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 57%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.34 0.27 0.66
