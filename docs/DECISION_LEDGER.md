@@ -56,6 +56,7 @@ leaves open. Statuses in this ledger mean:
 | D-012 | Z13 public statistics (L-04): mimir_stats_snapshot + versioned struct mimir_stats_v1; INC-J002-01 and INC-J002-02 CLOSED, INC-J002-05 PRICED | Adopted | Z13 roadmap Z-076; INC-J002-01/-02/-05; docs/Z13_PUBLIC_STATISTICS.md | Z-076 (settler) |
 | D-013 | Z13 zero-size and errno closure (L-09): zero-size is a defined non-failure contract NULL (U-09); realloc-to-zero preserves the block (U-12); errno never promised, checked refusals leave it untouched (U-10) | Adopted | Z13 roadmap Z-078; contracts.md V-01/V-02/V-04; docs/Z13_Z078_ZERO_SIZE_ERRNO.md | Z-078 (settler) |
 | D-014 | Z13 budget enforcement adopted (L-03 / D-04): the Phase-9 soft budget over Q-MAPPED is enforced at every backing-growth point, reclaim-before-refusal, refusals counted once in Q-REFUSED-BUDGET (INC-I001-14 discharged) | Adopted | Z13 roadmap Z-079; docs/PHASE_9_BUDGET_AND_TELEMETRY_DESIGN.md S3 (I-002); docs/Z13_BUDGET_Z079.md | Z-079 (settler) |
+| D-015 | Z13 interposing variant (L-01 opt-in route): separate opt-in libmimiralloc_interpose.so interposes the ten standard names with direct mimir_* counterparts; default library unchanged (exactly ten namespaced exports, no standard name); every glibc family symbol INTERPOSED, MISSING-NAMED, or INTERNAL in the filed audit | Adopted | Z13 roadmap Z-082; L-01; D-012 reservation; D-013 contract | Z-082 (settler) |
 
 ---
 
@@ -729,6 +730,98 @@ leaves open. Statuses in this ledger mean:
   of the absence; the register amendment itself is
   left to the next audit slice, the Z-078 posture).
   **Status of entry:** Current.
+
+---
+
+## D-015 - Z13 interposing variant (L-01) at Z-082: a separate opt-in library, the direct-counterpart set, the D-013 contract under standard names
+
+- **Status:** Adopted
+- **Roadmap basis:** docs/MIMIRALLOC_Z13_ROADMAP.md slice
+  Z-082 (Wave 10), which requires an opt-in build whose
+  library interposes the malloc family, with a
+  symbol-table audit against glibc's set in which every
+  missing symbol is a named list entry. The standing
+  posture it discharges is limitation L-01 in
+  docs/LIMITATIONS_AND_KNOWN_DEFECTS.md (no global
+  interposition by default; interposition routes are
+  opt-in only), and the reservation D-012 recorded for
+  the standard name malloc_usable_size ("standard-name
+  interposition is the Wave 10 opt-in variant's
+  business, never a surprise from the namespaced
+  surface").
+- **Decision:** (1) The variant is a SEPARATE library,
+  build/libmimiralloc_interpose.so, built only by the
+  explicit target `make lib-interpose`, under its own
+  version script (src/api/mimir_interpose.map). The
+  default libmimiralloc.so is unchanged: exactly the
+  ten namespaced exports, no standard name exported --
+  proven mechanically in the recorded run S2, so
+  interposition can never arrive as a surprise from the
+  default build. (2) The interposed set is exactly the
+  ten standard names with a direct namespaced
+  counterpart -- malloc, free, cfree (glibc's legacy
+  alias of free, forwarded identically), calloc,
+  realloc, reallocarray, aligned_alloc, posix_memalign,
+  malloc_usable_size, malloc_trim -- each a pure
+  forwarder through the L1 boundary (the E-005 counters
+  move per call), defined in src/api/mimir_interpose.c
+  and built into no other artifact. The namespaced ten
+  are exported alongside, so both surfaces in one
+  process are one allocator instance. The standard
+  names are exported unversioned (the anonymous-node
+  discipline of E-002); binding is by name at load
+  time, which is the interposition mechanism itself.
+  (3) Interposition changes names, not contract: the
+  interposed names inherit the namespaced contract
+  EXACTLY, including every D-013 divergence from glibc
+  (malloc(0) NULL; realloc(p, 0) preserves the live
+  block -- a caller relying on glibc's freeing reading
+  leaks, never corrupts; posix_memalign zero-size
+  ENOMEM; errno never promised). The divergences are
+  pinned through the standard names by
+  tests/abi/test_z082.c and restated in
+  docs/Z13_Z082_INTERPOSING_VARIANT.md S3; Z-090's
+  verdict owns restating them for preload users.
+  (4) Every other malloc-family symbol of this host's
+  glibc (2.44) is absent from the variant and carries a
+  filed disposition (recorded run S4, mechanically
+  enforced: an unnamed family symbol fails the run):
+  memalign/valloc/pvalloc are Z-083's roadmap
+  assignment; the introspection class (mallopt,
+  mallinfo, mallinfo2, malloc_info, malloc_stats) and
+  the debug-aid class (mcheck family, mprobe,
+  mallwatch, mtrace, muntrace) have no honest
+  counterpart here and are named gaps for Z-090 to
+  assign or close; memalignment and the C23 sized frees
+  (free_sized, free_aligned_sized, GLIBC_2.43) are
+  named gaps awaiting a namespaced counterpart or a
+  validating slice; the __libc_* aliases and the
+  inert-since-2.34 __*_hook objects are libc-internal
+  and not interposable by construction.
+- **Implementation note:** one new translation unit, one
+  new version script, one additive Makefile block, four
+  test files and the recorded-run script; no existing
+  source, header or export is modified. The interpose
+  and test objects are compiled -fno-builtin. The core
+  calls no public malloc-family name (inspection,
+  slice doc S1), so interposed calls cannot recurse
+  through the allocator's own work; the TLS cache's
+  zero-initialised first touch is what the filed
+  LD_PRELOAD proof (recorded run S9: plain GLIBC
+  verdict, preloaded MIMIR verdict, same binary)
+  exercises.
+- **Evidence:** docs/Z13_Z082_INTERPOSING_VARIANT.md;
+  tests/abi/recorded_run_z13_z082.txt (make test-z082:
+  static contract test 658 checks / 0 failed, dynamic
+  and C++ consumers, LD_PRELOAD probe pair, export
+  counts exactly 10 default / 20 interposing, audit
+  10 INTERPOSED / 18 MISSING-NAMED / 15 INTERNAL of 43
+  family symbols), with the standing gate green
+  (4988/0/77) on the final tree.
+- **Supersedes:** nothing. L-01's register text stands
+  until that register's next revision; D-012's
+  reservation is discharged, its usable-size semantics
+  unchanged. **Status of entry:** Current.
 
 ---
 

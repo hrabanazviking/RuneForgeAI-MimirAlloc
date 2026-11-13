@@ -1,0 +1,61 @@
+/* mimir_interpose.map - MimirAlloc Z-082: export contract
+ * of the OPT-IN interposing library,
+ * build/libmimiralloc_interpose.so (decision D-015).
+ *
+ * The defined dynamic exports are exactly twenty names:
+ * the ten public namespaced entry points of
+ * include/mimir_alloc.h (so a consumer of this variant
+ * can use both surfaces in one library instance, and the
+ * preload and namespaced views of the allocator are the
+ * same allocator, never two), plus the ten standard
+ * malloc-family names defined by
+ * src/api/mimir_interpose.c. Every other symbol defined
+ * by the library objects (the internal mimir_core_* and
+ * mimir_platform_* functions and the E-005 audit
+ * counters) is bound local and never appears in .dynsym.
+ *
+ * This script governs ONLY the interposing variant. The
+ * default library keeps src/api/mimir_alloc.map, whose
+ * export list stays exactly the ten namespaced names --
+ * standard-name interposition is never a surprise from
+ * the default build (L-01; D-012's reservation of
+ * malloc_usable_size to this variant).
+ *
+ * The node is deliberately ANONYMOUS, for the same
+ * reasons as the E-002 script: a named node would add an
+ * ABS version-name symbol to .dynsym (so the defined
+ * list would no longer be exactly the twenty names) and
+ * would imply a symbol-version / ABI-stability promise
+ * the namespaced surface expressly withholds (U-03,
+ * B-008 N-10). The interposed standard names are
+ * therefore exported UNVERSIONED, unlike glibc's
+ * GLIBC_2.x-versioned definitions; a consumer linked
+ * against glibc's names binds to these at load time by
+ * name, which is exactly the interposition mechanism --
+ * and one more reason this variant is opt-in only.
+ */
+{
+  global:
+    mimir_malloc;
+    mimir_free;
+    mimir_calloc;
+    mimir_realloc;
+    mimir_aligned_alloc;
+    mimir_posix_memalign;
+    mimir_usable_size;
+    mimir_stats_snapshot;
+    mimir_trim;
+    mimir_reallocarray;
+    malloc;
+    free;
+    cfree;
+    calloc;
+    realloc;
+    reallocarray;
+    aligned_alloc;
+    posix_memalign;
+    malloc_usable_size;
+    malloc_trim;
+  local:
+    *;
+};

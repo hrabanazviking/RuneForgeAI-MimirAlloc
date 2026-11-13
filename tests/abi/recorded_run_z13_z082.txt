@@ -1,0 +1,298 @@
+=== Z-082 ABI recorded run ===
+date_utc: 2026-11-13T00:23:56Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cxx: c++ (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+libc: /lib/x86_64-linux-gnu/libc.so.6
+head: 70ffa94dd94800053c1d3fb9fba22e639b340c90
+branch: yrsa/mimiralloc-team-02
+loadavg: 1.13 1.49 1.09 2/1307 702917
+page_size: 4096
+=== S1 build from clean ===
+  [ok] make lib + lib-interpose + z082 consumers (log hidden_files/z082_build.log)
+-rwxr-xr-x 1 volmarr volmarr 51128 Nov 12 19:23 build/libmimiralloc_interpose.so
+-rwxr-xr-x 1 volmarr volmarr 42584 Nov 12 19:23 build/libmimiralloc.so
+=== S2 default library exports (nm -D) - exactly the 10 namespaced symbols, unchanged by Z-082 ===
+00000000000063e0 T mimir_aligned_alloc
+0000000000006230 T mimir_calloc
+00000000000058f0 T mimir_free
+00000000000058d0 T mimir_malloc
+0000000000006400 T mimir_posix_memalign
+00000000000063c0 T mimir_realloc
+0000000000006f50 T mimir_reallocarray
+00000000000065e0 T mimir_stats_snapshot
+0000000000006da0 T mimir_trim
+0000000000006480 T mimir_usable_size
+defined dynamic symbol count: 10
+  [ok] count == 10
+  [ok] exported: mimir_malloc
+  [ok] exported: mimir_free
+  [ok] exported: mimir_calloc
+  [ok] exported: mimir_realloc
+  [ok] exported: mimir_aligned_alloc
+  [ok] exported: mimir_posix_memalign
+  [ok] exported: mimir_usable_size
+  [ok] exported: mimir_stats_snapshot
+  [ok] exported: mimir_trim
+  [ok] exported: mimir_reallocarray
+-- opt-in proof: NO standard malloc-family name is exported by the default library --
+  [ok] default library does NOT export malloc
+  [ok] default library does NOT export free
+  [ok] default library does NOT export cfree
+  [ok] default library does NOT export calloc
+  [ok] default library does NOT export realloc
+  [ok] default library does NOT export reallocarray
+  [ok] default library does NOT export aligned_alloc
+  [ok] default library does NOT export posix_memalign
+  [ok] default library does NOT export malloc_usable_size
+  [ok] default library does NOT export malloc_trim
+=== S3 interposing library exports (nm -D) - exactly 20: 10 namespaced + 10 standard ===
+0000000000007150 T aligned_alloc
+0000000000007120 T calloc
+0000000000007110 T cfree
+0000000000007100 T free
+00000000000070f0 T malloc
+0000000000007180 T malloc_trim
+0000000000007170 T malloc_usable_size
+0000000000006520 T mimir_aligned_alloc
+0000000000006370 T mimir_calloc
+0000000000005a30 T mimir_free
+0000000000005a10 T mimir_malloc
+0000000000006540 T mimir_posix_memalign
+0000000000006500 T mimir_realloc
+0000000000007090 T mimir_reallocarray
+0000000000006720 T mimir_stats_snapshot
+0000000000006ee0 T mimir_trim
+00000000000065c0 T mimir_usable_size
+0000000000007160 T posix_memalign
+0000000000007130 T realloc
+0000000000007140 T reallocarray
+defined dynamic symbol count: 20
+  [ok] count == 20
+  [ok] interposing export: mimir_malloc
+  [ok] interposing export: mimir_free
+  [ok] interposing export: mimir_calloc
+  [ok] interposing export: mimir_realloc
+  [ok] interposing export: mimir_aligned_alloc
+  [ok] interposing export: mimir_posix_memalign
+  [ok] interposing export: mimir_usable_size
+  [ok] interposing export: mimir_stats_snapshot
+  [ok] interposing export: mimir_trim
+  [ok] interposing export: mimir_reallocarray
+  [ok] interposing export: malloc
+  [ok] interposing export: free
+  [ok] interposing export: cfree
+  [ok] interposing export: calloc
+  [ok] interposing export: realloc
+  [ok] interposing export: reallocarray
+  [ok] interposing export: aligned_alloc
+  [ok] interposing export: posix_memalign
+  [ok] interposing export: malloc_usable_size
+  [ok] interposing export: malloc_trim
+  [ok] no mimir_core_/mimir_platform_/mimir_audit_ exports
+=== S4 symbol audit against glibc's malloc-family set (/lib/x86_64-linux-gnu/libc.so.6) ===
+-- glibc family symbols found on this host (defined, dynamic) --
+aligned_alloc
+calloc
+cfree
+free
+free_aligned_sized
+__free_hook
+free_sized
+__libc_calloc
+__libc_free
+__libc_mallinfo
+__libc_malloc
+__libc_mallopt
+__libc_memalign
+__libc_pvalloc
+__libc_realloc
+__libc_reallocarray
+__libc_valloc
+mallinfo
+mallinfo2
+malloc
+__malloc_hook
+malloc_info
+__malloc_initialize_hook
+malloc_stats
+malloc_trim
+malloc_usable_size
+mallopt
+mallwatch
+mcheck
+mcheck_check_all
+mcheck_pedantic
+memalign
+__memalign_hook
+memalignment
+mprobe
+mtrace
+muntrace
+posix_memalign
+pvalloc
+realloc
+reallocarray
+__realloc_hook
+valloc
+-- disposition of every family symbol --
+  [ok] audit basis: glibc has malloc
+  [ok] INTERPOSED: malloc
+  [ok] audit basis: glibc has free
+  [ok] INTERPOSED: free
+  [ok] audit basis: glibc has cfree
+  [ok] INTERPOSED: cfree
+  [ok] audit basis: glibc has calloc
+  [ok] INTERPOSED: calloc
+  [ok] audit basis: glibc has realloc
+  [ok] INTERPOSED: realloc
+  [ok] audit basis: glibc has reallocarray
+  [ok] INTERPOSED: reallocarray
+  [ok] audit basis: glibc has aligned_alloc
+  [ok] INTERPOSED: aligned_alloc
+  [ok] audit basis: glibc has posix_memalign
+  [ok] INTERPOSED: posix_memalign
+  [ok] audit basis: glibc has malloc_usable_size
+  [ok] INTERPOSED: malloc_usable_size
+  [ok] audit basis: glibc has malloc_trim
+  [ok] INTERPOSED: malloc_trim
+  [ok] audit basis: glibc has memalign (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): memalign
+  [ok] audit basis: glibc has valloc (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): valloc
+  [ok] audit basis: glibc has pvalloc (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): pvalloc
+  [ok] audit basis: glibc has mallopt (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mallopt
+  [ok] audit basis: glibc has mallinfo (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mallinfo
+  [ok] audit basis: glibc has mallinfo2 (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mallinfo2
+  [ok] audit basis: glibc has malloc_info (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): malloc_info
+  [ok] audit basis: glibc has malloc_stats (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): malloc_stats
+  [ok] audit basis: glibc has mcheck (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mcheck
+  [ok] audit basis: glibc has mcheck_pedantic (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mcheck_pedantic
+  [ok] audit basis: glibc has mcheck_check_all (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mcheck_check_all
+  [ok] audit basis: glibc has mprobe (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mprobe
+  [ok] audit basis: glibc has mallwatch (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mallwatch
+  [ok] audit basis: glibc has mtrace (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): mtrace
+  [ok] audit basis: glibc has muntrace (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): muntrace
+  [ok] audit basis: glibc has memalignment (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): memalignment
+  [ok] audit basis: glibc has free_sized (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): free_sized
+  [ok] audit basis: glibc has free_aligned_sized (named missing)
+  [ok] MISSING-NAMED (absent from interposing .so): free_aligned_sized
+  [note] INTERNAL (libc-private, not interposable): __libc_malloc
+  [note] INTERNAL (libc-private, not interposable): __libc_free
+  [note] INTERNAL (libc-private, not interposable): __libc_calloc
+  [note] INTERNAL (libc-private, not interposable): __libc_realloc
+  [note] INTERNAL (libc-private, not interposable): __libc_reallocarray
+  [note] INTERNAL (libc-private, not interposable): __libc_memalign
+  [note] INTERNAL (libc-private, not interposable): __libc_valloc
+  [note] INTERNAL (libc-private, not interposable): __libc_pvalloc
+  [note] INTERNAL (libc-private, not interposable): __libc_mallinfo
+  [note] INTERNAL (libc-private, not interposable): __libc_mallopt
+  [note] INTERNAL (libc-private, not interposable): __malloc_hook
+  [note] INTERNAL (libc-private, not interposable): __free_hook
+  [note] INTERNAL (libc-private, not interposable): __realloc_hook
+  [note] INTERNAL (libc-private, not interposable): __memalign_hook
+  [note] INTERNAL (libc-private, not interposable): __malloc_initialize_hook
+-- surprise scan: any glibc family symbol with NO disposition above fails --
+  [ok] no unnamed family symbol (every gap is a named list entry)
+-- full glibc raw rows for the family (with versions) --
+00000000000b5880 W aligned_alloc@@GLIBC_2.16
+00000000000b5940 W calloc@@GLIBC_2.2.5
+00000000000b4fb0 T cfree@GLIBC_2.2.5
+00000000000b58d0 W free_aligned_sized@@GLIBC_2.43
+00000000000b4fb0 T free@@GLIBC_2.2.5
+000000000021f188 V __free_hook@GLIBC_2.2.5
+00000000000b58c0 W free_sized@@GLIBC_2.43
+00000000000b5940 T __libc_calloc@@GLIBC_2.2.5
+00000000000b4fb0 T __libc_free@@GLIBC_2.2.5
+00000000000b60d0 T __libc_mallinfo@@GLIBC_2.2.5
+00000000000b4ad0 T __libc_malloc@@GLIBC_2.2.5
+00000000000b6430 T __libc_mallopt@@GLIBC_2.2.5
+00000000000b5820 T __libc_memalign@@GLIBC_2.2.5
+00000000000b5900 T __libc_pvalloc@@GLIBC_2.2.5
+00000000000b6bd0 T __libc_reallocarray@@GLIBC_PRIVATE
+00000000000b5300 T __libc_realloc@@GLIBC_2.2.5
+00000000000b58e0 T __libc_valloc@@GLIBC_2.2.5
+00000000000b5e80 W mallinfo2@@GLIBC_2.33
+00000000000b60d0 W mallinfo@@GLIBC_2.2.5
+00000000000b4ad0 T malloc@@GLIBC_2.2.5
+000000000021f180 V __malloc_hook@GLIBC_2.2.5
+00000000000b65e0 W malloc_info@@GLIBC_2.10
+000000000021f1a0 B __malloc_initialize_hook@GLIBC_2.2.5
+00000000000b6160 W malloc_stats@@GLIBC_2.2.5
+00000000000b5b60 W malloc_trim@@GLIBC_2.2.5
+00000000000b5e40 W malloc_usable_size@@GLIBC_2.2.5
+00000000000b6430 W mallopt@@GLIBC_2.2.5
+000000000021f1f0 B mallwatch@GLIBC_2.2.5
+00000000000b6600 T mcheck_check_all@@GLIBC_2.2.5
+00000000000b6610 T mcheck@@GLIBC_2.2.5
+00000000000b6620 T mcheck_pedantic@@GLIBC_2.2.5
+00000000000b5820 W memalign@@GLIBC_2.2.5
+000000000021f170 V __memalign_hook@GLIBC_2.2.5
+000000000004a770 T memalignment@@GLIBC_2.43
+00000000000b6630 T mprobe@@GLIBC_2.2.5
+00000000000b6650 T mtrace@@GLIBC_2.2.5
+00000000000b6660 T muntrace@@GLIBC_2.2.5
+00000000000b6580 W posix_memalign@@GLIBC_2.2.5
+00000000000b5900 W pvalloc@@GLIBC_2.2.5
+00000000000b6bd0 W reallocarray@@GLIBC_2.26
+00000000000b5300 T realloc@@GLIBC_2.2.5
+000000000021f178 V __realloc_hook@GLIBC_2.2.5
+00000000000b58e0 W valloc@@GLIBC_2.2.5
+=== S5 consumers bind to the interposing .so (DT_NEEDED + undefined symbols) ===
+-- test_z082_dyn --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc_interpose.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z082_dyn DT_NEEDED names libmimiralloc_interpose.so
+                 U calloc
+                 U free
+                 U malloc
+                 U realloc
+  [ok] test_z082_dyn references standard names as undefined (U)
+  [ok] test_z082_dyn does not define the standard names (not statically absorbed)
+-- test_z082_cpp --
+ 0x0000000000000001 (NEEDED)             Shared library: [libmimiralloc_interpose.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z082_cpp DT_NEEDED names libmimiralloc_interpose.so
+                 U free
+                 U malloc
+                 U realloc
+  [ok] test_z082_cpp references standard names as undefined (U)
+  [ok] test_z082_cpp does not define the standard names (not statically absorbed)
+-- preload probe consumer: no MimirAlloc DT_NEEDED (a plain glibc consumer) --
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+  [ok] test_z082_pre has no mimiralloc DT_NEEDED
+=== S6 static contract test ===
+test_z082: 658 checks, 0 failed
+test_z082: PASS
+  [ok] test_z082 exit 0
+=== S7 dynamic C consumer ===
+test_z082_dyn: PASS
+  [ok] test_z082_dyn exit 0
+=== S8 C++ consumer ===
+test_z082_cpp: PASS
+  [ok] test_z082_cpp exit 0
+=== S9 LD_PRELOAD probe pair ===
+plain run: PRELOAD-VERDICT: GLIBC
+  [ok] plain probe verdict is GLIBC (no interposition without opt-in)
+preloaded run: PRELOAD-VERDICT: MIMIR
+  [ok] preloaded probe verdict is MIMIR (runtime interposition binds)
+=== S10 neighbour evidence: E-005 audit readers ===
+  [ok] make test-e005 still passes (log hidden_files/z082_test_e005.log)
+=== Z-082 ABI RUN RESULT: PASS ===
