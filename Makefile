@@ -2513,3 +2513,39 @@ test-z094:
 	bash tests/perf/run_z094.sh
 
 .PHONY: test-z094
+
+# ------------------------------------------------------------------
+# Z-102: memory-pressure chaos (tests/perf/probe_z102.c,
+# modes dense / small / poll / budget / heritage; runner
+# tests/perf/run_z102.sh) -- cgroup ceilings (4 GiB,
+# 16 GiB, systemd user scopes holding only the probe)
+# over allocation storms on both allocator legs
+# (probe_z102_mimir links the production LIBOBJS;
+# probe_z102_glibc is the -DLEG_GLIBC control, the
+# bench_k002 pattern). The runner is the battery and
+# its stdout is the recorded run
+# (tests/perf/recorded_run_z13_z102.txt); the slice
+# report is docs/Z13_Z102_MEMORY_PRESSURE_CHAOS.md.
+# Standalone via `make test-z102`; NOT part of
+# `make test` (standing gate counts untouched).
+# ------------------------------------------------------------------
+$(BUILD)/probe_z102.o: tests/perf/probe_z102.c include/mimir_alloc.h src/core/mimir_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/perf/probe_z102.c -o $@
+
+$(BUILD)/probe_z102_mimir: $(LIBOBJS) $(BUILD)/probe_z102.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/probe_z102.o -o $@
+
+$(BUILD)/probe_z102_glibc.o: tests/perf/probe_z102.c | $(BUILD)
+	$(CC) $(CFLAGS) -DLEG_GLIBC -c tests/perf/probe_z102.c -o $@
+
+$(BUILD)/probe_z102_glibc: $(BUILD)/probe_z102_glibc.o
+	$(CC) $(CFLAGS) $(BUILD)/probe_z102_glibc.o -o $@
+
+probe-z102: $(BUILD)/probe_z102_mimir $(BUILD)/probe_z102_glibc
+
+.PHONY: probe-z102
+
+test-z102: probe-z102
+	bash tests/perf/run_z102.sh
+
+.PHONY: test-z102
