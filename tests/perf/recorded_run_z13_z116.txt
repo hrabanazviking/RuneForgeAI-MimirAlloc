@@ -1,0 +1,172 @@
+MimirAlloc Z13 recorded run - Z-116 Energy-proportional idle behaviour
+slice: Z-116 - energy-proportional idle behaviour (Wave 13 pool choice, seat WAVE_PLAN.md). Reason: roadmap pool; the Z-007/Z-107 idle-subtraction method gives a proven idle baseline on this host. Success measure: post-load idle retention/trim behaviour measured over time, idle cost quantified, any busy-retention defect fixed in scope or filed with a named owner. Gate: that measure + standing correctness gate GREEN 4988/0/77.
+date: run of record 2026-11-13T12:44:59-05:00 to 12:50:12-05:00 EST (hidden_files/z116_run.log); smoke runs 12:41-12:43 EST on the same builds.
+base: worktree HEAD 5585d2d (merge of seat main 8ac7f52, banked Z-001..Z-114) on branch yrsa/mimiralloc-team-02.
+host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64, 4 KiB pages, 128 GB UMA), glibc 2.44, kernel 7.3.0-10-generic (host truth annexed below).
+boundary: Z-110 quiet-window energy re-run hand-off remains OPEN and is NOT this slice. Nothing here re-runs run_z110.sh and no Z-107 energy grade is re-filed. This slice measures idle behaviour after load: retention/trim over time and idle package power, using the Z-007 idle-subtraction method as the measurement base.
+load state: LIGHT WINDOW, recorded not claimed quiet. loadavg 0.32/0.31/0.95 at mimir-leg start, 0.15-0.35 instantaneous at every power sample, 0.35/0.51/0.86 at end; top snapshots in the power raw show desktop daemons only (the Aesir mojo run live at 12:30 EST had finished before this run). No quiet-window claim is made; the power figures are this-run numbers under the recorded load.
+artifacts: tests/perf/probe_z116.c (sha256 3353c0ad2194704a0ddd37985e5067777d2b265f329210847896cf4a48e9d0ba), tests/perf/run_z116.sh (05af3de4ffc992ff25441e3fc654a5c6acea37e3626c7efd1a5fafc75d2cebf7), tests/perf/summarize_z116.py (c71ddb6f6a98318a7c1d96959b361ebfa40f1c2d7a2cbd8d34aa877d36319f1d); binaries probe_z116_mimir 7507e545853bae7b26bfc6dee7b99dcc491c64968016d31781a5952aaca482c1, probe_z116_glibc e603afc6cd335a6c9c490ec530fdd00ffad049883b6995284e45de3c58df8fe9 (hidden_files/z116_sha.txt, also in the run log). No src/, API, ABI or Makefile change; README.md untouched.
+correctness gate: scripts/z13/run_gate.sh on the slice tree, log hidden_files/z116_gate.log: GATE COUNTS checks=4988 failed=0 skips=77, GATE RESULT: GREEN (read back from the log).
+team: fresh lead ran the six Mythic Engineering roles itself sequentially (method design, probe authoring, measurement, load watch, gate verification, ledger) - no sub-agents spawned under this dispatch, recorded plainly per the muster rule.
+
+=== METHOD ===
+probe_z116, one source two legs (mimir public API / glibc -DLEG_GLIBC). Per leg: BASELINE sample; LOAD 832 blocks (512 small 64..1024 B, 256 medium 4..64 KiB, 64 large 256 KiB..1 MiB, fixed-seed mix, 52145847 B live, every page dense-touched, pattern-verified at peak); PEAK sample; free all; DRAINED sample (idle t=0); IDLE window 120 s, one sample every 10 s (12 samples) with NO allocator traffic between samples (measurement reads only: smaps_rollup, maps, mimir_stats_snapshot / mallinfo2); explicit full trim (mimir_trim(0) / malloc_trim(0)) with cached bytes read immediately before and after; POST_TRIM sample; two post-trim idle samples; SANITY phase (128 blocks allocated, verified, freed, trimmed); FINAL sample. Package power by the Z-007 method (sudo -n perf stat -a, RAPL power/energy-pkg/): 10 s samples pre-load, twice inside the mimir retained-idle window, post-trim/exit, and after the glibc leg. Workload equivalence across legs: DONE checksum 326368 in both legs (and in both smoke runs).
+
+=== VERDICT - ENERGY-PROPORTIONAL IDLE (roadmap gate) ===
+Gate MET: post-load idle retention/trim measured over time, idle cost quantified, no busy-retention defect found (F4).
+F1 - Retention after free-all (mimir): RSS 6660 KiB vs baseline 2204 (+4456 KiB); retained EMPTY spans (bytes_cached) 229376 B; bytes_mapped 2727936 B (spans + Z-048 pooled mappings); VMA 39 vs baseline 26. Most of the 49.7 MiB live peak is already returned at free-all (peak RSS 56964 KiB); the retained residue is bounded and small. glibc context: RSS +9068 KiB, fordblks 8995696 B (8.58 MiB) held in the arena.
+F2 - Idle behaviour over 120 s (the slice question): FLAT. All 12 mimir idle samples identical: RSS 6724 KiB, cached 229376 B, mapped 2727936 B, drift +0 KiB / +0 B first-to-last. glibc identical in shape (drift +0). The retained footprint neither grows (no busy-retention, no idle leak) nor returns on its own: with no allocator traffic there is no autonomous trim, by design - the Z-050 policy layer is caller-driven (mimir_core_trim_policy_tick) and no background thread exists in this allocator. Energy-proportional idle therefore holds exactly when the caller drives a trim or a policy tick; left alone, the drained footprint is held indefinitely at the F1 level.
+F3 - Trim response: mimir_trim(0) returned 1, cached 229376 -> 0 B, mapped -> 0, VMA 39 -> 26 (baseline), RSS 6660 -> 4060 KiB (-2600). Post-trim samples flat; FINAL after the sanity phase: cached 0, mapped 0, RSS 4204 KiB (+2000 over baseline) - the residual is non-allocator process memory (the probe process own glibc arena and touched pages), proven by mapped=0 and VMA=baseline in the same sample. glibc malloc_trim(0): RSS 11220 -> 2512 KiB (top returned via madvise) while fordblks stays 8991600 B (accounting, not residency).
+F4 - Idle cost quantified: package power (RAPL, perf stat -a) pre-load 14.27 W; during the retained-idle window 7.23 W and 6.62 W (median 6.93 W); post-trim/exit 8.27 W; after the glibc leg 6.07 W. The during-window figures sit BELOW the pre-load sample: holding the F1 retained footprint (2.60 MiB mapped, 4.35 MiB RSS over baseline) in an idle process adds NO measurable package power over this host idle baseline - the delta is under the idle-subtraction resolution of this window, so no watt figure is claimed for retention itself. The priced idle cost is the resident memory itself: 229376 B of retained spans plus pooled mappings to 2727936 B mapped held for as long as the process idles untrimmed (0.22 MiB spans; 2.60 MiB mapped), against glibc 8.58 MiB arena-held on the same shape. Cross-check with Z-100: drain retention stable there across 120 s / 1 h / 8 h; here the same posture is shown flat at 10 s resolution across a post-load idle window and fully trim-responsive.
+F5 - Defects: none in the allocator, the suite, or the harness. Filed observation (not a defect): energy-proportional idle is opt-in by construction - an application that never calls mimir_trim and never ticks the Z-050 policy holds the F1 residue for its whole life. Owner: API consumers, by the Z-050 design of record; any future change to autonomous idle return is a design slice of its own, not a fix owed by this one. Transfer note: run_z116.sh reached the host byte-exact after repair of one re-emission slip in a build-fail label (sha256 verified against the authored file before the run; the runner sha in the run log is the repaired file).
+
+=== SUMMARISER OUTPUT (hidden_files/z116_sum.txt, verbatim) ===
+=== leg mimir (idle 120s, sample 10s) ===
+baseline: rss=2204 KiB cached=0 B mapped=0 B vma=26
+peak: rss=56964 KiB live=52145847 B cached=16384 B
+drained: rss=6660 KiB (retained over baseline +4456 KiB) cached=229376 B mapped=2727936 B vma=39
+idle window: 12 samples, rss first=6724 last=6724 drift=+0 KiB; cached first=229376 last=229376 drift=+0 B
+idle cached constant across window: True
+trim(0): ret=1 cached 229376 -> 0 B; rss drained->post_trim -2600 KiB; post_trim rss=4060 KiB cached=0 B vma=26
+final: rss=4204 KiB cached=0 B (over baseline rss +2000 KiB)
+retained MiB held during idle (drained cached): 0.22
+=== leg glibc (idle 120s, sample 10s) ===
+baseline: rss=2152 KiB cached=132864 B mapped=139264 B vma=26
+peak: rss=53236 KiB live=52145847 B cached=7120 B
+drained: rss=11220 KiB (retained over baseline +9068 KiB) cached=8995696 B mapped=9285632 B vma=26
+idle window: 12 samples, rss first=11284 last=11284 drift=+0 KiB; cached first=8995696 last=8995696 drift=+0 B
+idle cached constant across window: True
+trim(0): ret=1 cached 8995696 -> 8991600 B; rss drained->post_trim -8708 KiB; post_trim rss=2512 KiB cached=8991600 B vma=26
+final: rss=2512 KiB cached=8991600 B (over baseline rss +360 KiB)
+retained MiB held during idle (drained cached): 8.58
+=== package idle power (RAPL power/energy-pkg/, perf stat -a, Z-007 method) ===
+pre: 14.27 W
+during1: 7.23 W
+during2: 6.62 W
+post: 8.27 W
+post_glibc: 6.07 W
+during retained-idle median: 6.93 W; delta vs pre: -7.34 W
+Z-116 RESULT: PASS
+
+=== RAW - mimir leg (hidden_files/z116_mimir.raw, verbatim) ===
+IDLEPROBE,mimir,120,10
+SAMPLE,mimir,baseline,0,2204,195,26,0,0,0
+SAMPLE,mimir,peak,8,56964,54954,27,16384,54243328,52145847
+SAMPLE,mimir,drained,12,6660,4650,39,229376,2727936,0
+SAMPLE,mimir,idle,10013,6724,4654,39,229376,2727936,0
+SAMPLE,mimir,idle,20014,6724,4658,39,229376,2727936,0
+SAMPLE,mimir,idle,30014,6724,4658,39,229376,2727936,0
+SAMPLE,mimir,idle,40015,6724,4658,39,229376,2727936,0
+SAMPLE,mimir,idle,50016,6724,4658,39,229376,2727936,0
+SAMPLE,mimir,idle,60017,6724,4654,39,229376,2727936,0
+SAMPLE,mimir,idle,70018,6724,4660,39,229376,2727936,0
+SAMPLE,mimir,idle,80019,6724,4660,39,229376,2727936,0
+SAMPLE,mimir,idle,90020,6724,4660,39,229376,2727936,0
+SAMPLE,mimir,idle,100021,6724,4660,39,229376,2727936,0
+SAMPLE,mimir,idle,110021,6724,4667,39,229376,2727936,0
+SAMPLE,mimir,idle,120022,6724,4660,39,229376,2727936,0
+TRIM,mimir,1,229376,0
+SAMPLE,mimir,post_trim,120023,4060,1996,26,0,0,0
+SAMPLE,mimir,post_trim_idle,130023,4060,1996,26,0,0,0
+SAMPLE,mimir,post_trim_idle,140024,4060,1996,26,0,0,0
+SAMPLE,mimir,final,140025,4204,2140,26,0,0,0
+DONE,mimir,19,326368,1
+
+=== RAW - glibc leg (hidden_files/z116_glibc.raw, verbatim) ===
+IDLEPROBE,glibc,120,10
+SAMPLE,glibc,baseline,0,2152,146,26,132864,139264,0
+SAMPLE,glibc,peak,7,53236,51230,27,7120,52310016,52145847
+SAMPLE,glibc,drained,8,11220,9214,26,8995696,9285632,0
+SAMPLE,glibc,idle,10008,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,20009,11284,9227,26,8995696,9285632,0
+SAMPLE,glibc,idle,30010,11284,9227,26,8995696,9285632,0
+SAMPLE,glibc,idle,40011,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,50011,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,60012,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,70013,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,80014,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,90015,11284,9227,26,8995696,9285632,0
+SAMPLE,glibc,idle,100017,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,110017,11284,9220,26,8995696,9285632,0
+SAMPLE,glibc,idle,120018,11284,9216,26,8995696,9285632,0
+TRIM,glibc,1,8995696,8991600
+SAMPLE,glibc,post_trim,120019,2512,444,26,8991600,9281536,0
+SAMPLE,glibc,post_trim_idle,130020,2512,444,26,8991600,9281536,0
+SAMPLE,glibc,post_trim_idle,140021,2512,444,26,8991600,9281536,0
+SAMPLE,glibc,final,140022,2512,444,26,8991600,9281536,0
+DONE,glibc,19,326368,1
+
+=== POWER RAW (hidden_files/z116_power_raw.txt, verbatim) ===
+=== power pre ===
+142.66|Joules|power/energy-pkg/|10003531356|100.00||
+43.05|Joules|power_core/energy-core/|160064563945|100.00||
+power_wall_s=10
+loadavg at pre: 0.32 0.31 0.95 2/1427 4155026
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+volmarr  4155024  107  0.0  25504  7064 ?        R    12:45   0:00 /home/volmarr/mimiralloc-z13-forge/build/probe_z115_mimir kv_blocks 20
+root         247  0.7  0.0      0     0 ?        S    Nov12  16:12 [kswapd0]
+root        1453  0.7  0.0  13116  4692 ?        Ss   Nov12  15:59 /usr/lib/systemd/systemd-logind
+=== power during1 ===
+72.31|Joules|power/energy-pkg/|10003436619|100.00||
+8.32|Joules|power_core/energy-core/|160058092952|100.00||
+power_wall_s=10
+loadavg at during1: 0.25 0.30 0.94 1/1424 4155263
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root         247  0.7  0.0      0     0 ?        S    Nov12  16:12 [kswapd0]
+root        1453  0.7  0.0  13116  4692 ?        Ss   Nov12  15:59 /usr/lib/systemd/systemd-logind
+root         909  0.6  0.0      0     0 ?        S    Nov12  12:40 [napi/phy0-0]
+=== power during2 ===
+66.23|Joules|power/energy-pkg/|10004089939|100.00||
+3.39|Joules|power_core/energy-core/|160070769204|100.00||
+power_wall_s=10
+loadavg at during2: 0.15 0.26 0.89 1/1425 4155460
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root         247  0.7  0.0      0     0 ?        S    Nov12  16:12 [kswapd0]
+root        1453  0.7  0.0  13116  4692 ?        Ss   Nov12  15:59 /usr/lib/systemd/systemd-logind
+root         909  0.6  0.0      0     0 ?        S    Nov12  12:41 [napi/phy0-0]
+=== power post ===
+82.73|Joules|power/energy-pkg/|10003455533|100.00||
+15.02|Joules|power_core/energy-core/|160058763132|100.00||
+power_wall_s=10
+loadavg at post: 0.18 0.24 0.83 1/1427 4156002
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+volmarr  4155999 40.0  0.0  30116 19152 ?        D    12:47   0:00 python3 scripts/sysinfo.py
+root         247  0.7  0.0      0     0 ?        S    Nov12  16:12 [kswapd0]
+root        1453  0.7  0.0  13116  4692 ?        Ss   Nov12  16:00 /usr/lib/systemd/systemd-logind
+=== power post_glibc ===
+60.69|Joules|power/energy-pkg/|10003919982|100.00||
+3.06|Joules|power_core/energy-core/|160065800417|100.00||
+power_wall_s=10
+loadavg at post_glibc: 0.35 0.51 0.86 1/1429 4156904
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+volmarr  4156901 33.3  0.0  30116 19160 ?        D    12:50   0:00 python3 scripts/sysinfo.py
+root         247  0.7  0.0      0     0 ?        S    Nov12  16:12 [kswapd0]
+root        1453  0.7  0.0  13116  4692 ?        Ss   Nov12  16:01 /usr/lib/systemd/systemd-logind
+
+=== HOST TRUTH (hidden_files/z116_host_truth.txt, verbatim) ===
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T17:44:59Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 2000000
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 62%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.22 0.29 0.96
