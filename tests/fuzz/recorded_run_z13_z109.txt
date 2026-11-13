@@ -1,0 +1,258 @@
+Z-109 RECORDED RUN - API fuzz at scale (Wave 13 reserve slice 1)
+================================================================
+Slice: Z-109 - Reserve slice 1 (roadmap docs/MIMIRALLOC_Z13_ROADMAP.md,
+  Wave 13 pool). Pool choice recorded in the seat WAVE_PLAN.md BEFORE
+  the slice started: API fuzz at scale. Reason: the banked Z-108
+  verdict S8 names the D-09 coverage gap in S6 (mmap-refusal
+  fuzz-injection coverage). Success measure (WAVE_PLAN, verbatim in
+  substance): a libFuzzer-style battery over the public surface at
+  scale; every crash / hang / misbehaviour triaged to a verdict;
+  defects fixed in scope or filed with a named owner; gate GREEN.
+Team: team-01, worktree /home/volmarr/mimiralloc-team-01,
+  branch yrsa/mimiralloc-team-01. Lead ran the six Mythic
+  Engineering roles SEQUENTIALLY itself (method design, harness
+  build, injection design, statistics/coverage audit, verdict
+  grading, ledger/risk review) - no sub-agents spawned this
+  slice; recorded plainly per the campaign fallback rule.
+Base: e4efc01 - clean merge of seat main 7e76e47 (banked
+  Z-001..Z-108) into the team branch. Baseline gate on the
+  merged tree GREEN 4988 checks / 0 failed / 77 by-design skips
+  (hidden_files/z109_baseline_gate.log).
+Host: purpleraider (ASUS ROG Flow Z13, AMD Strix Halo, x86-64,
+  4 KiB pages, 128 GB UMA), kernel 7.3.0-10-generic, gcc 15.3.0,
+  clang 22.1.8 (libFuzzer leg only).
+Harness: tests/fuzz/fuzz_z109.c (v1, trace version 1) - a
+  byte-stream interpreter over ALL 13 public entry points of
+  include/mimir_alloc.h, checked against an independent
+  ownership model (defined behaviour only; see the slice doc
+  docs/Z13_Z109_API_FUZZ.md for the observable list and the
+  coverage table). Runner: tests/fuzz/run_fuzz_z109.sh,
+  standalone via `make test-fuzz-z109` (NOT part of make test).
+Run of record: 2026-11-13, hidden_files/z109_run.log on the
+  team worktree (verbatim runner output between the markers
+  below; runner exit 0).
+Load honesty: SHARED HOST, CONTENDED WINDOW. Load average
+  4.34 / 2.97 / 2.03 at runner start, 2.86 / 2.87 / 2.25 at
+  end. Co-tenants observed during the window: the Aesir
+  forge's mojo run_all process (~276% CPU, live from 11:39
+  EST) and team-03's Z-111 trace probe (~100% CPU). No number
+  in this run is a timing or a performance baseline: every
+  verdict rests on exact counters (operations, checks,
+  shim counters), which contention cannot move. Wall times
+  are recorded in the slice doc as facts of the window only.
+
+----- BEGIN verbatim runner output -----
+Z109-RUNNER plain=./build/fuzz_z109 inject=./build/fuzz_z109_inject ops=25000 mtops=20000 lf_runs=300
+Z109-HOST Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+Z109-LOAD 4.34 2.97 2.03 3/1530 42976
+EXPORTS defined_mimir_T=13 expected=13
+LEG exports PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10901 STREAM ops=25000 op0=1266 op1=1282 op2=1245 op3=1221 op4=1299 op5=1283 op6=1252 op7=1265 op8=1268 op9=1295 op10=1346 op11=1269 op12=1324 op13=1300 op14=1229 op15=1228 op16=1148 op17=1110 op18=1171 op19=1199 checks=3697195 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10901 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10902 STREAM ops=25000 op0=1239 op1=1254 op2=1313 op3=1161 op4=1307 op5=1292 op6=1302 op7=1318 op8=1279 op9=1195 op10=1267 op11=1259 op12=1267 op13=1243 op14=1278 op15=1254 op16=1195 op17=1191 op18=1163 op19=1223 checks=3741568 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10902 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10903 STREAM ops=25000 op0=1281 op1=1248 op2=1267 op3=1361 op4=1317 op5=1246 op6=1265 op7=1303 op8=1217 op9=1292 op10=1263 op11=1230 op12=1340 op13=1274 op14=1265 op15=1290 op16=1135 op17=1101 op18=1161 op19=1145 checks=3669105 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10903 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10904 STREAM ops=25000 op0=1295 op1=1243 op2=1339 op3=1272 op4=1252 op5=1217 op6=1253 op7=1270 op8=1205 op9=1301 op10=1242 op11=1253 op12=1266 op13=1342 op14=1271 op15=1244 op16=1188 op17=1198 op18=1144 op19=1206 checks=3769817 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10904 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10905 STREAM ops=25000 op0=1272 op1=1271 op2=1270 op3=1276 op4=1266 op5=1271 op6=1283 op7=1275 op8=1276 op9=1204 op10=1287 op11=1253 op12=1288 op13=1310 op14=1297 op15=1287 op16=1182 op17=1182 op18=1096 op19=1154 checks=3747669 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10905 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10906 STREAM ops=25000 op0=1238 op1=1224 op2=1304 op3=1265 op4=1267 op5=1259 op6=1240 op7=1230 op8=1318 op9=1321 op10=1297 op11=1199 op12=1291 op13=1301 op14=1248 op15=1253 op16=1198 op17=1180 op18=1130 op19=1237 checks=3765392 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10906 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10907 STREAM ops=25000 op0=1317 op1=1238 op2=1273 op3=1248 op4=1308 op5=1309 op6=1212 op7=1245 op8=1246 op9=1218 op10=1273 op11=1242 op12=1270 op13=1325 op14=1244 op15=1350 op16=1116 op17=1175 op18=1185 op19=1207 checks=3801611 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10907 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10908 STREAM ops=25000 op0=1249 op1=1331 op2=1242 op3=1245 op4=1287 op5=1219 op6=1257 op7=1308 op8=1341 op9=1256 op10=1278 op11=1280 op12=1247 op13=1297 op14=1243 op15=1226 op16=1166 op17=1113 op18=1183 op19=1232 checks=3711626 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10908 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10909 STREAM ops=25000 op0=1242 op1=1293 op2=1239 op3=1309 op4=1275 op5=1304 op6=1243 op7=1255 op8=1246 op9=1298 op10=1259 op11=1241 op12=1343 op13=1245 op14=1230 op15=1268 op16=1217 op17=1167 op18=1151 op19=1175 checks=3702007 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10909 PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 10910 STREAM ops=25000 op0=1290 op1=1317 op2=1315 op3=1222 op4=1268 op5=1241 op6=1217 op7=1334 op8=1337 op9=1259 op10=1265 op11=1307 op12=1282 op13=1212 op14=1283 op15=1274 op16=1175 op17=1153 op18=1122 op19=1128 checks=3651123 fails=0 injected_nulls=0 live_end=0
+RESULT: PASS
+LEG plain seed=10910 PASS
+LEG determinism PASS (seed 10901 twice, byte-identical)
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface INJECT build (mmap-refusal armed)
+SEED 10921 STREAM ops=25000 op0=1277 op1=1274 op2=1282 op3=1230 op4=1242 op5=1241 op6=1276 op7=1230 op8=1343 op9=1249 op10=1269 op11=1250 op12=1232 op13=1255 op14=1321 op15=1284 op16=1173 op17=1203 op18=1131 op19=1239 checks=3773212 fails=0 injected_nulls=74 live_end=0
+FAULT acquire_attempts=3286 injected=134 real_failed=1021 release_attempts=2131 lock_attempts=26114 pagesize_attempts=23165
+RESULT: PASS
+LEG inject seed=10921 PASS
+INJECT-PROOF seed=10921 shim_injected=134
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface INJECT build (mmap-refusal armed)
+SEED 10922 STREAM ops=25000 op0=1234 op1=1323 op2=1295 op3=1234 op4=1359 op5=1224 op6=1264 op7=1236 op8=1300 op9=1198 op10=1276 op11=1287 op12=1352 op13=1273 op14=1229 op15=1221 op16=1174 op17=1140 op18=1184 op19=1198 checks=3686287 fails=0 injected_nulls=70 live_end=0
+FAULT acquire_attempts=3154 injected=116 real_failed=965 release_attempts=2073 lock_attempts=25925 pagesize_attempts=22581
+RESULT: PASS
+LEG inject seed=10922 PASS
+INJECT-PROOF seed=10922 shim_injected=116
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface INJECT build (mmap-refusal armed)
+SEED 10923 STREAM ops=25000 op0=1282 op1=1269 op2=1315 op3=1274 op4=1285 op5=1248 op6=1254 op7=1287 op8=1227 op9=1264 op10=1284 op11=1298 op12=1258 op13=1284 op14=1249 op15=1257 op16=1138 op17=1184 op18=1175 op19=1168 checks=3725940 fails=0 injected_nulls=60 live_end=0
+FAULT acquire_attempts=3204 injected=121 real_failed=980 release_attempts=2103 lock_attempts=26204 pagesize_attempts=22986
+RESULT: PASS
+LEG inject seed=10923 PASS
+INJECT-PROOF seed=10923 shim_injected=121
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface INJECT build (mmap-refusal armed)
+SEED 10924 STREAM ops=25000 op0=1293 op1=1250 op2=1281 op3=1230 op4=1275 op5=1264 op6=1246 op7=1262 op8=1250 op9=1301 op10=1262 op11=1283 op12=1282 op13=1328 op14=1236 op15=1281 op16=1187 op17=1163 op18=1129 op19=1197 checks=3752965 fails=0 injected_nulls=61 live_end=0
+FAULT acquire_attempts=3231 injected=112 real_failed=1007 release_attempts=2112 lock_attempts=26113 pagesize_attempts=22902
+RESULT: PASS
+LEG inject seed=10924 PASS
+INJECT-PROOF seed=10924 shim_injected=112
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface INJECT build (mmap-refusal armed)
+SEED 10925 STREAM ops=25000 op0=1316 op1=1244 op2=1284 op3=1287 op4=1274 op5=1236 op6=1256 op7=1254 op8=1282 op9=1240 op10=1264 op11=1276 op12=1260 op13=1289 op14=1245 op15=1273 op16=1188 op17=1227 op18=1116 op19=1189 checks=3777083 fails=0 injected_nulls=68 live_end=0
+FAULT acquire_attempts=3161 injected=126 real_failed=999 release_attempts=2036 lock_attempts=26101 pagesize_attempts=23095
+RESULT: PASS
+LEG inject seed=10925 PASS
+INJECT-PROOF seed=10925 shim_injected=126
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface INJECT build (mmap-refusal armed)
+SEED 10926 STREAM ops=25000 op0=1291 op1=1215 op2=1290 op3=1269 op4=1311 op5=1268 op6=1246 op7=1272 op8=1225 op9=1284 op10=1236 op11=1322 op12=1233 op13=1246 op14=1266 op15=1240 op16=1207 op17=1209 op18=1145 op19=1226 checks=3737383 fails=0 injected_nulls=74 live_end=0
+FAULT acquire_attempts=3261 injected=125 real_failed=1062 release_attempts=2074 lock_attempts=26179 pagesize_attempts=23075
+RESULT: PASS
+LEG inject seed=10926 PASS
+INJECT-PROOF seed=10926 shim_injected=125
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+SEED 28820 MT ops=20000 op0=1018 op1=981 op2=999 op3=954 op4=1038 op5=1047 op6=1008 op7=982 op8=1068 op9=1019 op10=1002 op11=1019 op12=1045 op13=986 op14=1079 op15=978 op16=959 op17=961 op18=942 op19=915 checks=496049 fails=0 injected_nulls=0 live_end=0
+SEED 44658 MT ops=20000 op0=1013 op1=1055 op2=990 op3=1017 op4=1023 op5=1058 op6=1013 op7=990 op8=1021 op9=1042 op10=1006 op11=1040 op12=1014 op13=990 op14=1018 op15=1011 op16=948 op17=919 op18=923 op19=909 checks=498172 fails=0 injected_nulls=0 live_end=0
+SEED 20901 MT ops=20000 op0=991 op1=1073 op2=1018 op3=1039 op4=1014 op5=1019 op6=1014 op7=1011 op8=966 op9=1022 op10=1031 op11=989 op12=1048 op13=1029 op14=981 op15=1024 op16=951 op17=944 op18=962 op19=874 checks=495990 fails=0 injected_nulls=0 live_end=0
+SEED 36739 MT ops=20000 op0=998 op1=1007 op2=971 op3=995 op4=1031 op5=1008 op6=1020 op7=1066 op8=997 op9=1050 op10=1055 op11=1034 op12=1039 op13=987 op14=1005 op15=1024 op16=970 op17=968 op18=888 op19=888 checks=494852 fails=0 injected_nulls=0 live_end=0
+MT-INBOX-LEFTOVER 63 checks=63 fails=0
+MT-FINAL live=0 PASS
+RESULT: PASS
+LEG mt PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31001 bytes=4096 checks=239752 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31002 bytes=4096 checks=247882 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31003 bytes=4096 checks=228987 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31004 bytes=4096 checks=248182 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31005 bytes=4096 checks=235377 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31006 bytes=4096 checks=236690 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31007 bytes=4096 checks=235373 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31008 bytes=4096 checks=237318 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31009 bytes=4096 checks=225246 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31010 bytes=4096 checks=219584 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31011 bytes=4096 checks=224304 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31012 bytes=4096 checks=240690 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31013 bytes=4096 checks=235328 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31014 bytes=4096 checks=234123 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31015 bytes=4096 checks=240158 fails=0 live_end=0
+RESULT: PASS
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+FUZZ-Z109 harness v1 (trace version 1) libFuzzer-style, full public surface
+CORPUS /tmp/z109run.7jSWVL/corpus/c31016 bytes=4096 checks=241525 fails=0 live_end=0
+RESULT: PASS
+LEG corpus PASS (16 files)
+"\341\337\322\314\301s\000\000" # Uses: 0
+"\014\000\000\000" # Uses: 1
+"\365\342\320\314\301s\000\000" # Uses: 0
+###### End of recommended dictionary. ######
+Done 300 runs in 67 second(s)
+LEG libfuzzer PASS (300 runs, ASan+UBSan)
+Z109-TOTALS stream_ops=530000 checks=72860018 fails=0
+Z109-LOAD-END 2.86 2.87 2.25 4/1540 788195
+Z109-RESULT: PASS
+----- END verbatim runner output -----
+
+TRIAGE AND VERDICT
+----------------------------------------------------------------
+Crashes: NONE. No leg crashed, aborted or was sanitizer-
+  stopped; the libFuzzer leg completed its 300 bounded runs
+  with no crash artifact (libFuzzer writes one on any find).
+Hangs: NONE. Every invocation ran under timeout(1); no leg
+  returned 124 and no leg needed its bound.
+Misbehaviour (FINDING lines): NONE - 0 FINDING lines in
+  72,860,018 checks over 530,000 stream operations (runner
+  totals, including the determinism pair), 480,000 of them
+  in the legs printed above, plus 16 corpus replays
+  (3,770,519 checks) and 300 libFuzzer executions under
+  ASan+UBSan.
+Coverage: all 20 op classes exercised (per-class totals
+  across the stream legs: 22,101..24,698 each); all 13
+  public entry points fuzzed (export audit leg: exactly 13
+  defined mimir_* T symbols in build/libmimiralloc.so).
+D-09 (mmap-refusal fuzz-injection): DISCHARGED for the
+  acquire channel. The injection build armed single-shot
+  mmap refusals through the I-004 shim across 150,000
+  stream ops; the shim's own counters record 734 injected
+  refusals (112..134 per seed), every lawful NULL/ENOMEM
+  they caused was excused only by a successful disarmed
+  retry, original blocks stayed byte-identical through
+  every failed realloc, and the allocator live count
+  matched the model after every batch. The same legs also
+  drove ~6,000 genuine OS refusals (real_failed counters)
+  from the harness's representable-unsatisfiable shapes.
+Determinism: seed 10901 run twice at full scale, outputs
+  byte-identical.
+Defects: NO allocator defect found. Three harness-side
+  defects were found and fixed during the build (plain-build
+  unused-function, inject-build misleading indentation,
+  libFuzzer-build unused drivers) - all in the new test
+  file only, none in src/, include/ or the shipped build.
+Filed (slice doc S7, owners named): INC-Z109-01 (release /
+  lock / page-size shim channels compiled in but not armed;
+  owner: the next fuzz slice on this line or the Z-117
+  hand-off), INC-Z109-02 (arbitrary-interleaving contention
+  fuzzing beyond transfer/inbox shapes not claimed; owner:
+  soak-class follow-on), INC-Z109-03 (undefined-behaviour
+  surface never invoked by design; no verdict claimed).
+Final gate: scripts/z13/run_gate.sh on the slice tree -
+  GREEN 4988 checks / 0 failed / 77 by-design skips, make
+  exit 0 (hidden_files/z109_gate.log), identical to the
+  baseline gate on the merged base tree.
+VERDICT: PASS - the pool item's success measure is met.

@@ -2601,3 +2601,33 @@ test-z105:
 	bash tests/abi/run_z105.sh
 
 .PHONY: test-z105
+# ------------------------------------------------------------------
+# Z-109: Wave 13 reserve (pool choice: API fuzz at scale) --
+# libFuzzer-style harness over the FULL public surface
+# (tests/fuzz/fuzz_z109.c; slice doc
+# docs/Z13_Z109_API_FUZZ.md; recorded run
+# tests/fuzz/recorded_run_z13_z109.txt). Two binaries from
+# one source: the plain harness and an injection build
+# (-DZ109_INJECT) linked with the I-004 fault shim under
+# -Wl,--wrap on the four L6 entries, arming single-shot
+# mmap refusals (the D-09 coverage gap). The shim object
+# rule above (test-i004) is reused, not duplicated.
+# Standalone via `make test-fuzz-z109`; NOT part of
+# `make test` (standing gate counts untouched).
+# ------------------------------------------------------------------
+$(BUILD)/fuzz_z109.o: tests/fuzz/fuzz_z109.c include/mimir_alloc.h | $(BUILD)
+	$(CC) $(CFLAGS) -c tests/fuzz/fuzz_z109.c -o $@
+
+$(BUILD)/fuzz_z109: $(LIBOBJS) $(BUILD)/fuzz_z109.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/fuzz_z109.o -o $@
+
+$(BUILD)/fuzz_z109_inject.o: tests/fuzz/fuzz_z109.c include/mimir_alloc.h tests/core/mimir_fault_i004.h | $(BUILD)
+	$(CC) $(CFLAGS) -DZ109_INJECT -c tests/fuzz/fuzz_z109.c -o $@
+
+$(BUILD)/fuzz_z109_inject: $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/fuzz_z109_inject.o
+	$(CC) $(CFLAGS) $(LIBOBJS) $(BUILD)/mimir_fault_shim_i004.o $(BUILD)/fuzz_z109_inject.o -Wl,--wrap=mimir_platform_map_acquire -Wl,--wrap=mimir_platform_map_release -Wl,--wrap=mimir_platform_global_lock -Wl,--wrap=mimir_platform_page_size -o $@
+
+test-fuzz-z109: $(BUILD)/fuzz_z109 $(BUILD)/fuzz_z109_inject
+	./tests/fuzz/run_fuzz_z109.sh ./$(BUILD)/fuzz_z109 ./$(BUILD)/fuzz_z109_inject
+
+.PHONY: test-fuzz-z109
