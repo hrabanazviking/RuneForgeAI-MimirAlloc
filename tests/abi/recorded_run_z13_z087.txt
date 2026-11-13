@@ -1,0 +1,101 @@
+=== Z-087 Aesir boundary trial recorded run ===
+date_utc: 2026-11-13T01:52:38Z
+host: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+head: 8382d38b03669fff19ea48c1e0de13ec582845e1
+branch: yrsa/mimiralloc-team-03
+loadavg_start: 2.91 2.33 1.83 1/1237 3159976
+page_size: 4096
+preload: /home/volmarr/mimiralloc-team-03/build/libmimiralloc_interpose.so (Z-082 interposing variant)
+rollback: unset LD_PRELOAD
+boundary: read-only toward /home/volmarr/aesir-forge (no writes; git status proof S6)
+=== S1 build the interposing variant ===
+  [ok] make lib-interpose (log hidden_files/z087_build_interpose.log)
+-rwxr-xr-x 1 volmarr volmarr 51280 Nov 12 20:38 build/libmimiralloc_interpose.so
+interpose defined dynamic exports: 20
+  [ok] interpose export count == 20 (10 namespaced + 10 standard)
+9a6836d5318fb3a269fcbaeb7b6b03834bd88cb375f38a1d88677fd5188e2491  build/libmimiralloc_interpose.so
+=== S2 engine and model identity (all read-only) ===
+aesir seat head: b99b702be8bd3d0c94e2bea5c2427cab7da16f42
+aesir seat branch: main
+engine entry: aesir_engine/main.mojo -> cli.commands dispatch; run <model.gguf> <prompt...> on the verified CPU backend (acceleration_backend auto/cpu)
+run road: pixi run --frozen mojo build -I . --target-accelerator gfx1151, FFI shims staged in mktemp (Aesir seat-gate A-074 shape), binary in mktemp
+-rw-r--r-- 1 volmarr volmarr 4920739232 Nov 12 16:32 /home/volmarr/aesir-forge/hidden_files/fixtures/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+7b064f5842bf9532c91456deda288a1b672397a54fa729aa665952863033557c  /home/volmarr/aesir-forge/hidden_files/fixtures/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+model note: aesir_engine/model.gguf in the Aesir tree is a 24-byte empty header; the seat's real fixture above is the model of record
+prebuilt binaries assessed (report doc S5): root aesir_main (2026-11-11 build) SEGFAULTS in prefill on a PLAIN run with this fixture; aesir_engine/aesir_main returns canned text (not genuine generation); neither is the token path of record - both named, neither fixed here
+attempt-1 finding: mojo-run-under-preload exceeded a 600 s bound still compiling (100% CPU); plain mojo-run leg: wall 20.14 s, decode_ms 4368.047 for 32 tokens (hidden_files/z087_plain1.log, attempt-1 recorded run preserved)
+mojo: Mojo 1.0.0 (ed45d567)
+=== S3 stage FFI shims and build the engine binary (mktemp, outside the Aesir tree) ===
+  [ok] hailo10h stub
+  [ok] thread_par shim
+  [ok] hip shim
+  [ok] vulkan shim
+  [ok] zero-copy shim
+  [ok] affinity shim
+staging: /tmp/tmp.vSpnwPlkvM (removed at end of run)
+  [ok] mojo build engine binary (log hidden_files/z087_build_engine.log)
+-rwxr-xr-x 1 volmarr volmarr 4041896 Nov 12 20:53 /tmp/tmp.1b2WGyhJMX/aesir_z087
+940267891bd9ce5aed3c3776e36a29818e063a085a5b0c4826c03f05fa38cdd2  /tmp/tmp.1b2WGyhJMX/aesir_z087
+=== S4 trial legs on the compiled binary: plain / preload alternating, 2 reps each ===
+prompt: The capital of Norway is ; max_tokens: 32 ; sampling: engine deterministic (greedy) loop
+--- leg plain1 (plain) loadavg: 2.06 2.19 1.80 1/1239 3160283
+leg plain1 exit=0
+  [ok] leg plain1 exit 0
+leg plain1 tokens: 58958 13 58958 374 279 7928 3363 304 32603 323 374 7559 304 279 83209 961 315 279 3224 13 1102 374 31183 389 279 58958 69 73 541 11 264 3544 
+{"timing_version":1,"load_ms":519.211,"prefill_ms":220.013,"decode_ms":3797.493,"sample_ms":0.716,"accounted_ms":4537.435,"wall_ms":4537.438,"residual_ms":0.003,"coverage_pct":99.99,"prompt_tokens":6,"generated_tokens":32,"clock":"CLOCK_MONOTONIC","sample_scope":"sample_token_from_logits calls in the forward paths"}
+Elapsed (wall clock) time (h:mm:ss or m:ss): 0:04.61
+Maximum resident set size (kbytes): 6687464
+Major (requiring I/O) page faults: 2
+Minor (reclaiming a frame) page faults: 978739
+[Response]:
+ Oslo. Oslo is the largest city in Norway and is located in the southeastern part of the country. It is situated on the Oslofjord, a large
+	Command being timed: "/tmp/tmp.1b2WGyhJMX/aesir_z087 run /home/volmarr/aesir-forge/hidden_files/fixtures/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --max-tokens 32 The capital of Norway is"
+	User time (seconds): 33.36
+--- leg preload1 (preload) loadavg: 1.98 2.17 1.79 1/1239 3325940
+leg preload1 exit=0
+  [ok] leg preload1 exit 0
+leg preload1 tokens: 58958 13 58958 374 279 7928 3363 304 32603 323 374 7559 304 279 83209 961 315 279 3224 13 1102 374 31183 389 279 58958 69 73 541 11 264 3544 
+{"timing_version":1,"load_ms":493.733,"prefill_ms":219.534,"decode_ms":4162.274,"sample_ms":0.635,"accounted_ms":4876.178,"wall_ms":4876.181,"residual_ms":0.003,"coverage_pct":99.99,"prompt_tokens":6,"generated_tokens":32,"clock":"CLOCK_MONOTONIC","sample_scope":"sample_token_from_logits calls in the forward paths"}
+Elapsed (wall clock) time (h:mm:ss or m:ss): 0:04.95
+Maximum resident set size (kbytes): 6693144
+Major (requiring I/O) page faults: 0
+Minor (reclaiming a frame) page faults: 1117035
+[Response]:
+ Oslo. Oslo is the largest city in Norway and is located in the southeastern part of the country. It is situated on the Oslofjord, a large
+	Command being timed: "/tmp/tmp.1b2WGyhJMX/aesir_z087 run /home/volmarr/aesir-forge/hidden_files/fixtures/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --max-tokens 32 The capital of Norway is"
+	User time (seconds): 34.38
+--- leg plain2 (plain) loadavg: 3.50 2.48 1.89 1/1239 3491598
+leg plain2 exit=0
+  [ok] leg plain2 exit 0
+leg plain2 tokens: 58958 13 58958 374 279 7928 3363 304 32603 323 374 7559 304 279 83209 961 315 279 3224 13 1102 374 31183 389 279 58958 69 73 541 11 264 3544 
+{"timing_version":1,"load_ms":508.706,"prefill_ms":214.609,"decode_ms":4127.256,"sample_ms":0.681,"accounted_ms":4851.254,"wall_ms":4851.257,"residual_ms":0.003,"coverage_pct":99.99,"prompt_tokens":6,"generated_tokens":32,"clock":"CLOCK_MONOTONIC","sample_scope":"sample_token_from_logits calls in the forward paths"}
+Elapsed (wall clock) time (h:mm:ss or m:ss): 0:04.93
+Maximum resident set size (kbytes): 6691508
+Major (requiring I/O) page faults: 0
+Minor (reclaiming a frame) page faults: 979649
+[Response]:
+ Oslo. Oslo is the largest city in Norway and is located in the southeastern part of the country. It is situated on the Oslofjord, a large
+	Command being timed: "/tmp/tmp.1b2WGyhJMX/aesir_z087 run /home/volmarr/aesir-forge/hidden_files/fixtures/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --max-tokens 32 The capital of Norway is"
+	User time (seconds): 36.98
+--- leg preload2 (preload) loadavg: 3.86 2.57 1.93 1/1239 3657265
+leg preload2 exit=0
+  [ok] leg preload2 exit 0
+leg preload2 tokens: 58958 13 58958 374 279 7928 3363 304 32603 323 374 7559 304 279 83209 961 315 279 3224 13 1102 374 31183 389 279 58958 69 73 541 11 264 3544 
+{"timing_version":1,"load_ms":502.701,"prefill_ms":221.595,"decode_ms":4263.026,"sample_ms":0.603,"accounted_ms":4987.927,"wall_ms":4987.930,"residual_ms":0.003,"coverage_pct":99.99,"prompt_tokens":6,"generated_tokens":32,"clock":"CLOCK_MONOTONIC","sample_scope":"sample_token_from_logits calls in the forward paths"}
+Elapsed (wall clock) time (h:mm:ss or m:ss): 0:05.06
+Maximum resident set size (kbytes): 6693904
+Major (requiring I/O) page faults: 0
+Minor (reclaiming a frame) page faults: 1117095
+[Response]:
+ Oslo. Oslo is the largest city in Norway and is located in the southeastern part of the country. It is situated on the Oslofjord, a large
+	Command being timed: "/tmp/tmp.1b2WGyhJMX/aesir_z087 run /home/volmarr/aesir-forge/hidden_files/fixtures/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --max-tokens 32 The capital of Norway is"
+	User time (seconds): 36.45
+=== S5 correctness: token-stream identity across all legs ===
+distinct token streams across 4 legs: 1 (must be 1)
+  [ok] token streams identical (plain == preload, both reps)
+token stream sha256: a7532fc6ed8abfeb57d101f1409640e4470799d32eb447a0d80f6daf5bab0214  -
+=== S6 boundary proof: Aesir tree untouched by this runner ===
+aesir git status: UNCHANGED across the trial legs
+loadavg_end: 4.43 2.71 1.98 1/1239 3822983
+=== Z-087 recorded run end: FAIL=0 ===
+RUNNER_EXIT:0

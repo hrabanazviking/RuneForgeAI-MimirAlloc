@@ -2391,3 +2391,18 @@ test-z086: $(IPOLIB)
 	bash tests/abi/run_z086.sh
 
 .PHONY: test-z086
+
+# ------------------------------------------------------------------
+# Z-087: Aesir boundary trial (tests/abi/run_z087.sh) - the
+# Aesir CPU engine on this host (source run via the Aesir
+# seat's canonical pixi/mojo road, read-only toward the
+# Aesir forge) plain vs under the Z-082 interposing variant;
+# the script is the trial and its stdout is the recorded run
+# (tests/abi/recorded_run_z13_z087.txt). Standalone via
+# `make test-z087`; NOT part of `make test` (standing gate
+# counts untouched).
+
+test-z087: $(IPOLIB)
+	bash tests/abi/run_z087.sh
+
+.PHONY: test-z087
