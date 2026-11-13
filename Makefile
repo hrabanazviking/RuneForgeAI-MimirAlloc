@@ -40,7 +40,7 @@
 #        run is tests/concurrency/recorded_run_d004.txt.
 
 CC      = cc
-CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto
+CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O3
 # K-004 (Phase 11): -O2 added to the shipped CFLAGS on measured
 # evidence only (docs/PHASE_11_PERFORMANCE_K004.md; bench
 # tests/core/bench_k004.c, recorded run tests/core/
@@ -63,6 +63,28 @@ CFLAGS  = -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc -O2 -flto
 # objects - link it with -flto in CFLAGS (every in-tree
 # consumer does); Z-096 re-trials the flag set on the
 # near-final core. No source or ABI change.
+# Z-096 (Z13 line): final flag matrix on the near-final core
+# (tests/perf/recorded_run_z13_z096.txt; runner tests/perf/
+# run_z096.sh, summarizer tests/perf/summarize_z096.py; bench
+# tests/perf/bench_k002.c mimir leg, allocator objects only,
+# bench TU -O2 in every leg; full 2x2x2 factorial over
+# -O2/-O3 x -march=native x -flto, 9 reps interleaved, two
+# clean runs agree; a third run under co-tenant load agrees
+# on adoption and is cited as corroboration only): -O3
+# ADOPTED (small_churn 33.72->29.55 ns/op +12.4%,
+# mixed_batch 30.79->28.68 +6.9% vs -O2 in run A2, replicated
+# +12.5%/+8.6% in run A3; large_batch and mixed_lifecycle
+# TIE; vs the old shipped -O2 -flto set -O3 is WIN on both
+# small-path workloads, +11.1%/+8.1%). -march=native NOT
+# adopted (mixed_batch -6.7% LOSS in A2, -4.8% in A3).
+# -flto NOT re-adopted: its Z-035 small-path wins are gone
+# on this core (isolated LTO leg TIE on every workload in
+# both clean runs), so CFLAGS drop -flto and the five .so
+# link lines lose -flto with it; the static archive again
+# holds plain objects. The Z-064/Z-065 leaf objects keep
+# their -fno-lto (a no-op under this set) and their
+# comments record the pre-Z-096 build fact. Shipped set:
+# -O3. No source or ABI change.
 # J-004 debug flavour (docs/PHASE_10_FOUNDATION_PLAN.md S5.1;
 # docs/PHASE_10_DEBUG_REDZONES.md): `make DEBUG=1` adds
 # -DMIMIR_DEBUG=1 and directs ALL objects to build-debug/,
@@ -267,7 +289,7 @@ $(PICDIR)/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mimir
 	$(CC) $(CFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
 
 $(BUILD)/libmimiralloc.so: $(PICOBJS) $(MAPFILE) | $(BUILD)
-	$(CC) -flto -shared -Wl,--version-script=$(MAPFILE) -o $@ $(PICOBJS) -pthread
+	$(CC) -shared -Wl,--version-script=$(MAPFILE) -o $@ $(PICOBJS) -pthread
 
 lib: $(BUILD)/libmimiralloc.so
 
@@ -1459,7 +1481,7 @@ $(DPICDIR)/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mimi
 	$(CC) $(DCFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
 
 $(DBUILD)/libmimiralloc.so: $(DPICOBJS) $(MAPFILE) | $(DBUILD)
-	$(CC) -flto -shared -Wl,--version-script=$(MAPFILE) -o $@ $(DPICOBJS) -pthread
+	$(CC) -shared -Wl,--version-script=$(MAPFILE) -o $@ $(DPICOBJS) -pthread
 
 lib-debug: $(DBUILD)/libmimiralloc.so
 
@@ -1620,7 +1642,7 @@ $(HARD)/pic/mimir_platform_pic.o: src/platform/mimir_platform.c src/platform/mim
 	$(CC) $(HCFLAGS) -fPIC -fvisibility=hidden -c src/platform/mimir_platform.c -o $@
 
 $(HARD)/libmimiralloc.so: $(HARDPIC) $(MAPFILE) | $(HARD)
-	$(CC) -flto -shared $(HARDLINK) -Wl,--version-script=$(MAPFILE) -o $@ $(HARDPIC) -pthread
+	$(CC) -shared $(HARDLINK) -Wl,--version-script=$(MAPFILE) -o $@ $(HARDPIC) -pthread
 
 lib-hardened: $(HARD)/libmimiralloc.so
 
@@ -1811,7 +1833,7 @@ LIBDIR        = $(PREFIX)/lib
 INCLUDEDIR    = $(PREFIX)/include
 
 $(VLIB): $(PICOBJS) $(MAPFILE) VERSION | $(BUILD)
-	$(CC) -flto -shared -Wl,--version-script=$(MAPFILE) -Wl,-soname,$(VSONAME) -o $@ $(PICOBJS) -pthread
+	$(CC) -shared -Wl,--version-script=$(MAPFILE) -Wl,-soname,$(VSONAME) -o $@ $(PICOBJS) -pthread
 
 $(BUILD)/$(VSONAME): $(VLIB)
 	ln -sf libmimiralloc.so.$(MIMIR_VERSION) $@
@@ -2291,7 +2313,7 @@ $(PICDIR)/mimir_interpose_pic.o: src/api/mimir_interpose.c include/mimir_alloc.h
 	$(CC) $(CFLAGS) -fno-builtin -fPIC -fvisibility=default -c src/api/mimir_interpose.c -o $@
 
 $(IPOLIB): $(PICOBJS) $(PICDIR)/mimir_interpose_pic.o $(IPOMAP) | $(BUILD)
-	$(CC) -flto -shared -Wl,--version-script=$(IPOMAP) -o $@ $(PICOBJS) $(PICDIR)/mimir_interpose_pic.o -pthread
+	$(CC) -shared -Wl,--version-script=$(IPOMAP) -o $@ $(PICOBJS) $(PICDIR)/mimir_interpose_pic.o -pthread
 
 lib-interpose: $(IPOLIB)
 

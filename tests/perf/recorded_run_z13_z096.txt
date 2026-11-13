@@ -1,0 +1,1068 @@
+run_z096_version: 1
+slice: Z-096 final build-flag matrix
+date_utc: 2026-11-13T04:17:47Z
+repo: /home/volmarr/mimiralloc-team-05
+head: 26220c180283182f379ef6afa7a4611e9447799e
+branch: yrsa/mimiralloc-team-05
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cpus_pin: 2
+reps: 9
+warmups: 3
+common_flags: -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
+bench_tu_flags: -O2 (identical for every leg, K-004 style)
+shipped_today: -O2 -flto (variant lto; Z-035 adoption)
+variant_base: -O2
+variant_o3: -O3
+variant_march: -O2 -march=native
+variant_o3march: -O3 -march=native
+variant_lto: -O2 -flto
+variant_o3lto: -O3 -flto
+variant_marchlto: -O2 -march=native -flto
+variant_full: -O3 -march=native -flto
+loadavg_start: 0.14 0.51 0.64
+co_tenant_top: COMMAND         %CPU;systemd-logind   0.7;openrazer-daemo  0.6;kworker/u128:1-  0.3;
+--- host_truth (scripts/z13/host_truth.sh, verbatim) ---
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T04:17:47Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5107056
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 79%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.14 0.51 0.64
+--- end host_truth ---
+loadavg_end: 0.45 0.56 0.66
+raw_lines: 288 (expect 288)
+
+=== RUN A2 (CLEAN - RUN OF RECORD) SUMMARY (summarize_z096.py on z096_a2.raw) ===
+noise bound: 5.0%   drift bound: 8.0%
+checksums: large_batch=OK(1 distinct); mixed_batch=OK(1 distinct); mixed_lifecycle=OK(1 distinct); small_churn=OK(1 distinct)
+
+variant   workload             median        min        max  drift%   delta%  verdict (vs base -O2)
+base      large_batch           99.21      98.93     103.90    0.21     0.00  BASE
+base      mixed_batch           30.79      30.61      31.32    0.13     0.00  BASE
+base      mixed_lifecycle      537.15     535.51     539.48    0.19     0.00  BASE
+base      small_churn           33.72      32.68      34.02    0.16     0.00  BASE
+o3        large_batch           97.75      97.27      98.58    0.17     1.47  TIE
+o3        mixed_batch           28.68      28.62      29.19    0.02     6.85  WIN
+o3        mixed_lifecycle      516.86     516.28     519.76    0.23     3.78  TIE
+o3        small_churn           29.55      29.23      29.66    0.41    12.37  WIN
+march     large_batch           99.10      98.71     102.93    0.26     0.11  TIE
+march     mixed_batch           32.86      32.67      33.12    0.12    -6.72  LOSS
+march     mixed_lifecycle      533.35     529.29     537.18    0.06     0.71  TIE
+march     small_churn           34.96      34.02      35.40    0.66    -3.68  TIE
+o3march   large_batch           96.89      96.50     101.40    0.02     2.34  TIE
+o3march   mixed_batch           30.49      30.36      30.92    0.10     0.97  TIE
+o3march   mixed_lifecycle      521.80     516.94     527.36    0.24     2.86  TIE
+o3march   small_churn           32.40      32.23      32.74    0.42     3.91  TIE
+lto       large_batch           95.93      95.58      97.17    0.04     3.31  TIE
+lto       mixed_batch           31.21      30.87      31.43    0.48    -1.36  TIE
+lto       mixed_lifecycle      534.82     533.90     536.01    0.01     0.43  TIE
+lto       small_churn           33.23      33.00      33.64    0.65     1.45  TIE
+o3lto     large_batch           94.98      94.73      98.21    0.09     4.26  TIE
+o3lto     mixed_batch           29.89      29.42      29.98    0.50     2.92  TIE
+o3lto     mixed_lifecycle      516.86     516.03     519.52    0.15     3.78  TIE
+o3lto     small_churn           30.48      30.16      30.84    0.10     9.61  WIN
+marchlto  large_batch           96.91      96.44      99.29    0.61     2.32  TIE
+marchlto  mixed_batch           32.58      32.47      32.98    0.15    -5.81  LOSS
+marchlto  mixed_lifecycle      537.19     535.86     543.66    0.28    -0.01  TIE
+marchlto  small_churn           34.50      33.92      34.85    0.84    -2.31  TIE
+full      large_batch           95.17      94.84      95.63    0.02     4.07  TIE
+full      mixed_batch           32.92      32.79      33.02    0.18    -6.92  LOSS
+full      mixed_lifecycle      516.76     511.22     517.78    0.06     3.80  TIE
+full      small_churn           32.83      32.74      33.26    0.17     2.64  TIE
+
+adoption rule: isolated flag adopted only if WIN on BOTH small-path workloads, drift inside bounds, checksums identical, and no other workload LOSS.
+  -O3 (over -O2)   small-path=['WIN', 'WIN'] others=['TIE', 'TIE'] -> ADOPT
+  -march=native    small-path=['TIE', 'LOSS'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+  LTO (-flto)      small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+
+variant   workload          delta_vs_shipped%  verdict (vs shipped lto: -O2 -flto)
+base      large_batch                   -3.42  TIE
+base      mixed_batch                    1.35  TIE
+base      mixed_lifecycle               -0.44  TIE
+base      small_churn                   -1.47  TIE
+o3        large_batch                   -1.90  TIE
+o3        mixed_batch                    8.11  WIN
+o3        mixed_lifecycle                3.36  TIE
+o3        small_churn                   11.07  WIN
+march     large_batch                   -3.30  TIE
+march     mixed_batch                   -5.29  LOSS
+march     mixed_lifecycle                0.27  TIE
+march     small_churn                   -5.21  LOSS
+o3march   large_batch                   -1.00  TIE
+o3march   mixed_batch                    2.31  TIE
+o3march   mixed_lifecycle                2.43  TIE
+o3march   small_churn                    2.50  TIE
+lto       large_batch                    0.00  SHIPPED
+lto       mixed_batch                    0.00  SHIPPED
+lto       mixed_lifecycle                0.00  SHIPPED
+lto       small_churn                    0.00  SHIPPED
+o3lto     large_batch                    0.99  TIE
+o3lto     mixed_batch                    4.23  TIE
+o3lto     mixed_lifecycle                3.36  TIE
+o3lto     small_churn                    8.28  WIN
+marchlto  large_batch                   -1.02  TIE
+marchlto  mixed_batch                   -4.39  TIE
+marchlto  mixed_lifecycle               -0.44  TIE
+marchlto  small_churn                   -3.82  TIE
+full      large_batch                    0.79  TIE
+full      mixed_batch                   -5.48  LOSS
+full      mixed_lifecycle                3.38  TIE
+full      small_churn                    1.20  TIE
+
+FINAL ADOPTED SET: -O3 (variant o3)
+Z096 SUMMARY GATE: PASS (checksums identical)
+
+=== RUN A3 (CLEAN - CONFIRMATION) - header ===
+run_z096_version: 1
+slice: Z-096 final build-flag matrix
+date_utc: 2026-11-13T04:18:30Z
+repo: /home/volmarr/mimiralloc-team-05
+head: 26220c180283182f379ef6afa7a4611e9447799e
+branch: yrsa/mimiralloc-team-05
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cpus_pin: 2
+reps: 9
+warmups: 3
+common_flags: -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
+bench_tu_flags: -O2 (identical for every leg, K-004 style)
+shipped_today: -O2 -flto (variant lto; Z-035 adoption)
+variant_base: -O2
+variant_o3: -O3
+variant_march: -O2 -march=native
+variant_o3march: -O3 -march=native
+variant_lto: -O2 -flto
+variant_o3lto: -O3 -flto
+variant_marchlto: -O2 -march=native -flto
+variant_full: -O3 -march=native -flto
+loadavg_start: 0.39 0.54 0.65
+co_tenant_top: COMMAND         %CPU;systemd-logind   0.7;openrazer-daemo  0.6;kworker/u128:1-  0.3;
+--- host_truth (scripts/z13/host_truth.sh, verbatim) ---
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T04:18:30Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 5125446
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 66%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 0.52 0.56 0.65
+--- end host_truth ---
+loadavg_end: 0.63 0.58 0.66
+raw_lines: 288 (expect 288)
+
+=== RUN A3 SUMMARY (summarize_z096.py on z096_a3.raw) ===
+noise bound: 5.0%   drift bound: 8.0%
+checksums: large_batch=OK(1 distinct); mixed_batch=OK(1 distinct); mixed_lifecycle=OK(1 distinct); small_churn=OK(1 distinct)
+
+variant   workload             median        min        max  drift%   delta%  verdict (vs base -O2)
+base      large_batch           99.35      98.94     105.25    0.15     0.00  BASE
+base      mixed_batch           31.34      30.67      31.43    0.10     0.00  BASE
+base      mixed_lifecycle      538.72     530.63     540.29    0.15     0.00  BASE
+base      small_churn           33.74      33.14      34.23    1.11     0.00  BASE
+o3        large_batch           97.99      97.64      98.63    0.08     1.37  TIE
+o3        mixed_batch           28.66      28.55      29.55    0.94     8.55  WIN
+o3        mixed_lifecycle      517.93     515.93     522.02    0.09     3.86  TIE
+o3        small_churn           29.54      29.32      29.78    0.20    12.45  WIN
+march     large_batch           99.35      98.88     104.00    0.12     0.00  TIE
+march     mixed_batch           32.85      32.62      33.05    0.43    -4.82  TIE
+march     mixed_lifecycle      533.42     530.20     534.52    0.12     0.98  TIE
+march     small_churn           34.85      33.87      35.45    0.76    -3.29  TIE
+o3march   large_batch           97.15      96.70     101.33    1.97     2.21  TIE
+o3march   mixed_batch           30.51      30.25      30.54    0.39     2.65  TIE
+o3march   mixed_lifecycle      523.82     522.10     524.74    0.05     2.77  TIE
+o3march   small_churn           32.40      32.27      34.00    0.06     3.97  TIE
+lto       large_batch           96.07      95.09      99.49    0.31     3.30  TIE
+lto       mixed_batch           31.22      31.09      31.43    0.19     0.38  TIE
+lto       mixed_lifecycle      537.10     536.83     539.28    0.12     0.30  TIE
+lto       small_churn           33.37      32.99      33.65    1.08     1.10  TIE
+o3lto     large_batch           95.14      94.55      97.65    0.48     4.24  TIE
+o3lto     mixed_batch           29.48      29.38      30.39    1.56     5.93  WIN
+o3lto     mixed_lifecycle      518.02     511.04     518.35    0.13     3.84  TIE
+o3lto     small_churn           30.33      30.18      30.73    0.49    10.11  WIN
+marchlto  large_batch           97.09      96.55     102.00    1.98     2.27  TIE
+marchlto  mixed_batch           32.48      32.22      32.80    0.09    -3.64  TIE
+marchlto  mixed_lifecycle      538.38     537.38     542.38    0.06     0.06  TIE
+marchlto  small_churn           34.32      33.78      34.66    0.64    -1.72  TIE
+full      large_batch           95.24      94.90     100.73    0.13     4.14  TIE
+full      mixed_batch           32.95      32.77      33.24    0.08    -5.14  LOSS
+full      mixed_lifecycle      516.23     505.32     520.11    0.36     4.17  TIE
+full      small_churn           32.99      32.69      33.22    0.45     2.22  TIE
+
+adoption rule: isolated flag adopted only if WIN on BOTH small-path workloads, drift inside bounds, checksums identical, and no other workload LOSS.
+  -O3 (over -O2)   small-path=['WIN', 'WIN'] others=['TIE', 'TIE'] -> ADOPT
+  -march=native    small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+  LTO (-flto)      small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+
+variant   workload          delta_vs_shipped%  verdict (vs shipped lto: -O2 -flto)
+base      large_batch                   -3.41  TIE
+base      mixed_batch                   -0.38  TIE
+base      mixed_lifecycle               -0.30  TIE
+base      small_churn                   -1.11  TIE
+o3        large_batch                   -2.00  TIE
+o3        mixed_batch                    8.20  WIN
+o3        mixed_lifecycle                3.57  TIE
+o3        small_churn                   11.48  WIN
+march     large_batch                   -3.41  TIE
+march     mixed_batch                   -5.22  LOSS
+march     mixed_lifecycle                0.69  TIE
+march     small_churn                   -4.44  TIE
+o3march   large_batch                   -1.12  TIE
+o3march   mixed_batch                    2.27  TIE
+o3march   mixed_lifecycle                2.47  TIE
+o3march   small_churn                    2.91  TIE
+lto       large_batch                    0.00  SHIPPED
+lto       mixed_batch                    0.00  SHIPPED
+lto       mixed_lifecycle                0.00  SHIPPED
+lto       small_churn                    0.00  SHIPPED
+o3lto     large_batch                    0.97  TIE
+o3lto     mixed_batch                    5.57  WIN
+o3lto     mixed_lifecycle                3.55  TIE
+o3lto     small_churn                    9.11  WIN
+marchlto  large_batch                   -1.06  TIE
+marchlto  mixed_batch                   -4.04  TIE
+marchlto  mixed_lifecycle               -0.24  TIE
+marchlto  small_churn                   -2.85  TIE
+full      large_batch                    0.86  TIE
+full      mixed_batch                   -5.54  LOSS
+full      mixed_lifecycle                3.89  TIE
+full      small_churn                    1.14  TIE
+
+FINAL ADOPTED SET: -O3 (variant o3)
+Z096 SUMMARY GATE: PASS (checksums identical)
+
+=== RUN A1 (CONTENDED - CORROBORATION ONLY) - header ===
+run_z096_version: 1
+slice: Z-096 final build-flag matrix
+date_utc: 2026-11-13T04:09:01Z
+repo: /home/volmarr/mimiralloc-team-05
+head: 26220c180283182f379ef6afa7a4611e9447799e
+branch: yrsa/mimiralloc-team-05
+cc: cc (Ubuntu 15.3.0-4ubuntu1) 15.3.0
+cpus_pin: 2
+reps: 9
+warmups: 3
+common_flags: -std=c11 -Wall -Wextra -Werror -pthread -Iinclude -Isrc
+bench_tu_flags: -O2 (identical for every leg, K-004 style)
+shipped_today: -O2 -flto (variant lto; Z-035 adoption)
+variant_base: -O2
+variant_o3: -O3
+variant_march: -O2 -march=native
+variant_o3march: -O3 -march=native
+variant_lto: -O2 -flto
+variant_o3lto: -O3 -flto
+variant_marchlto: -O2 -march=native -flto
+variant_full: -O3 -march=native -flto
+loadavg_start: 1.08 0.99 0.75
+co_tenant_top: COMMAND         %CPU;mojo             160;systemd-logind   0.7;openrazer-daemo  0.6;
+--- host_truth (scripts/z13/host_truth.sh, verbatim) ---
+host_truth_version: 1
+hostname: purpleraider
+date_utc: 2026-11-13T04:09:01Z
+kernel: Linux 7.3.0-10-generic x86_64
+kernel_version_full: Linux purpleraider 7.3.0-10-generic #10-Ubuntu SMP PREEMPT_DYNAMIC Thu Oct 22 07:35:54 UTC 2026 x86_64 GNU/Linux
+os: Ubuntu 26.10
+arch: x86_64
+cpu_model: AMD RYZEN AI MAX+ 395 w/ Radeon 8060S
+cpu_count: 32
+cache_topology: L1d cache=768 KiB (16 instances); L1i cache=512 KiB (16 instances); L2 cache=16 MiB (16 instances); L3 cache=64 MiB (2 instances)
+cache_L1d: 768 KiB (16 instances)
+cache_L1i: 512 KiB (16 instances)
+cache_L2: 16 MiB (16 instances)
+cache_L3: 64 MiB (2 instances)
+scaling_governor: performance
+scaling_cur_freq_khz: 4450788
+scaling_min_freq_khz: 2000000
+scaling_max_freq_khz: 5187500
+scaling_driver: amd-pstate-epp
+cpu_scaling_mhz_pct: 77%
+thp_enabled: madvise
+thp_defrag: madvise
+thp_shmem_enabled: never
+page_size_bytes: 4096
+glibc: ldd (Ubuntu GLIBC 2.44-1ubuntu2) 2.44
+loadavg: 1.08 0.99 0.75
+--- end host_truth ---
+loadavg_end: 1.34 1.06 0.77
+raw_lines: 288 (expect 288)
+
+=== RUN A1 SUMMARY (summarize_z096.py on z096_a1.raw) ===
+noise bound: 5.0%   drift bound: 8.0%
+checksums: large_batch=OK(1 distinct); mixed_batch=OK(1 distinct); mixed_lifecycle=OK(1 distinct); small_churn=OK(1 distinct)
+
+variant   workload             median        min        max  drift%   delta%  verdict (vs base -O2)
+base      large_batch          104.48      99.99     107.69    3.30     0.00  BASE
+base      mixed_batch           31.82      31.35      36.63    3.24     0.00  BASE
+base      mixed_lifecycle      564.27     552.59     634.40    1.93     0.00  BASE
+base      small_churn           34.59      33.67      38.86    6.98     0.00  BASE
+o3        large_batch          100.47      98.80     110.53    1.67     3.84  TIE
+o3        mixed_batch           29.39      29.09      32.10    1.38     7.64  WIN
+o3        mixed_lifecycle      540.79     539.68     605.42    0.87     4.16  TIE
+o3        small_churn           30.23      29.74      33.24    0.43    12.60  WIN
+march     large_batch          103.03     100.11     108.92    1.10     1.39  TIE
+march     mixed_batch           33.69      33.23      36.86    0.70    -5.88  LOSS
+march     mixed_lifecycle      560.23     542.33     624.64    0.93     0.72  TIE
+march     small_churn           35.36      34.25      39.46    0.24    -2.23  TIE
+o3march   large_batch           99.67      97.70     127.71    3.93     4.60  TIE
+o3march   mixed_batch           31.35      30.83      34.37    0.96     1.48  TIE
+o3march   mixed_lifecycle      545.75     531.68     613.64    0.48     3.28  TIE
+o3march   small_churn           33.01      32.66      35.85    0.56     4.57  TIE
+lto       large_batch           99.37      97.55     112.19    0.54     4.89  TIE
+lto       mixed_batch           32.12      31.27      33.55    0.14    -0.94  TIE
+lto       mixed_lifecycle      560.48     550.91     652.93    7.02     0.67  TIE
+lto       small_churn           33.70      32.84      38.46    0.37     2.57  TIE
+o3lto     large_batch           97.95      97.09     122.12    1.70     6.25  WIN
+o3lto     mixed_batch           30.77      30.00      36.97    2.14     3.30  TIE
+o3lto     mixed_lifecycle      509.50     502.46     576.66    6.85     9.71  WIN
+o3lto     small_churn           31.57      30.68      37.03    3.67     8.73  WIN
+marchlto  large_batch           98.96      98.32     117.58    5.06     5.28  WIN
+marchlto  mixed_batch           33.76      33.20      49.78    6.96    -6.10  LOSS
+marchlto  mixed_lifecycle      562.01     552.54     619.48    4.78     0.40  TIE
+marchlto  small_churn           35.80      35.05      40.90    6.73    -3.50  TIE
+full      large_batch           98.52      96.32     104.88    1.03     5.70  WIN
+full      mixed_batch           32.85      31.61      34.76    4.81    -3.24  TIE
+full      mixed_lifecycle      519.18     506.44     582.61    4.01     7.99  WIN
+full      small_churn           33.44      33.16      40.03    7.19     3.32  TIE
+
+adoption rule: isolated flag adopted only if WIN on BOTH small-path workloads, drift inside bounds, checksums identical, and no other workload LOSS.
+  -O3 (over -O2)   small-path=['WIN', 'WIN'] others=['TIE', 'TIE'] -> ADOPT
+  -march=native    small-path=['TIE', 'LOSS'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+  LTO (-flto)      small-path=['TIE', 'TIE'] others=['TIE', 'TIE'] -> DO NOT ADOPT
+
+variant   workload          delta_vs_shipped%  verdict (vs shipped lto: -O2 -flto)
+base      large_batch                   -5.14  LOSS
+base      mixed_batch                    0.93  TIE
+base      mixed_lifecycle               -0.68  TIE
+base      small_churn                   -2.64  TIE
+o3        large_batch                   -1.11  TIE
+o3        mixed_batch                    8.50  WIN
+o3        mixed_lifecycle                3.51  TIE
+o3        small_churn                   10.30  WIN
+march     large_batch                   -3.68  TIE
+march     mixed_batch                   -4.89  TIE
+march     mixed_lifecycle                0.04  TIE
+march     small_churn                   -4.93  TIE
+o3march   large_batch                   -0.30  TIE
+o3march   mixed_batch                    2.40  TIE
+o3march   mixed_lifecycle                2.63  TIE
+o3march   small_churn                    2.05  TIE
+lto       large_batch                    0.00  SHIPPED
+lto       mixed_batch                    0.00  SHIPPED
+lto       mixed_lifecycle                0.00  SHIPPED
+lto       small_churn                    0.00  SHIPPED
+o3lto     large_batch                    1.43  TIE
+o3lto     mixed_batch                    4.20  TIE
+o3lto     mixed_lifecycle                9.10  WIN
+o3lto     small_churn                    6.32  WIN
+marchlto  large_batch                    0.41  TIE
+marchlto  mixed_batch                   -5.11  LOSS
+marchlto  mixed_lifecycle               -0.27  TIE
+marchlto  small_churn                   -6.23  LOSS
+full      large_batch                    0.86  TIE
+full      mixed_batch                   -2.27  TIE
+full      mixed_lifecycle                7.37  WIN
+full      small_churn                    0.77  TIE
+
+FINAL ADOPTED SET: -O3 (variant o3)
+Z096 SUMMARY GATE: PASS (checksums identical)
+
+====================================================================
+Z-096 VERDICTS AND ADOPTION DECISION
+====================================================================
+Method (K-004 style, Z-004 protocol): bench_k002 mimir leg
+only; the bench TU is compiled -O2 for every variant; the
+three allocator objects (src/api, src/core, src/platform)
+differ ONLY by the flags under trial. Eight variants: the
+full 2x2x2 factorial over opt level (-O2/-O3),
+-march=native and -flto. 9 measured reps + 3 warm-ups per
+variant, separate processes interleaved round-robin,
+pinned taskset -c 2. Headline is the median ns/op;
+WIN/LOSS at the 5% noise bound; split-half drift bound
+8%; checksums must be one distinct value per workload
+across all variants (identical in all three runs).
+
+Runs and load honesty: A1 (2026-11-13T04:09Z) ran under
+co-tenant load (mojo at 160% CPU, loadavg_start 1.08) and
+is corroboration only, never a baseline. A2
+(loadavg_start 0.14, no heavy co-tenant) is the run of
+record; A3 (loadavg_start 0.39) is the clean confirmation.
+The adoption below rests on A2+A3 agreement. Clean-run
+drift is at most 1.98% (bound 8%); A1 drift reached 7.19%
+under contention and its o3lto mixed_lifecycle WIN
+(+9.71%) did NOT replicate in the clean runs (TIE
++3.78/+3.84) - exactly why A1 decides nothing alone.
+
+Per-flag verdicts (vs base -O2, both clean runs):
+  -O3: WIN on both small-path workloads (small_churn
+    +12.37/+12.45, mixed_batch +6.85/+8.55), TIE on
+    large_batch and mixed_lifecycle. ADOPT.
+  -march=native: mixed_batch LOSS in A2 (-6.72), -4.82
+    in A3, small_churn TIE in both; vs the shipped LTO
+    set it is LOSS on mixed_batch in both clean runs.
+    DO NOT ADOPT.
+  -flto (the Z-035 adoption): TIE on every workload in
+    both clean runs (best delta +3.31). Its Z-035
+    small-path wins (+18.5%/+33.7%) do not survive on
+    the near-final core - the batch and small paths
+    changed underneath it (Z-035 base mixed_batch
+    median 223.22 ns/op then, 30.79 ns/op now).
+    DO NOT RE-ADOPT.
+Combos (informational): o3lto is also WIN/WIN on the
+small path but its small-path medians sit ABOVE plain
+o3 in both clean runs (small_churn A2 30.48 vs 29.55,
+A3 30.33 vs 29.54), so keeping LTO would cost speed,
+not buy it. Every march-bearing combo inherits the
+mixed_batch regression (marchlto LOSS in A2; full LOSS
+in both clean runs).
+
+FINAL ADOPTED SET: -O3 (variant o3), per the adoption
+rule stated before measuring (isolated WIN on both
+small-path workloads, no other-workload LOSS, drift
+inside bounds, checksums identical); the union variant
+o3 itself shows no LOSS vs base in any run. Against
+the previously shipped -O2 -flto, -O3 is WIN on both
+small-path workloads in both clean runs (+11.07/+8.11
+in A2; +11.48/+8.20 in A3) and TIE elsewhere: the
+change is a measured win against what ships today,
+not only against -O2.
+
+Makefile change (this commit): CFLAGS -O2 -flto -> -O3;
+the five .so link lines lose -flto (lib, lib-debug,
+lib-hardened, versioned lib, lib-interpose) so the
+shared libraries link the same plain objects they are
+compiled from; the static archive again holds plain
+objects. The Z-064/Z-065 leaf objects keep their
+-fno-lto (a no-op under this set). No source or ABI
+change.
+
+Verification on the adopted set: standing gate
+scripts/z13/run_gate.sh GREEN 4988 checks / 0 failed /
+77 by-design skips, exit 0 (hidden_files/z096_gate.log)
+- identical counts to baseline. All four .so flavours
+rebuild clean (hidden_files/z096_libs.log). The
+standalone LTO-sensitive suites still pass under -O3:
+test-z064 19 run 0 failed, test-z065 561 run 0 failed.
+
+Bugs: none in the allocator or the suite. One process
+defect found and repaired in scope: the landed A1 run
+had been measured under co-tenant contention; no flag
+was adopted from it - this lead re-measured clean
+twice (A2, A3) before touching the Makefile, per the
+shared-machine law that contended numbers are not
+baselines.
+
+=== RUN A2 RAW (run of record, 288 lines) ===
+base,small_churn,100000,3374786,29631508.5,33.75,12756656
+base,mixed_batch,256000,7972131,32111865.7,31.14,34727552
+base,large_batch,9600,997417,9624861.0,103.90,1106008
+base,mixed_lifecycle,307200,165313132,1858291.6,538.13,40359936
+o3,small_churn,100000,2923131,34209893.4,29.23,12756656
+o3,mixed_batch,256000,7353362,34814007.5,28.72,34727552
+o3,large_batch,9600,933757,10281047.4,97.27,1106008
+o3,mixed_lifecycle,307200,158939294,1932813.4,517.38,40359936
+march,small_churn,100000,3456339,28932347.2,34.56,12756656
+march,mixed_batch,256000,8412816,30429763.4,32.86,34727552
+march,large_batch,9600,947593,10130931.7,98.71,1106008
+march,mixed_lifecycle,307200,163543521,1878399.1,532.37,40359936
+o3march,small_churn,100000,3232149,30939167.7,32.32,12756656
+o3march,mixed_batch,256000,7799056,32824485.4,30.47,34727552
+o3march,large_batch,9600,930652,10315348.8,96.94,1106008
+o3march,mixed_lifecycle,307200,159975343,1920295.9,520.75,40359936
+lto,small_churn,100000,3309555,30215542.6,33.10,12756656
+lto,mixed_batch,256000,8004761,31980967.3,31.27,34727552
+lto,large_batch,9600,920933,10424211.1,95.93,1106008
+lto,mixed_lifecycle,307200,164014812,1873001.6,533.90,40359936
+o3lto,small_churn,100000,3027857,33026658.8,30.28,12756656
+o3lto,mixed_batch,256000,7652372,33453679.5,29.89,34727552
+o3lto,large_batch,9600,911786,10528786.4,94.98,1106008
+o3lto,mixed_lifecycle,307200,158629233,1936591.3,516.37,40359936
+marchlto,small_churn,100000,3447001,29010725.6,34.47,12756656
+marchlto,mixed_batch,256000,8313419,30793588.1,32.47,34727552
+marchlto,large_batch,9600,930341,10318797.1,96.91,1106008
+marchlto,mixed_lifecycle,307200,164858632,1863414.7,536.65,40359936
+full,small_churn,100000,3301799,30286519.6,33.02,12756656
+full,mixed_batch,256000,8426962,30378682.1,32.92,34727552
+full,large_batch,9600,913390,10510296.8,95.14,1106008
+full,mixed_lifecycle,307200,157046782,1956105.0,511.22,40359936
+base,small_churn,100000,3282694,30462784.5,32.83,12756656
+base,mixed_batch,256000,7864900,32549682.8,30.72,34727552
+base,large_batch,9600,955188,10050377.5,99.50,1106008
+base,mixed_lifecycle,307200,164508957,1867375.5,535.51,40359936
+o3,small_churn,100000,2930815,34120202.1,29.31,12756656
+o3,mixed_batch,256000,7333535,34908130.9,28.65,34727552
+o3,large_batch,9600,936893,10246634.4,97.59,1106008
+o3,mixed_lifecycle,307200,158611049,1936813.4,516.31,40359936
+march,small_churn,100000,3497355,28593036.7,34.97,12756656
+march,mixed_batch,256000,8364495,30605553.6,32.67,34727552
+march,large_batch,9600,951090,10093682.0,99.07,1106008
+march,mixed_lifecycle,307200,163866915,1874692.0,533.42,40359936
+o3march,small_churn,100000,3240064,30863587.9,32.40,12756656
+o3march,mixed_batch,256000,7916747,32336514.0,30.92,34727552
+o3march,large_batch,9600,930742,10314351.3,96.95,1106008
+o3march,mixed_lifecycle,307200,161371315,1903684.1,525.30,40359936
+lto,small_churn,100000,3364406,29722928.8,33.64,12756656
+lto,mixed_batch,256000,8045307,31819792.6,31.43,34727552
+lto,large_batch,9600,921063,10422739.8,95.94,1106008
+lto,mixed_lifecycle,307200,164129648,1871691.1,534.28,40359936
+o3lto,small_churn,100000,3054507,32738507.4,30.55,12756656
+o3lto,mixed_batch,256000,7656920,33433808.9,29.91,34727552
+o3lto,large_batch,9600,911526,10531789.5,94.95,1106008
+o3lto,mixed_lifecycle,307200,158524528,1937870.5,516.03,40359936
+marchlto,small_churn,100000,3449816,28987053.2,34.50,12756656
+marchlto,mixed_batch,256000,8318679,30774116.9,32.49,34727552
+marchlto,large_batch,9600,927676,10348440.6,96.63,1106008
+marchlto,mixed_lifecycle,307200,164979178,1862053.2,537.04,40359936
+full,small_churn,100000,3277023,30515501.4,32.77,12756656
+full,mixed_batch,256000,8430939,30364352.1,32.93,34727552
+full,large_batch,9600,913640,10507420.9,95.17,1106008
+full,mixed_lifecycle,307200,158688905,1935863.1,516.57,40359936
+base,small_churn,100000,3374485,29634151.6,33.74,12756656
+base,mixed_batch,256000,8016734,31933203.7,31.32,34727552
+base,large_batch,9600,949738,10108050.9,98.93,1106008
+base,mixed_lifecycle,307200,164915779,1862769.0,536.84,40359936
+o3,small_churn,100000,2954820,33843009.0,29.55,12756656
+o3,mixed_batch,256000,7325670,34945609.1,28.62,34727552
+o3,large_batch,9600,946391,10143798.9,98.58,1106008
+o3,mixed_lifecycle,307200,158755409,1935052.2,516.78,40359936
+march,small_churn,100000,3540085,28247909.3,35.40,12756656
+march,mixed_batch,256000,8466005,30238583.6,33.07,34727552
+march,large_batch,9600,951381,10090594.6,99.10,1106008
+march,mixed_lifecycle,307200,163846438,1874926.3,533.35,40359936
+o3march,small_churn,100000,3256464,30708154.6,32.56,12756656
+o3march,mixed_batch,256000,7785210,32882863.8,30.41,34727552
+o3march,large_batch,9600,928828,10335605.7,96.75,1106008
+o3march,mixed_lifecycle,307200,160167483,1917992.3,521.38,40359936
+lto,small_churn,100000,3322649,30096468.2,33.23,12756656
+lto,mixed_batch,256000,7985896,32056515.6,31.19,34727552
+lto,large_batch,9600,932836,10291198.0,97.17,1106008
+lto,mixed_lifecycle,307200,164473511,1867778.0,535.40,40359936
+o3lto,small_churn,100000,3015915,33157433.2,30.16,12756656
+o3lto,mixed_batch,256000,7659085,33424358.1,29.92,34727552
+o3lto,large_batch,9600,920854,10425105.4,95.92,1106008
+o3lto,mixed_lifecycle,307200,159596324,1924856.4,519.52,40359936
+marchlto,small_churn,100000,3391918,29481844.8,33.92,12756656
+marchlto,mixed_batch,256000,8340609,30693202.4,32.58,34727552
+marchlto,large_batch,9600,925813,10369264.6,96.44,1106008
+marchlto,mixed_lifecycle,307200,164997341,1861848.2,537.10,40359936
+full,small_churn,100000,3303293,30272821.7,33.03,12756656
+full,mixed_batch,256000,8406192,30453741.7,32.84,34727552
+full,large_batch,9600,913530,10508686.1,95.16,1106008
+full,mixed_lifecycle,307200,158918835,1933062.2,517.31,40359936
+base,small_churn,100000,3267816,30601478.2,32.68,12756656
+base,mixed_batch,256000,7881992,32479099.2,30.79,34727552
+base,large_batch,9600,952392,10079883.1,99.21,1106008
+base,mixed_lifecycle,307200,164538984,1867034.7,535.61,40359936
+o3,small_churn,100000,2966211,33713043.3,29.66,12756656
+o3,mixed_batch,256000,7406292,34565204.8,28.93,34727552
+o3,large_batch,9600,938376,10230440.7,97.75,1106008
+o3,mixed_lifecycle,307200,158602283,1936920.4,516.28,40359936
+march,small_churn,100000,3421394,29227852.7,34.21,12756656
+march,mixed_batch,256000,8405101,30457694.7,32.83,34727552
+march,large_batch,9600,947884,10127821.5,98.74,1106008
+march,mixed_lifecycle,307200,163653366,1877138.3,532.73,40359936
+o3march,small_churn,100000,3229263,30966818.1,32.29,12756656
+o3march,mixed_batch,256000,7802042,32811922.8,30.48,34727552
+o3march,large_batch,9600,929279,10330589.6,96.80,1106008
+o3march,mixed_lifecycle,307200,162005412,1896232.9,527.36,40359936
+lto,small_churn,100000,3361922,29744890.0,33.62,12756656
+lto,mixed_batch,256000,8029678,31881726.8,31.37,34727552
+lto,large_batch,9600,920052,10434192.8,95.84,1106008
+lto,mixed_lifecycle,307200,164343798,1869252.2,534.97,40359936
+o3lto,small_churn,100000,3084283,32422446.3,30.84,12756656
+o3lto,mixed_batch,256000,7549049,33911556.3,29.49,34727552
+o3lto,large_batch,9600,912839,10516640.9,95.09,1106008
+o3lto,mixed_lifecycle,307200,159507457,1925928.8,519.23,40359936
+marchlto,small_churn,100000,3439136,29077070.5,34.39,12756656
+marchlto,mixed_batch,256000,8419087,30407097.6,32.89,34727552
+marchlto,large_batch,9600,928087,10343857.8,96.68,1106008
+marchlto,mixed_lifecycle,307200,165105354,1860630.2,537.45,40359936
+full,small_churn,100000,3279598,30491542.0,32.80,12756656
+full,mixed_batch,256000,8442941,30321187.8,32.98,34727552
+full,large_batch,9600,914992,10491895.0,95.31,1106008
+full,mixed_lifecycle,307200,158817305,1934298.0,516.98,40359936
+base,small_churn,100000,3402278,29392072.0,34.02,12756656
+base,mixed_batch,256000,7835775,32670667.5,30.61,34727552
+base,large_batch,9600,950078,10104433.5,98.97,1106008
+base,mixed_lifecycle,307200,165729021,1853628.3,539.48,40359936
+o3,small_churn,100000,2960531,33777724.3,29.61,12756656
+o3,mixed_batch,256000,7340187,34876495.7,28.67,34727552
+o3,large_batch,9600,936383,10252215.2,97.54,1106008
+o3,mixed_lifecycle,307200,158779424,1934759.5,516.86,40359936
+march,small_churn,100000,3402288,29391985.6,34.02,12756656
+march,mixed_batch,256000,8400783,30473349.9,32.82,34727552
+march,large_batch,9600,951841,10085718.1,99.15,1106008
+march,mixed_lifecycle,307200,163887594,1874455.5,533.49,40359936
+o3march,small_churn,100000,3245113,30815567.9,32.45,12756656
+o3march,mixed_batch,256000,7864509,32551301.0,30.72,34727552
+o3march,large_batch,9600,973402,9862317.9,101.40,1106008
+o3march,mixed_lifecycle,307200,158802498,1934478.4,516.94,40359936
+lto,small_churn,100000,3299565,30307025.3,33.00,12756656
+lto,mixed_batch,256000,8047271,31812026.7,31.43,34727552
+lto,large_batch,9600,920874,10424879.0,95.92,1106008
+lto,mixed_lifecycle,307200,164662054,1865639.3,536.01,40359936
+o3lto,small_churn,100000,3080225,32465160.8,30.80,12756656
+o3lto,mixed_batch,256000,7530984,33992901.9,29.42,34727552
+o3lto,large_batch,9600,942855,10181841.3,98.21,1106008
+o3lto,mixed_lifecycle,307200,158653639,1936293.4,516.45,40359936
+marchlto,small_churn,100000,3472850,28794793.9,34.73,12756656
+marchlto,mixed_batch,256000,8444074,30317119.4,32.98,34727552
+marchlto,large_batch,9600,930862,10313021.7,96.96,1106008
+marchlto,mixed_lifecycle,307200,164615928,1866162.1,535.86,40359936
+full,small_churn,100000,3273787,30545664.7,32.74,12756656
+full,mixed_batch,256000,8449023,30299361.2,33.00,34727552
+full,large_batch,9600,914211,10500858.1,95.23,1106008
+full,mixed_lifecycle,307200,158733598,1935318.1,516.71,40359936
+base,small_churn,100000,3371881,29657037.1,33.72,12756656
+base,mixed_batch,256000,8003469,31986130.0,31.26,34727552
+base,large_batch,9600,950389,10101127.0,99.00,1106008
+base,mixed_lifecycle,307200,165066010,1861073.6,537.32,40359936
+o3,small_churn,100000,2962314,33757393.7,29.62,12756656
+o3,mixed_batch,256000,7340879,34873208.0,28.68,34727552
+o3,large_batch,9600,945710,10151103.4,98.51,1106008
+o3,mixed_lifecycle,307200,158602293,1936920.3,516.28,40359936
+march,small_churn,100000,3493909,28621237.7,34.94,12756656
+march,mixed_batch,256000,8421522,30398305.7,32.90,34727552
+march,large_batch,9600,951320,10091241.6,99.10,1106008
+march,mixed_lifecycle,307200,164046752,1872636.9,534.01,40359936
+o3march,small_churn,100000,3260662,30668618.8,32.61,12756656
+o3march,mixed_batch,256000,7804958,32799664.0,30.49,34727552
+o3march,large_batch,9600,929389,10329366.9,96.81,1106008
+o3march,mixed_lifecycle,307200,161056155,1907409.3,524.27,40359936
+lto,small_churn,100000,3310927,30203021.7,33.11,12756656
+lto,mixed_batch,256000,7989212,32043210.3,31.21,34727552
+lto,large_batch,9600,917797,10459829.4,95.60,1106008
+lto,mixed_lifecycle,307200,164321336,1869507.7,534.90,40359936
+o3lto,small_churn,100000,3068142,32593015.6,30.68,12756656
+o3lto,mixed_batch,256000,7534642,33976398.6,29.43,34727552
+o3lto,large_batch,9600,911196,10535603.8,94.92,1106008
+o3lto,mixed_lifecycle,307200,159062835,1931312.2,517.78,40359936
+marchlto,small_churn,100000,3475093,28776208.3,34.75,12756656
+marchlto,mixed_batch,256000,8341602,30689548.6,32.58,34727552
+marchlto,large_batch,9600,926154,10365446.8,96.47,1106008
+marchlto,mixed_lifecycle,307200,165025605,1861529.3,537.19,40359936
+full,small_churn,100000,3282533,30464278.7,32.83,12756656
+full,mixed_batch,256000,8412965,30429224.4,32.86,34727552
+full,large_batch,9600,910484,10543842.6,94.84,1106008
+full,mixed_lifecycle,307200,158495423,1938226.3,515.94,40359936
+base,small_churn,100000,3399422,29416765.6,33.99,12756656
+base,mixed_batch,256000,7872254,32519275.9,30.75,34727552
+base,large_batch,9600,953314,10070134.3,99.30,1106008
+base,mixed_lifecycle,307200,165013452,1861666.4,537.15,40359936
+o3,small_churn,100000,2954900,33842092.8,29.55,12756656
+o3,mixed_batch,256000,7342543,34865304.8,28.68,34727552
+o3,large_batch,9600,936423,10251777.2,97.54,1106008
+o3,mixed_lifecycle,307200,158856389,1933822.1,517.11,40359936
+march,small_churn,100000,3512865,28466792.8,35.13,12756656
+march,mixed_batch,256000,8364434,30605776.8,32.67,34727552
+march,large_batch,9600,988089,9715724.0,102.93,1106008
+march,mixed_lifecycle,307200,165022007,1861569.9,537.18,40359936
+o3march,small_churn,100000,3237980,30883452.0,32.38,12756656
+o3march,mixed_batch,256000,7816459,32751403.2,30.53,34727552
+o3march,large_batch,9600,930101,10321459.7,96.89,1106008
+o3march,mixed_lifecycle,307200,160255447,1916939.5,521.66,40359936
+lto,small_churn,100000,3330563,30024953.7,33.31,12756656
+lto,mixed_batch,256000,7977711,32089405.1,31.16,34727552
+lto,large_batch,9600,917597,10462109.2,95.58,1106008
+lto,mixed_lifecycle,307200,164021174,1872928.9,533.92,40359936
+o3lto,small_churn,100000,3019801,33114764.8,30.20,12756656
+o3lto,mixed_batch,256000,7675535,33352723.9,29.98,34727552
+o3lto,large_batch,9600,913970,10503627.0,95.21,1106008
+o3lto,mixed_lifecycle,307200,158780897,1934741.6,516.86,40359936
+marchlto,small_churn,100000,3485292,28692000.6,34.85,12756656
+marchlto,mixed_batch,256000,8343065,30684167.0,32.59,34727552
+marchlto,large_batch,9600,932044,10299942.9,97.09,1106008
+marchlto,mixed_lifecycle,307200,165829739,1852502.5,539.81,40359936
+full,small_churn,100000,3325905,30067004.3,33.26,12756656
+full,mixed_batch,256000,8394050,30497793.1,32.79,34727552
+full,large_batch,9600,918059,10456844.3,95.63,1106008
+full,mixed_lifecycle,307200,158748266,1935139.2,516.76,40359936
+base,small_churn,100000,3295978,30340008.3,32.96,12756656
+base,mixed_batch,256000,7837438,32663735.3,30.61,34727552
+base,large_batch,9600,949738,10108050.9,98.93,1106008
+base,mixed_lifecycle,307200,164643479,1865849.8,535.95,40359936
+o3,small_churn,100000,2954971,33841279.7,29.55,12756656
+o3,mixed_batch,256000,7473527,34254241.7,29.19,34727552
+o3,large_batch,9600,939939,10213428.7,97.91,1106008
+o3,mixed_lifecycle,307200,159251698,1929021.8,518.40,40359936
+march,small_churn,100000,3495843,28605403.6,34.96,12756656
+march,mixed_batch,256000,8414097,30425130.6,32.87,34727552
+march,large_batch,9600,949467,10110935.9,98.90,1106008
+march,mixed_lifecycle,307200,163655831,1877110.0,532.73,40359936
+o3march,small_churn,100000,3273978,30543882.7,32.74,12756656
+o3march,mixed_batch,256000,7814225,32760766.4,30.52,34727552
+o3march,large_batch,9600,931633,10304486.9,97.05,1106008
+o3march,mixed_lifecycle,307200,160297315,1916438.8,521.80,40359936
+lto,small_churn,100000,3344199,29902526.7,33.44,12756656
+lto,mixed_batch,256000,7982109,32071724.4,31.18,34727552
+lto,large_batch,9600,926384,10362873.3,96.50,1106008
+lto,mixed_lifecycle,307200,164133044,1871652.4,534.29,40359936
+o3lto,small_churn,100000,3048375,32804363.0,30.48,12756656
+o3lto,mixed_batch,256000,7671608,33369796.8,29.97,34727552
+o3lto,large_batch,9600,909392,10556503.7,94.73,1106008
+o3lto,mixed_lifecycle,307200,158694716,1935792.2,516.58,40359936
+marchlto,small_churn,100000,3428677,29165768.6,34.29,12756656
+marchlto,mixed_batch,256000,8369604,30586871.3,32.69,34727552
+marchlto,large_batch,9600,935010,10267269.9,97.40,1106008
+marchlto,mixed_lifecycle,307200,165075267,1860969.3,537.35,40359936
+full,small_churn,100000,3274900,30535283.5,32.75,12756656
+full,mixed_batch,256000,8414498,30423680.7,32.87,34727552
+full,large_batch,9600,911176,10535835.0,94.91,1106008
+full,mixed_lifecycle,307200,159061563,1931327.7,517.78,40359936
+base,small_churn,100000,3284828,30442994.3,32.85,12756656
+base,mixed_batch,256000,8015382,31938590.1,31.31,34727552
+base,large_batch,9600,953224,10071085.1,99.29,1106008
+base,mixed_lifecycle,307200,165103540,1860650.6,537.45,40359936
+o3,small_churn,100000,2926297,34172881.3,29.26,12756656
+o3,mixed_batch,256000,7338395,34885012.3,28.67,34727552
+o3,large_batch,9600,938557,10228467.7,97.77,1106008
+o3,mixed_lifecycle,307200,159670271,1923964.9,519.76,40359936
+march,small_churn,100000,3502535,28550749.7,35.03,12756656
+march,mixed_batch,256000,8478498,30194027.3,33.12,34727552
+march,large_batch,9600,952583,10077862.0,99.23,1106008
+march,mixed_lifecycle,307200,162598612,1889315.0,529.29,40359936
+o3march,small_churn,100000,3223102,31026011.6,32.23,12756656
+o3march,mixed_batch,256000,7772397,32937072.1,30.36,34727552
+o3march,large_batch,9600,926404,10362649.6,96.50,1106008
+o3march,mixed_lifecycle,307200,160469908,1914377.6,522.36,40359936
+lto,small_churn,100000,3308492,30225250.7,33.08,12756656
+lto,mixed_batch,256000,7902630,32394278.9,30.87,34727552
+lto,large_batch,9600,923499,10395246.8,96.20,1106008
+lto,mixed_lifecycle,307200,164296520,1869790.1,534.82,40359936
+o3lto,small_churn,100000,3041272,32880978.7,30.41,12756656
+o3lto,mixed_batch,256000,7558546,33868947.8,29.53,34727552
+o3lto,large_batch,9600,911686,10529941.2,94.97,1106008
+o3lto,mixed_lifecycle,307200,158868641,1933673.0,517.15,40359936
+marchlto,small_churn,100000,3469213,28824981.3,34.69,12756656
+marchlto,mixed_batch,256000,8328517,30737765.2,32.53,34727552
+marchlto,large_batch,9600,953183,10071518.3,99.29,1106008
+marchlto,mixed_lifecycle,307200,167013836,1839368.6,543.66,40359936
+full,small_churn,100000,3288495,30409047.3,32.88,12756656
+full,mixed_batch,256000,8453531,30283203.6,33.02,34727552
+full,large_batch,9600,915603,10484893.6,95.38,1106008
+full,mixed_lifecycle,307200,158943602,1932761.0,517.39,40359936
+
+=== RUN A3 RAW (confirmation, 288 lines) ===
+base,small_churn,100000,3417175,29263938.8,34.17,12756656
+base,mixed_batch,256000,8022665,31909596.1,31.34,34727552
+base,large_batch,9600,949848,10106880.3,98.94,1106008
+base,mixed_lifecycle,307200,164970872,1862146.9,537.01,40359936
+o3,small_churn,100000,2952216,33872860.3,29.52,12756656
+o3,mixed_batch,256000,7309841,35021281.6,28.55,34727552
+o3,large_batch,9600,938246,10231858.2,97.73,1106008
+o3,mixed_lifecycle,307200,158750691,1935109.7,516.77,40359936
+march,small_churn,100000,3482508,28714937.6,34.83,12756656
+march,mixed_batch,256000,8410370,30438613.3,32.85,34727552
+march,large_batch,9600,950569,10099214.3,99.02,1106008
+march,mixed_lifecycle,307200,162875911,1886098.4,530.20,40359936
+o3march,small_churn,100000,3239683,30867217.6,32.40,12756656
+o3march,mixed_batch,256000,7744094,33057450.0,30.25,34727552
+o3march,large_batch,9600,929479,10328366.8,96.82,1106008
+o3march,mixed_lifecycle,307200,160997997,1908098.3,524.08,40359936
+lto,small_churn,100000,3335513,29980395.8,33.36,12756656
+lto,mixed_batch,256000,7977601,32089847.6,31.16,34727552
+lto,large_batch,9600,912829,10516756.2,95.09,1106008
+lto,mixed_lifecycle,307200,165065629,1861077.9,537.32,40359936
+o3lto,small_churn,100000,3022466,33085566.6,30.22,12756656
+o3lto,mixed_batch,256000,7677208,33345455.8,29.99,34727552
+o3lto,large_batch,9600,913660,10507190.9,95.17,1106008
+o3lto,mixed_lifecycle,307200,159224167,1929355.4,518.31,40359936
+marchlto,small_churn,100000,3441591,29056328.9,34.42,12756656
+marchlto,mixed_batch,256000,8280307,30916728.1,32.34,34727552
+marchlto,large_batch,9600,932024,10300163.9,97.09,1106008
+marchlto,mixed_lifecycle,307200,165391590,1857410.0,538.38,40359936
+full,small_churn,100000,3310966,30202665.9,33.11,12756656
+full,mixed_batch,256000,8441429,30326618.9,32.97,34727552
+full,large_batch,9600,914341,10499365.1,95.24,1106008
+full,mixed_lifecycle,307200,159777342,1922675.6,520.11,40359936
+base,small_churn,100000,3423096,29213320.3,34.23,12756656
+base,mixed_batch,256000,8032694,31869756.3,31.38,34727552
+base,large_batch,9600,953575,10067378.0,99.33,1106008
+base,mixed_lifecycle,307200,165709124,1853850.8,539.42,40359936
+o3,small_churn,100000,2957375,33813770.7,29.57,12756656
+o3,mixed_batch,256000,7474098,34251624.7,29.20,34727552
+o3,large_batch,9600,944277,10166508.3,98.36,1106008
+o3,mixed_lifecycle,307200,158492488,1938262.2,515.93,40359936
+march,small_churn,100000,3418208,29255095.1,34.18,12756656
+march,mixed_batch,256000,8373271,30573476.0,32.71,34727552
+march,large_batch,9600,998368,9615692.8,104.00,1106008
+march,mixed_lifecycle,307200,163850725,1874877.3,533.37,40359936
+o3march,small_churn,100000,3237008,30892725.6,32.37,12756656
+o3march,mixed_batch,256000,7810798,32775140.3,30.51,34727552
+o3march,large_batch,9600,953364,10069606.2,99.31,1106008
+o3march,mixed_lifecycle,307200,160788445,1910585.1,523.40,40359936
+lto,small_churn,100000,3343698,29907007.2,33.44,12756656
+lto,mixed_batch,256000,7991296,32034853.9,31.22,34727552
+lto,large_batch,9600,921054,10422841.7,95.94,1106008
+lto,mixed_lifecycle,307200,165665412,1854340.0,539.28,40359936
+o3lto,small_churn,100000,3020744,33104427.3,30.21,12756656
+o3lto,mixed_batch,256000,7680244,33332274.3,30.00,34727552
+o3lto,large_batch,9600,937474,10240284.0,97.65,1106008
+o3lto,mixed_lifecycle,307200,158885533,1933467.4,517.21,40359936
+marchlto,small_churn,100000,3401225,29401171.6,34.01,12756656
+marchlto,mixed_batch,256000,8322476,30760076.7,32.51,34727552
+marchlto,large_batch,9600,972049,9876045.3,101.26,1106008
+marchlto,mixed_lifecycle,307200,165083994,1860870.9,537.38,40359936
+full,small_churn,100000,3289166,30402843.8,32.89,12756656
+full,mixed_batch,256000,8404640,30459365.3,32.83,34727552
+full,large_batch,9600,967040,9927200.5,100.73,1106008
+full,mixed_lifecycle,307200,159356304,1927755.6,518.74,40359936
+base,small_churn,100000,3395665,29449312.6,33.96,12756656
+base,mixed_batch,256000,8021593,31913860.5,31.33,34727552
+base,large_batch,9600,972931,9867092.3,101.35,1106008
+base,mixed_lifecycle,307200,165046695,1861291.4,537.26,40359936
+o3,small_churn,100000,2954339,33848519.1,29.54,12756656
+o3,mixed_batch,256000,7337052,34891397.8,28.66,34727552
+o3,large_batch,9600,946842,10138967.2,98.63,1106008
+o3,mixed_lifecycle,307200,160364922,1915630.9,522.02,40359936
+march,small_churn,100000,3544794,28210384.0,35.45,12756656
+march,mixed_batch,256000,8449534,30297528.8,33.01,34727552
+march,large_batch,9600,955388,10048273.6,99.52,1106008
+march,mixed_lifecycle,307200,163921528,1874067.5,533.60,40359936
+o3march,small_churn,100000,3234884,30913009.6,32.35,12756656
+o3march,mixed_batch,256000,7816189,32752534.5,30.53,34727552
+o3march,large_batch,9600,928298,10341506.7,96.70,1106008
+o3march,mixed_lifecycle,307200,161126848,1906572.4,524.50,40359936
+lto,small_churn,100000,3353697,29817839.8,33.54,12756656
+lto,mixed_batch,256000,7983292,32066971.9,31.18,34727552
+lto,large_batch,9600,926203,10364898.4,96.48,1106008
+lto,mixed_lifecycle,307200,165256556,1858927.8,537.94,40359936
+o3lto,small_churn,100000,3073172,32539669.1,30.73,12756656
+o3lto,mixed_batch,256000,7522349,34031922.7,29.38,34727552
+o3lto,large_batch,9600,910223,10546866.0,94.81,1106008
+o3lto,mixed_lifecycle,307200,159167721,1930039.6,518.12,40359936
+marchlto,small_churn,100000,3420111,29238817.1,34.20,12756656
+marchlto,mixed_batch,256000,8344497,30678901.3,32.60,34727552
+marchlto,large_batch,9600,926895,10357160.2,96.55,1106008
+marchlto,mixed_lifecycle,307200,165227623,1859253.3,537.85,40359936
+full,small_churn,100000,3321586,30106099.9,33.22,12756656
+full,mixed_batch,256000,8510718,30079718.3,33.24,34727552
+full,large_batch,9600,915484,10486256.5,95.36,1106008
+full,mixed_lifecycle,307200,158584400,1937138.8,516.23,40359936
+base,small_churn,100000,3351673,29835846.2,33.52,12756656
+base,mixed_batch,256000,8006254,31975003.5,31.27,34727552
+base,large_batch,9600,952933,10074160.5,99.26,1106008
+base,mixed_lifecycle,307200,165826694,1852536.5,539.80,40359936
+o3,small_churn,100000,2931847,34108191.9,29.32,12756656
+o3,mixed_batch,256000,7325069,34948476.3,28.61,34727552
+o3,large_batch,9600,937385,10241256.3,97.64,1106008
+o3,mixed_lifecycle,307200,159108500,1930757.9,517.93,40359936
+march,small_churn,100000,3539194,28255020.8,35.39,12756656
+march,mixed_batch,256000,8372329,30576915.9,32.70,34727552
+march,large_batch,9600,950719,10097620.9,99.03,1106008
+march,mixed_lifecycle,307200,163631014,1877394.7,532.65,40359936
+o3march,small_churn,100000,3253870,30732635.3,32.54,12756656
+o3march,mixed_batch,256000,7816650,32750602.9,30.53,34727552
+o3march,large_batch,9600,931513,10305814.3,97.03,1106008
+o3march,mixed_lifecycle,307200,160916063,1909069.8,523.82,40359936
+lto,small_churn,100000,3365319,29714865.1,33.65,12756656
+lto,mixed_batch,256000,8000384,31998464.1,31.25,34727552
+lto,large_batch,9600,919291,10442830.4,95.76,1106008
+lto,mixed_lifecycle,307200,164996389,1861858.9,537.10,40359936
+o3lto,small_churn,100000,3025462,33052803.2,30.25,12756656
+o3lto,mixed_batch,256000,7645760,33482610.0,29.87,34727552
+o3lto,large_batch,9600,908049,10572116.7,94.59,1106008
+o3lto,mixed_lifecycle,307200,159142904,1930340.5,518.04,40359936
+marchlto,small_churn,100000,3377932,29603911.5,33.78,12756656
+marchlto,mixed_batch,256000,8249159,31033466.6,32.22,34727552
+marchlto,large_batch,9600,979182,9804101.8,102.00,1106008
+marchlto,mixed_lifecycle,307200,165977236,1850856.2,540.29,40359936
+full,small_churn,100000,3293464,30363167.8,32.93,12756656
+full,mixed_batch,256000,8442952,30321148.3,32.98,34727552
+full,large_batch,9600,911085,10536887.3,94.90,1106008
+full,mixed_lifecycle,307200,156771166,1959544.0,510.32,40359936
+base,small_churn,100000,3317920,30139364.4,33.18,12756656
+base,mixed_batch,256000,8007647,31969441.2,31.28,34727552
+base,large_batch,9600,981416,9781784.7,102.23,1106008
+base,mixed_lifecycle,307200,165226360,1859267.5,537.85,40359936
+o3,small_churn,100000,2952376,33871024.6,29.52,12756656
+o3,mixed_batch,256000,7337633,34888635.1,28.66,34727552
+o3,large_batch,9600,941091,10200926.4,98.03,1106008
+o3,mixed_lifecycle,307200,159954684,1920543.9,520.69,40359936
+march,small_churn,100000,3484842,28695705.6,34.85,12756656
+march,mixed_batch,256000,8405632,30455770.6,32.83,34727552
+march,large_batch,9600,949227,10113492.3,98.88,1106008
+march,mixed_lifecycle,307200,164205019,1870832.0,534.52,40359936
+o3march,small_churn,100000,3273075,30552309.4,32.73,12756656
+o3march,mixed_batch,256000,7810468,32776525.0,30.51,34727552
+o3march,large_batch,9600,931173,10309577.3,97.00,1106008
+o3march,mixed_lifecycle,307200,160389639,1915335.7,522.10,40359936
+lto,small_churn,100000,3344720,29897868.9,33.45,12756656
+lto,mixed_batch,256000,7959987,32160856.5,31.09,34727552
+lto,large_batch,9600,955117,10051124.6,99.49,1106008
+lto,mixed_lifecycle,307200,164981612,1862025.7,537.05,40359936
+o3lto,small_churn,100000,3045920,32830803.2,30.46,12756656
+o3lto,mixed_batch,256000,7528480,34004208.0,29.41,34727552
+o3lto,large_batch,9600,907659,10576659.3,94.55,1106008
+o3lto,mixed_lifecycle,307200,159236990,1929200.0,518.35,40359936
+marchlto,small_churn,100000,3457541,28922289.0,34.58,12756656
+marchlto,mixed_batch,256000,8396224,30489896.4,32.80,34727552
+marchlto,large_batch,9600,927606,10349221.5,96.63,1106008
+marchlto,mixed_lifecycle,307200,165694436,1854015.2,539.37,40359936
+full,small_churn,100000,3321907,30103190.7,33.22,12756656
+full,mixed_batch,256000,8431200,30363412.1,32.93,34727552
+full,large_batch,9600,922006,10412079.7,96.04,1106008
+full,mixed_lifecycle,307200,155235732,1978925.8,505.32,40359936
+base,small_churn,100000,3363645,29729653.4,33.64,12756656
+base,mixed_batch,256000,8046660,31814442.3,31.43,34727552
+base,large_batch,9600,1010431,9500896.2,105.25,1106008
+base,mixed_lifecycle,307200,165749940,1853394.3,539.55,40359936
+o3,small_churn,100000,2961152,33770640.6,29.61,12756656
+o3,mixed_batch,256000,7564648,33841627.5,29.55,34727552
+o3,large_batch,9600,943706,10172659.7,98.30,1106008
+o3,mixed_lifecycle,307200,158705526,1935660.4,516.62,40359936
+march,small_churn,100000,3444397,29032658.0,34.44,12756656
+march,mixed_batch,256000,8351931,30651594.2,32.62,34727552
+march,large_batch,9600,955990,10041946.0,99.58,1106008
+march,mixed_lifecycle,307200,163865624,1874706.8,533.42,40359936
+o3march,small_churn,100000,3248079,30787428.5,32.48,12756656
+o3march,mixed_batch,256000,7786112,32879054.4,30.41,34727552
+o3march,large_batch,9600,964966,9948537.0,100.52,1106008
+o3march,mixed_lifecycle,307200,160725426,1911334.2,523.19,40359936
+lto,small_churn,100000,3337286,29964468.1,33.37,12756656
+lto,mixed_batch,256000,8007828,31968718.6,31.28,34727552
+lto,large_batch,9600,916164,10478473.3,95.43,1106008
+lto,mixed_lifecycle,307200,164953600,1862341.9,536.96,40359936
+o3lto,small_churn,100000,3046321,32826481.5,30.46,12756656
+o3lto,mixed_batch,256000,7546143,33924615.5,29.48,34727552
+o3lto,large_batch,9600,913299,10511344.0,95.14,1106008
+o3lto,mixed_lifecycle,307200,158913927,1933121.9,517.30,40359936
+marchlto,small_churn,100000,3431933,29138098.0,34.32,12756656
+marchlto,mixed_batch,256000,8384001,30534347.5,32.75,34727552
+marchlto,large_batch,9600,929890,10323801.7,96.86,1106008
+marchlto,mixed_lifecycle,307200,165209359,1859458.8,537.79,40359936
+full,small_churn,100000,3299385,30308678.7,32.99,12756656
+full,mixed_batch,256000,8436319,30344988.1,32.95,34727552
+full,large_batch,9600,913820,10505351.2,95.19,1106008
+full,mixed_lifecycle,307200,159265253,1928857.6,518.44,40359936
+base,small_churn,100000,3314393,30171437.1,33.14,12756656
+base,mixed_batch,256000,8029638,31881885.6,31.37,34727552
+base,large_batch,9600,955509,10047001.1,99.53,1106008
+base,mixed_lifecycle,307200,165493951,1856261.2,538.72,40359936
+o3,small_churn,100000,2956584,33822817.1,29.57,12756656
+o3,mixed_batch,256000,7325550,34946181.5,28.62,34727552
+o3,large_batch,9600,940340,10209073.3,97.95,1106008
+o3,mixed_lifecycle,307200,158976744,1932358.1,517.50,40359936
+march,small_churn,100000,3527942,28345137.2,35.28,12756656
+march,mixed_batch,256000,8460644,30257744.0,33.05,34727552
+march,large_batch,9600,953805,10064950.4,99.35,1106008
+march,mixed_lifecycle,307200,164004604,1873118.1,533.87,40359936
+o3march,small_churn,100000,3232549,30935339.3,32.33,12756656
+o3march,mixed_batch,256000,7779660,32906322.4,30.39,34727552
+o3march,large_batch,9600,932626,10293515.3,97.15,1106008
+o3march,mixed_lifecycle,307200,161040637,1907593.1,524.22,40359936
+lto,small_churn,100000,3313862,30176271.7,33.14,12756656
+lto,mixed_batch,256000,8045588,31818681.2,31.43,34727552
+lto,large_batch,9600,922316,10408580.1,96.07,1106008
+lto,mixed_lifecycle,307200,165128247,1860372.2,537.53,40359936
+o3lto,small_churn,100000,3017608,33138830.5,30.18,12756656
+o3lto,mixed_batch,256000,7542496,33941019.0,29.46,34727552
+o3lto,large_batch,9600,923919,10390521.2,96.24,1106008
+o3lto,mixed_lifecycle,307200,158965503,1932494.8,517.47,40359936
+marchlto,small_churn,100000,3432905,29129847.8,34.33,12756656
+marchlto,mixed_batch,256000,8301086,30839338.4,32.43,34727552
+marchlto,large_batch,9600,959546,10004731.4,99.95,1106008
+marchlto,mixed_lifecycle,307200,165322921,1858181.5,538.16,40359936
+full,small_churn,100000,3310396,30207866.4,33.10,12756656
+full,mixed_batch,256000,8436168,30345531.3,32.95,34727552
+full,large_batch,9600,913620,10507650.9,95.17,1106008
+full,mixed_lifecycle,307200,159407490,1927136.5,518.90,40359936
+base,small_churn,100000,3417195,29263767.5,34.17,12756656
+base,mixed_batch,256000,8028055,31888172.2,31.36,34727552
+base,large_batch,9600,951591,10088367.8,99.12,1106008
+base,mixed_lifecycle,307200,163008028,1884569.8,530.63,40359936
+o3,small_churn,100000,2931907,34107493.9,29.32,12756656
+o3,mixed_batch,256000,7457647,34327181.2,29.13,34727552
+o3,large_batch,9600,939709,10215928.5,97.89,1106008
+o3,mixed_lifecycle,307200,159296261,1928482.2,518.54,40359936
+march,small_churn,100000,3387009,29524574.6,33.87,12756656
+march,mixed_batch,256000,8422443,30394981.6,32.90,34727552
+march,large_batch,9600,954587,10056705.2,99.44,1106008
+march,mixed_lifecycle,307200,163449434,1879480.4,532.06,40359936
+o3march,small_churn,100000,3226969,30988831.9,32.27,12756656
+o3march,mixed_batch,256000,7777526,32915351.2,30.38,34727552
+o3march,large_batch,9600,972740,9869029.8,101.33,1106008
+o3march,mixed_lifecycle,307200,160676344,1911918.0,523.03,40359936
+lto,small_churn,100000,3298654,30315395.3,32.99,12756656
+lto,mixed_batch,256000,7997578,32009690.9,31.24,34727552
+lto,large_batch,9600,923779,10392095.9,96.23,1106008
+lto,mixed_lifecycle,307200,164914476,1862783.7,536.83,40359936
+o3lto,small_churn,100000,3043847,32853162.5,30.44,12756656
+o3lto,mixed_batch,256000,7538118,33960731.3,29.45,34727552
+o3lto,large_batch,9600,919320,10442501.0,95.76,1106008
+o3lto,mixed_lifecycle,307200,159134378,1930444.0,518.02,40359936
+marchlto,small_churn,100000,3465806,28853317.2,34.66,12756656
+marchlto,mixed_batch,256000,8315963,30784167.8,32.48,34727552
+marchlto,large_batch,9600,935822,10258361.1,97.48,1106008
+marchlto,mixed_lifecycle,307200,166618256,1843735.5,542.38,40359936
+full,small_churn,100000,3268728,30592940.1,32.69,12756656
+full,mixed_batch,256000,8468730,30228853.7,33.08,34727552
+full,large_batch,9600,912567,10519775.5,95.06,1106008
+full,mixed_lifecycle,307200,157534895,1950044.1,512.81,40359936
+base,small_churn,100000,3373754,29640572.5,33.74,12756656
+base,mixed_batch,256000,7851945,32603386.8,30.67,34727552
+base,large_batch,9600,953806,10064939.8,99.35,1106008
+base,mixed_lifecycle,307200,165976474,1850864.7,540.29,40359936
+o3,small_churn,100000,2978224,33577058.0,29.78,12756656
+o3,mixed_batch,256000,7341841,34868638.5,28.68,34727552
+o3,large_batch,9600,940730,10204840.9,97.99,1106008
+o3,mixed_lifecycle,307200,159168723,1930027.4,518.13,40359936
+march,small_churn,100000,3524947,28369220.9,35.25,12756656
+march,mixed_batch,256000,8433795,30354069.5,32.94,34727552
+march,large_batch,9600,952373,10080084.2,99.21,1106008
+march,mixed_lifecycle,307200,164086647,1872181.6,534.14,40359936
+o3march,small_churn,100000,3399933,29412344.3,34.00,12756656
+o3march,mixed_batch,256000,7818062,32744687.9,30.54,34727552
+o3march,large_batch,9600,932696,10292742.8,97.16,1106008
+o3march,mixed_lifecycle,307200,161198803,1905721.3,524.74,40359936
+lto,small_churn,100000,3311808,30194987.1,33.12,12756656
+lto,mixed_batch,256000,7984112,32063678.5,31.19,34727552
+lto,large_batch,9600,923779,10392095.9,96.23,1106008
+lto,mixed_lifecycle,307200,164973487,1862117.4,537.02,40359936
+o3lto,small_churn,100000,3033257,32967862.6,30.33,12756656
+o3lto,mixed_batch,256000,7779089,32908737.8,30.39,34727552
+o3lto,large_batch,9600,912348,10522300.7,95.04,1106008
+o3lto,mixed_lifecycle,307200,156991599,1956792.6,511.04,40359936
+marchlto,small_churn,100000,3411254,29314732.9,34.11,12756656
+marchlto,mixed_batch,256000,8262774,30982331.1,32.28,34727552
+marchlto,large_batch,9600,931443,10306588.8,97.03,1106008
+marchlto,mixed_lifecycle,307200,165493140,1856270.3,538.71,40359936
+full,small_churn,100000,3275180,30532673.0,32.75,12756656
+full,mixed_batch,256000,8388831,30516766.9,32.77,34727552
+full,large_batch,9600,954436,10058296.2,99.42,1106008
+full,mixed_lifecycle,307200,155366667,1977258.1,505.75,40359936
